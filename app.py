@@ -129,9 +129,7 @@ with st.form("reflection_form"):
     
     submitted = st.form_submit_button("שמור")
 
-    # --- התחלה של החלק התחתון המאוחד (הדבק כאן) ---
 
-# ודא שהקוד הזה מגיע מיד אחרי submitted = st.form_submit_button("שמור")
 if submitted:
     # 1. שמירת הרפלקציה המלאה (רק פעם אחת)
     res = save_reflection({
