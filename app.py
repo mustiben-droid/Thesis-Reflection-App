@@ -131,6 +131,7 @@ with st.form("reflection_form"):
 
     # --- התחלה של החלק התחתון המאוחד (הדבק כאן) ---
 
+# ודא שהקוד הזה מגיע מיד אחרי submitted = st.form_submit_button("שמור")
 if submitted:
     # 1. שמירת הרפלקציה המלאה (רק פעם אחת)
     res = save_reflection({
@@ -181,9 +182,8 @@ if st.button("✨ סכם שבוע אחרון עם Gemini"):
         st.info("אין מספיק נתונים (רשומות) מהשבוע האחרון ליצירת סיכום.")
     else:
         with st.spinner("יוצר סיכום על ידי Gemini (זה עשוי לקחת כמה שניות)..."):
-            summary_text = generate_summary(entries)
+            # ודא שהפונקציה generate_summary(entries) קיימת בפונקציות העליונות
+            summary_text = generate_summary(entries) 
         
         st.subheader("סיכום שבועי מונע-AI")
         st.markdown(summary_text)
-
-# --- סוף app.py ---
