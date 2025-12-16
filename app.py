@@ -17,6 +17,15 @@ def set_rtl():
                 direction: rtl !important;
                 text-align: right;
             }
+            /* הוסף את שני הכללים האלה כאן: */
+            [data-testid="stSlider"] {
+                direction: rtl;
+            }
+            [data-testid="stSlider"] label {
+                direction: rtl;
+                text-align: right;
+            }
+            /* --- סוף הוספה --- */
             [data-testid="stHeader"], [data-testid="baseButton"] {
                 direction: ltr; 
             }
