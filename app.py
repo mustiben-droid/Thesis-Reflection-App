@@ -1,4 +1,5 @@
 import json # חובה לייבא json!
+import base64
 import os
 import io
 from datetime import date, datetime, timedelta
