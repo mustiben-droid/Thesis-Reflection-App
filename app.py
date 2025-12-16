@@ -10,6 +10,7 @@ from google.genai.errors import APIError
 def set_rtl():
     st.markdown("""
         <style>
+            /* כללי RTL כלליים לדף ולשדות טקסט */
             html, body, [data-testid="stAppViewContainer"] {
                 direction: rtl; 
             }
@@ -18,20 +19,18 @@ def set_rtl():
                 text-align: right;
             }
             
-            /* התיקון החדש והמקיף ל-Sliders מתחיל כאן */
+            /* התיקון האולטימטיבי ל-Sliders */
             [data-testid="stSlider"] {
                 direction: rtl; 
             }
-            .st-bh > label, .st-bh > div > div > div > div {
-                direction: rtl; 
-                text-align: right; 
-            }
-            [data-testid="stThumbValue"] {
+            /* כופה RTL על *כל* האלמנטים הפנימיים בתוך ה-Slider */
+            [data-testid="stSlider"] * {
                 direction: rtl !important;
                 text-align: right !important;
             }
-            /* התיקון החדש והמקיף ל-Sliders נגמר כאן */
+            /* --- סוף התיקון ל-Sliders --- */
             
+            /* שומר על כיוון LTR לכפתורים וכותרות Streamlit */
             [data-testid="stHeader"], [data-testid="baseButton"] {
                 direction: ltr; 
             }
