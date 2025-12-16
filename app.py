@@ -14,12 +14,11 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 # --- סוף Google Drive Imports ---
 
-# --- הגדרות קבועות (מעודכן) ---
+# --- הגדרות קבועות ---
 DATA_FILE = "reflections.jsonl"
 # קורא את הסודות שהגדרת ב-Streamlit Cloud
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
-# קורא את השם החדש ששמרת כטקסט גולמי
-GDRIVE_SERVICE_ACCOUNT_JSON = st.secrets.get("GDRIVE_SERVICE_ACCOUNT_JSON") 
+# GDRIVE_SERVICE_ACCOUNT_B64 נקרא ישירות בתוך get_drive_service
 # -----------------------------
 
 def set_rtl():
@@ -63,7 +62,7 @@ def save_reflection(entry: dict) -> dict:
     return {"status": "saved", "date": entry["date"]}
 
 def load_last_week():
-    # ... (הפונקציה נשארת ללא שינוי) ...
+    """טוען רשומות רפלקציה מהשבוע האחרון בלבד."""
     if not os.path.exists(DATA_FILE):
         return []
     
@@ -107,11 +106,11 @@ def load_all_summaries():
     return summaries
 
 # -----------------------------
-# Google Drive Functions (מעודכן)
+# Google Drive Functions (הגרסה המתוקנת)
 # -----------------------------
 
 def get_drive_service():
-    """מייצר חיבור מאומת לשירות Google Drive API (Base64)."""
+    """מייצר חיבור מאומת לשירות Google Drive API."""
 
     if not GDRIVE_FOLDER_ID:
         st.error("חסר GDRIVE_FOLDER_ID ב-Secrets")
@@ -151,7 +150,7 @@ def get_drive_service():
 
 
 def upload_summary_to_drive(summary_text: str, drive_service):
-    # ... (הפונקציה נשארת ללא שינוי) ...
+    """מעלה או מעדכן את הסיכום השבועי ב-Google Drive כקובץ MD."""
     today_str = date.today().isoformat()
     file_name = f"סיכום שבועי לתזה - {today_str}.md"
     
@@ -159,7 +158,10 @@ def upload_summary_to_drive(summary_text: str, drive_service):
     response = drive_service.files().list(
         q=query,
         spaces='drive',
-        fields='files(id)'
+        fields='files(id)',
+        # --- תיקון קריטי 1: חובה לחיפוש בכוננים משותפים ---
+        includeItemsFromAllDrives=True,
+        corpora='allDrives'
     ).execute()
     
     files = response.get('files', [])
@@ -174,7 +176,9 @@ def upload_summary_to_drive(summary_text: str, drive_service):
     if file_id:
         drive_service.files().update(
             fileId=file_id,
-            media_body=media
+            media_body=media,
+            # --- תיקון קריטי 2: חובה לעדכון בכונן משותף ---
+            supportsAllDrives=True 
         ).execute()
         return f"עודכן קובץ: {file_name}"
     else:
@@ -186,12 +190,15 @@ def upload_summary_to_drive(summary_text: str, drive_service):
         drive_service.files().create(
             body=file_metadata,
             media_body=media,
-            fields='id, name'
+            fields='id, name',
+            # --- תיקון קריטי 3: חובה ליצירה בכונן משותף ---
+            supportsAllDrives=True 
         ).execute()
         return f"נוצר קובץ חדש: {file_name}"
 
+
 def upload_reflection_to_drive(entry: dict, drive_service):
-    # ... (הפונקציה נשארת ללא שינוי) ...
+    """מעלה רפלקציה בודדת ל-Google Drive כקובץ JSON."""
     student_name = entry.get("student_name", "ללא-שם").replace(" ", "_")
     date_str = entry.get("date", date.today().isoformat())
     file_name = f"רפלקציה-{student_name}-{date_str}-{entry.get('timestamp')}.json"
@@ -213,15 +220,17 @@ def upload_reflection_to_drive(entry: dict, drive_service):
     drive_service.files().create(
         body=file_metadata,
         media_body=media,
-        fields='id, name'
+        fields='id, name',
+        # --- תיקון קריטי: חובה עבור כוננים משותפים ---
+        supportsAllDrives=True 
     ).execute()
     return f"רפלקציה נשמרה כ-JSON: {file_name}"
     
 # -----------------------------
-# Gemini Summary Function
+# Gemini Summary Function (ללא שינוי)
 # -----------------------------
 def generate_summary(entries: list) -> str:
-    # ... (הפונקציה נשארת ללא שינוי) ...
+    """יוצר סיכום AI על סמך רשומות הרפלקציה."""
     if not entries:
         return "לא נמצאו רשומות רפלקציה בשבוע האחרון לסיכום."
 
@@ -279,7 +288,7 @@ def generate_summary(entries: list) -> str:
         return f"שגיאה בלתי צפויה בעת יצירת הסיכום: {e}"
 
 # -----------------------------
-# Streamlit UI
+# Streamlit UI (ללא שינוי)
 # -----------------------------
 
 set_rtl()
