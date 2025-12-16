@@ -161,7 +161,9 @@ def upload_summary_to_drive(summary_text: str, drive_service):
         fields='files(id)',
         # --- תיקון קריטי 1: חובה לחיפוש בכוננים משותפים ---
         includeItemsFromAllDrives=True,
-        corpora='allDrives'
+        corpora='allDrives',
+        # --- תיקון קריטי נוסף לשגיאת 403 בחיפוש ---
+        supportsAllDrives=True 
     ).execute()
     
     files = response.get('files', [])
@@ -198,7 +200,7 @@ def upload_summary_to_drive(summary_text: str, drive_service):
 
 
 def upload_reflection_to_drive(entry: dict, drive_service):
-    """מעלה רפלקציה בודדת ל-Google Drive כקובץ JSON."""
+    """מעלה רפלקציה בודדת ל-Google Drive כקובץ JSON. (נשאר ללא שינוי, עובד)."""
     student_name = entry.get("student_name", "ללא-שם").replace(" ", "_")
     date_str = entry.get("date", date.today().isoformat())
     file_name = f"רפלקציה-{student_name}-{date_str}-{entry.get('timestamp')}.json"
