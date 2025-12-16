@@ -266,6 +266,9 @@ def generate_summary(entries: list) -> str:
 set_rtl()
 st.title("יומן תצפית")
 
+st.write("FOLDER:", bool(st.secrets.get("GDRIVE_FOLDER_ID")))
+st.write("SA JSON:", bool(st.secrets.get("GDRIVE_SERVICE_ACCOUNT_JSON")))
+
 with st.form("reflection_form"):
     st.subheader("פרטי רפלקציה")
     student_name = st.text_input("שם תלמיד", help="הזן את שם התלמיד שעבורו נרשמה הרפלקציה.")
