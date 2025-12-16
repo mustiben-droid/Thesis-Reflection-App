@@ -111,26 +111,44 @@ def load_all_summaries():
 # -----------------------------
 
 def get_drive_service():
-    """מייצר חיבור מאומת לשירות Google Drive API."""
-    # משתמש בשם החדש
-    if not (GDRIVE_FOLDER_ID and GDRIVE_SERVICE_ACCOUNT_JSON):
+    """מייצר חיבור מאומת לשירות Google Drive API (Base64)."""
+
+    if not GDRIVE_FOLDER_ID:
+        st.error("חסר GDRIVE_FOLDER_ID ב-Secrets")
         return None
+
+    if not st.secrets.get("GDRIVE_SERVICE_ACCOUNT_B64"):
+        st.error("חסר GDRIVE_SERVICE_ACCOUNT_B64 ב-Secrets")
+        return None
+
     try:
-        SCOPES = ['https://www.googleapis.com/auth/drive.file']
-        
-        # שלב קריטי: המרה מטקסט גולמי למילון JSON
-        service_account_info = json.loads(GDRIVE_SERVICE_ACCOUNT_JSON)
-        
+        SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+
+        service_account_json_str = base64.b64decode(
+            st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]
+        ).decode("utf-8")
+
+        service_account_info = json.loads(service_account_json_str)
+
         credentials = Credentials.from_service_account_info(
-            service_account_info, # משתמשים במילון ה-JSON שהומר
+            service_account_info,
             scopes=SCOPES
         )
-        service = build('drive', 'v3', credentials=credentials)
+
+        service = build("drive", "v3", credentials=credentials)
+
+        # בדיקת אמת – קריאה קטנה ל-Drive
+        about = service.about().get(fields="user").execute()
+        st.success(
+            f"Drive auth OK: {about.get('user', {}).get('emailAddress','(no email)')}"
+        )
+
         return service
+
     except Exception as e:
-        # אם יש שגיאת פורמט ב-JSON, היא תיתפס כאן, ונוכל לראות אותה
-        st.error(f"שגיאת אימות ל-Google Drive: ודא שהסודות וההרשאות תקינים. פרטי שגיאה: {e}")
+        st.error(f"Drive connect failed: {repr(e)}")
         return None
+
 
 def upload_summary_to_drive(summary_text: str, drive_service):
     # ... (הפונקציה נשארת ללא שינוי) ...
