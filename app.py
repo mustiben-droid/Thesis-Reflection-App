@@ -17,15 +17,21 @@ def set_rtl():
                 direction: rtl !important;
                 text-align: right;
             }
-            /* הוסף את שני הכללים האלה כאן: */
+            
+            /* התיקון החדש והמקיף ל-Sliders מתחיל כאן */
             [data-testid="stSlider"] {
-                direction: rtl;
+                direction: rtl; 
             }
-            [data-testid="stSlider"] label {
-                direction: rtl;
-                text-align: right;
+            .st-bh > label, .st-bh > div > div > div > div {
+                direction: rtl; 
+                text-align: right; 
             }
-            /* --- סוף הוספה --- */
+            [data-testid="stThumbValue"] {
+                direction: rtl !important;
+                text-align: right !important;
+            }
+            /* התיקון החדש והמקיף ל-Sliders נגמר כאן */
+            
             [data-testid="stHeader"], [data-testid="baseButton"] {
                 direction: ltr; 
             }
