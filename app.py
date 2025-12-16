@@ -1,4 +1,4 @@
-import json
+import json # חובה לייבא json!
 import os
 import io
 from datetime import date, datetime, timedelta
@@ -13,11 +13,12 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 # --- סוף Google Drive Imports ---
 
-# --- הגדרות קבועות ---
+# --- הגדרות קבועות (מעודכן) ---
 DATA_FILE = "reflections.jsonl"
 # קורא את הסודות שהגדרת ב-Streamlit Cloud
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
-GDRIVE_SERVICE_ACCOUNT_KEY = st.secrets.get("GDRIVE_SERVICE_ACCOUNT_KEY") 
+# קורא את השם החדש ששמרת כטקסט גולמי
+GDRIVE_SERVICE_ACCOUNT_JSON = st.secrets.get("GDRIVE_SERVICE_ACCOUNT_JSON") 
 # -----------------------------
 
 def set_rtl():
@@ -56,13 +57,12 @@ def get_google_api_key() -> str:
 
 def save_reflection(entry: dict) -> dict:
     """שומר רשומה ללוג המקומי (JSONL)."""
-    # כבר אין צורך להוסיף תאריך כאן, כי זה יקרה בבלוק ה-submitted
     with open(DATA_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     return {"status": "saved", "date": entry["date"]}
 
 def load_last_week():
-    # ... (פונקציות load_last_week ו-load_all_summaries נשארות זהות) ...
+    # ... (הפונקציה נשארת ללא שינוי) ...
     if not os.path.exists(DATA_FILE):
         return []
     
@@ -106,27 +106,33 @@ def load_all_summaries():
     return summaries
 
 # -----------------------------
-# Google Drive Functions
+# Google Drive Functions (מעודכן)
 # -----------------------------
 
 def get_drive_service():
     """מייצר חיבור מאומת לשירות Google Drive API."""
-    if not (GDRIVE_FOLDER_ID and GDRIVE_SERVICE_ACCOUNT_KEY):
+    # משתמש בשם החדש
+    if not (GDRIVE_FOLDER_ID and GDRIVE_SERVICE_ACCOUNT_JSON):
         return None
     try:
         SCOPES = ['https://www.googleapis.com/auth/drive.file']
+        
+        # שלב קריטי: המרה מטקסט גולמי למילון JSON
+        service_account_info = json.loads(GDRIVE_SERVICE_ACCOUNT_JSON)
+        
         credentials = Credentials.from_service_account_info(
-            GDRIVE_SERVICE_ACCOUNT_KEY,
+            service_account_info, # משתמשים במילון ה-JSON שהומר
             scopes=SCOPES
         )
         service = build('drive', 'v3', credentials=credentials)
         return service
     except Exception as e:
+        # אם יש שגיאת פורמט ב-JSON, היא תיתפס כאן, ונוכל לראות אותה
         st.error(f"שגיאת אימות ל-Google Drive: ודא שהסודות וההרשאות תקינים. פרטי שגיאה: {e}")
         return None
 
 def upload_summary_to_drive(summary_text: str, drive_service):
-    """מעלה או מעדכן את הסיכום השבועי ב-Google Drive כקובץ MD."""
+    # ... (הפונקציה נשארת ללא שינוי) ...
     today_str = date.today().isoformat()
     file_name = f"סיכום שבועי לתזה - {today_str}.md"
     
@@ -166,7 +172,7 @@ def upload_summary_to_drive(summary_text: str, drive_service):
         return f"נוצר קובץ חדש: {file_name}"
 
 def upload_reflection_to_drive(entry: dict, drive_service):
-    """מעלה רפלקציה בודדת ל-Google Drive כקובץ JSON."""
+    # ... (הפונקציה נשארת ללא שינוי) ...
     student_name = entry.get("student_name", "ללא-שם").replace(" ", "_")
     date_str = entry.get("date", date.today().isoformat())
     file_name = f"רפלקציה-{student_name}-{date_str}-{entry.get('timestamp')}.json"
@@ -196,8 +202,7 @@ def upload_reflection_to_drive(entry: dict, drive_service):
 # Gemini Summary Function
 # -----------------------------
 def generate_summary(entries: list) -> str:
-    # (פונקציה זו נשארת ללא שינוי מהותי)
-    # ... (כל הקוד של generate_summary) ...
+    # ... (הפונקציה נשארת ללא שינוי) ...
     if not entries:
         return "לא נמצאו רשומות רפלקציה בשבוע האחרון לסיכום."
 
@@ -246,7 +251,6 @@ def generate_summary(entries: list) -> str:
         return response.text or "לא התקבל טקסט מהמודל."
 
     except APIError as e:
-        # ... (טיפול בשגיאות API) ...
         msg = str(e)
         if ("expired" in msg.lower()) or ("api_key_invalid" in msg.lower()) or ("api key" in msg.lower()):
             return ("שגיאת API: מפתח ה-API לא תקין או פג תוקף. עדכן ב-Streamlit Secrets.")
@@ -256,15 +260,14 @@ def generate_summary(entries: list) -> str:
         return f"שגיאה בלתי צפויה בעת יצירת הסיכום: {e}"
 
 # -----------------------------
-# Streamlit UI - השינויים מתחילים כאן
+# Streamlit UI
 # -----------------------------
 
 set_rtl()
-st.title("יומן תצפית") # --- שינוי שם ---
+st.title("יומן תצפית")
 
 with st.form("reflection_form"):
     st.subheader("פרטי רפלקציה")
-    # ... (פרטי הרפלקציה המילולית וסרגלי הדירוג נשארים זהים) ...
     student_name = st.text_input("שם תלמיד", help="הזן את שם התלמיד שעבורו נרשמה הרפלקציה.")
     lesson_id = st.text_input("מזהה שיעור")
 
@@ -318,6 +321,7 @@ if submitted:
                 drive_status = upload_reflection_to_drive(reflection_entry, drive_service)
                 st.success(f"נשמר בהצלחה ✅ (לוג מקומי ו-Drive): {drive_status}")
             except Exception as e:
+                # שינוי קטן בהודעה כדי לעזור לאתר שגיאות קריטיות כמו הרשאות כתיבה
                 st.error(f"שגיאה בשמירה ל-Google Drive: ודא שניתנה הרשאת 'Editor' לחשבון השירות. פרטי שגיאה: {e}")
         else:
             st.warning("נשמר בלוג המקומי בלבד. לא ניתן להתחבר ל-Google Drive. ")
@@ -325,10 +329,8 @@ if submitted:
 
 st.divider()
 
-# --- הסרנו את הצגת רשימת הרפלקציות מהשבוע האחרון, כפי שביקשת ---
-
 # --- הצגת כפתור הסיכום ---
-entries = load_last_week() # עדיין נחוץ כדי לדעת אם יש נתונים לסיכום
+entries = load_last_week() 
 
 if st.button("✨ סכם שבוע אחרון עם Gemini"):
     if not entries:
