@@ -6,9 +6,24 @@ import streamlit as st
 from google import genai
 from google.genai.errors import APIError
 
+
+def set_rtl():
+    st.markdown("""
+        <style>
+            html, body, [data-testid="stAppViewContainer"] {
+                direction: rtl; 
+            }
+            input, textarea, [data-testid="stTextarea"] {
+                direction: rtl !important;
+                text-align: right;
+            }
+            [data-testid="stHeader"], [data-testid="baseButton"] {
+                direction: ltr; 
+            }
+        </style>
+        """, unsafe_allow_html=True)
+
 DATA_FILE = "reflections.jsonl"
-
-
 # -----------------------------
 # Utilities
 # -----------------------------
@@ -130,10 +145,7 @@ def generate_summary(entries: list) -> str:
     except Exception as e:
         return f"שגיאה בלתי צפויה בעת יצירת הסיכום: {e}"
 
-
-# -----------------------------
-# UI
-# -----------------------------
+set_rtl()
 st.title("יומן רפלקציה לתזה")
 
 with st.form("reflection_form"):
