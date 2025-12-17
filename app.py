@@ -27,7 +27,7 @@ CLASS_ROSTER = [
 ]
 
 # -----------------------------
-# פונקציית העיצוב (תיקון ספציפי לרקע השחור בבחירת תלמיד)
+# פונקציית העיצוב
 # -----------------------------
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
@@ -175,16 +175,58 @@ def upload_reflection_to_drive(entry: dict, drive_service):
     drive_service.files().create(body=file_metadata, media_body=media).execute()
 
 def generate_summary(entries: list) -> str:
-    if not entries: return "אין נתונים."
-    full_text = "רשומות רפלקציה:\n" + "\n".join([str(e) for e in entries])
-    prompt = f"נתח את הרשומות האלו וסכם מגמות, הישגים והמלצות:\n{full_text}"
+    if not entries: return "לא נמצאו נתונים לניתוח בטווח הזמן שנבחר."
+    
+    # המרת הרשומות לטקסט קריא
+    full_text = "רשומות תצפית גולמיות:\n" + "\n".join([str(e) for e in entries])
+    
+    # --- הפרומפט המעודכן עם קטגוריית המסוגלות העצמית ---
+    prompt = f"""
+    אתה עוזר מחקר אקדמי המנתח נתונים איכותניים לתזה בנושא חשיבה מרחבית.
+    עליך לנתח את יומני התצפית ולהפיק דוח ממצאים המבוסס אך ורק על חמשת הקטגוריות המוגדרות של המחקר.
+    
+    השתמש בהגדרות הבאות לניתוח התצפיות (שים לב לקטגוריה 5 החדשה):
+
+    1. המרת ייצוגים (Conversion):
+       - הגדרה: יכולת לבודד מבט ספציפי מתוך תלת-ממד (וההפך).
+       - מה לחפש: זיהוי נכון של מבטים, שרטוט תלת-ממדי.
+
+    2. מידות ופרופורציות (Measurement & Proportions):
+       - הגדרה: יכולת לפרש מידות ולשמור על יחסים נכונים.
+       - מה לחפש: ספירת משבצות, שימוש בסרגל, השוואה ויזואלית.
+
+    3. מעבר בין היטלים (View Transition):
+       - הגדרה: שמירה על רציפות נקודות בין מבטים.
+       - מה לחפש: קווי עזר, התאמה בין היטלים.
+
+    4. שימוש בגוף מודפס כתומך חשיבה (Physical Artifact Scaffolding):
+       - הגדרה: האופן בו נעשה שימוש פיזי בגוף (מניפולציה).
+       - מה לחפש: סיבוב הגוף, הנחה על הדף, השוואה פיזית.
+
+    5. מסוגלות עצמית ולמידה עצמאית (Self-Efficacy & Independence):
+       - הגדרה: המידה שבה התלמיד לומד לבד בעזרת הגוף המודפס ונזקק פחות לתיווך המורה.
+       - מה לחפש: האם התלמיד ניסה לפתור לבד לפני שפנה לעזרה? האם השימוש בגוף אפשר לו לתקן טעות באופן עצמאי? האם המורה נדרש להתערב הרבה או מעט?
+
+    הוראות לכתיבת הדוח:
+    - עבור כל קטגוריה, כתוב פסקה המסכמת את הממצאים שעלו מהתצפיות השבוע.
+    - הדגש במיוחד מקרים שבהם השימוש בגוף המודפס (קטגוריה 4) הוביל לעלייה במסוגלות העצמית (קטגוריה 5).
+
+    הנתונים לניתוח:
+    {full_text}
+    """
+    
     api_key = get_google_api_key()
-    if not api_key: return "חסר מפתח API"
+    if not api_key: return "שגיאה: חסר מפתח API"
+    
     try:
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash", 
+            contents=prompt,
+            config={"temperature": 0.2} 
+        )
         return response.text
-    except Exception as e: return f"שגיאה ב-AI: {e}"
+    except Exception as e: return f"שגיאה בניתוח ה-AI: {e}"
 
 # -----------------------------
 # ממשק ראשי (Main UI)
@@ -192,42 +234,42 @@ def generate_summary(entries: list) -> str:
 
 setup_design()
 
-st.title("🎓 יומן תצפית")
+st.title("🎓 יומן תצפית אינטראקטיבי")
 st.markdown("### מעקב אחר מיומנויות תפיסה מרחבית")
 
-tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 התקדמות אישית", "🤖 סיכום AI"])
+tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 התקדמות אישית", "🧠 עוזר מחקרי (AI)"])
 
 # --- לשונית 1: הזנת נתונים ---
 with tab1:
-    st.info("💡 טיפ: רפלקציה טובה נכתבת בסמוך לזמן השיעור.")
+    st.info("💡 טיפ: מומלץ למלא את התצפית תוך כדי או מיד אחרי השיעור.")
     with st.form("reflection_form"):
         st.markdown("#### 1. פרטי התצפית") 
         
         col_student, col_lesson = st.columns(2)
         with col_student:
-            selected_student = st.selectbox("שם תלמיד", CLASS_ROSTER)
+            selected_student = st.selectbox("👤 שם תלמיד", CLASS_ROSTER)
             if selected_student == "תלמיד אחר...":
-                student_name = st.text_input("הזן שם תלמיד:")
+                student_name = st.text_input("✍️ הזן שם תלמיד:")
             else:
                 student_name = selected_student
         
         with col_lesson:
-            lesson_id = st.text_input("שיעור מס'", placeholder="לדוגמה: היטלים 1")
+            lesson_id = st.text_input("📚 שיעור מס'", placeholder="לדוגמה: היטלים 1")
 
         st.markdown("#### 2. אופן העבודה")
         work_method = st.radio(
-            "כיצד התבצע השרטוט?",
+            "🛠️ כיצד התבצע השרטוט?",
             ["🎨 ללא גוף מודפס (דמיון/דף)", "🧊 בעזרת גוף מודפס (פיזי)"],
             horizontal=True
         )
 
-        st.markdown("#### 3. הלב של הרפלקציה")
+        st.markdown("#### 3. תיאור תצפית")
         col_text1, col_text2 = st.columns(2)
         with col_text1:
-            planned = st.text_area("🎯 מה תכננתי?", height=100, placeholder="מטרת המטלה...")
-            challenge = st.text_area("🔥 קושי מרכזי", height=100, placeholder="תיאור הפער בתפיסה...")
+            planned = st.text_area("📋 תיאור המטלה", height=100, placeholder="מה התלמיד נדרש לעשות?")
+            challenge = st.text_area("🗣️ ציטוטים / תגובות", height=100, placeholder="דברים שהתלמיד אמר או שפת גוף...")
         with col_text2:
-            done = st.text_area("✅ מה בוצע בפועל?", height=100, placeholder="תיאור הביצוע...")
+            done = st.text_area("👀 פעולות שנצפו", height=100, placeholder="מה ראית בפועל? (פעולות, מחיקות, היסוס...)")
         
         st.markdown("#### 4. מדדי הערכה (1-5)")
         c1, c2 = st.columns(2)
@@ -236,17 +278,25 @@ with tab1:
             cat_dims = st.slider("📏 מידות ופרופורציות", 1, 5, 3)
         with c2:
             cat_proj = st.slider("📐 מעבר בין היטלים", 1, 5, 3)
-            cat_3d_support = st.slider("🆘 מידת תמיכה נדרשת", 1, 5, 3)
+            cat_3d_support = st.slider("🆘 תמיכה נדרשת (הפוך ממסוגלות)", 1, 5, 3, help="1=המורה עשה הכל, 5=עבד לבד לגמרי")
+        
+        # המדד החדש נוסף כאן
+        st.markdown("---")
+        cat_self_efficacy = st.slider("💪 מסוגלות עצמית (למידה עצמאית בעזרת הגוף)", 1, 5, 3, help="עד כמה התלמיד הצליח להתקדם לבד בזכות המודל?")
 
-        submitted = st.form_submit_button("שמור רפלקציה ביומן")
+        submitted = st.form_submit_button("💾 שמור תצפית ביומן")
 
         if submitted:
             entry = {
                 "type": "reflection", "student_name": student_name, "lesson_id": lesson_id,
                 "work_method": work_method, "planned": planned, "done": done, 
-                "challenge": challenge, "cat_convert_rep": cat_convert, 
-                "cat_dims_props": cat_dims, "cat_proj_trans": cat_proj, 
-                "cat_3d_support": cat_3d_support, "date": date.today().isoformat(),
+                "challenge": challenge, 
+                "cat_convert_rep": cat_convert, 
+                "cat_dims_props": cat_dims, 
+                "cat_proj_trans": cat_proj, 
+                "cat_3d_support": cat_3d_support,
+                "cat_self_efficacy": cat_self_efficacy, # שמירת המדד החדש
+                "date": date.today().isoformat(),
                 "timestamp": datetime.now().isoformat()
             }
             save_reflection(entry)
@@ -257,68 +307,83 @@ with tab1:
                     upload_reflection_to_drive(entry, svc)
                 except: pass
 
-# --- לשונית 2: לוח בקרה אישי (ללא ממוצע קבוצתי) ---
+# --- לשונית 2: לוח בקרה אישי ---
 with tab2:
     st.markdown("### 🕵️ מעקב התפתחות אישי")
     df = load_data_as_dataframe()
     
     if df.empty:
-        st.warning("עדיין אין נתונים. נא למלא רפלקציות בלשונית הראשונה.")
+        st.warning("⚠️ עדיין אין נתונים. נא למלא תצפיות בלשונית הראשונה.")
     else:
-        metric_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_3d_support']
-        heb_names = {'cat_convert_rep': 'המרת ייצוגים', 'cat_dims_props': 'מידות', 'cat_proj_trans': 'היטלים', 'cat_3d_support': 'תמיכה'}
+        # עדכון רשימת המדדים לגרף
+        metric_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_self_efficacy']
+        heb_names = {
+            'cat_convert_rep': 'המרת ייצוגים', 
+            'cat_dims_props': 'מידות', 
+            'cat_proj_trans': 'היטלים', 
+            'cat_3d_support': 'תמיכה (ישן)',
+            'cat_self_efficacy': 'מסוגלות עצמית' # שם המדד החדש בגרף
+        }
         
         all_students = df['student_name'].unique() if 'student_name' in df.columns else []
         
         if len(all_students) > 0:
-            # הבחירה היא הדבר הראשון שרואים
-            selected_student_graph = st.selectbox("בחר תלמיד להצגת נתונים:", all_students)
+            selected_student_graph = st.selectbox("🎓 בחר תלמיד להצגת נתונים:", all_students)
             
-            # סינון הנתונים לתלמיד הספציפי
             student_df = df[df['student_name'] == selected_student_graph].sort_values("date")
             
             if not student_df.empty:
-                st.caption(f"מציג {len(student_df)} תצפיות עבור {selected_student_graph}")
+                st.caption(f"📅 מציג {len(student_df)} תצפיות עבור {selected_student_graph}")
                 
-                # כרטיסיות מידע
                 m1, m2, m3 = st.columns(3)
-                m1.metric("סה״כ תצפיות", len(student_df))
+                m1.metric("🔢 סה״כ תצפיות", len(student_df))
                 
                 last_method = student_df.iloc[-1].get('work_method', 'לא ידוע')
-                # קיצור הטקסט אם הוא ארוך מדי לתצוגה
                 short_method = last_method.split(' ')[0] if isinstance(last_method, str) else "לא ידוע"
-                m2.metric("שיטה אחרונה", short_method)
+                m2.metric("🛠️ שיטה אחרונה", short_method)
                 
-                m3.metric("תאריך אחרון", str(student_df.iloc[-1]['date'].date()))
+                # מציג את המדד החדש בכרטיסיה אם הוא קיים
+                last_efficacy = student_df.iloc[-1].get('cat_self_efficacy', 'N/A')
+                m3.metric("💪 מסוגלות אחרונה", last_efficacy)
 
                 st.divider()
 
-                # הגרף האישי - ביחס לעצמו
                 existing_cols = [c for c in metric_cols if c in df.columns]
                 if existing_cols:
-                    st.subheader("מגמת שיפור אישית")
+                    st.subheader("📈 מגמת שיפור אישית")
                     chart_data = student_df.set_index("date")[existing_cols]
                     chart_data.columns = [heb_names.get(c, c) for c in chart_data.columns]
                     st.line_chart(chart_data)
                 
                 st.divider()
-                st.subheader("הערות מילוליות (היסטוריה)")
-                # מציג טבלה רק עם עמודות רלוונטיות
+                st.subheader("📜 היסטוריית תצפיות")
+                
+                history_table = student_df[['date', 'work_method', 'planned', 'done', 'challenge']].tail(5)
+                history_table = history_table.rename(columns={
+                    'planned': '📋 מטלה',
+                    'done': '👀 פעולות',
+                    'challenge': '🗣️ ציטוטים',
+                    'work_method': '🛠️ שיטה',
+                    'date': '📅 תאריך'
+                })
+                
                 st.dataframe(
-                    student_df[['date', 'work_method', 'challenge', 'done']].tail(5), 
+                    history_table, 
                     hide_index=True, 
                     use_container_width=True
                 )
             else:
-                st.info("אין נתונים לתלמיד זה.")
+                st.info("ℹ️ אין נתונים לתלמיד זה.")
         else:
-            st.info("לא נמצאו תלמידים במאגר הנתונים.")
+            st.info("ℹ️ לא נמצאו תלמידים במאגר הנתונים.")
 
 # --- לשונית 3: AI ---
 with tab3:
-    st.markdown("### 🧠 העוזר המחקרי")
-    if st.button("צור סיכום שבועי חכם ✨"):
+    st.markdown("### 🤖 העוזר המחקרי החכם")
+    st.write("כאן תוכל לקבל ניתוח עומק על התקדמות הכיתה והתלמידים.")
+    
+    if st.button("✨ צור סיכום שבועי חכם"):
         entries = load_last_week()
-        with st.spinner("ה-AI מנתח את הנתונים..."):
+        with st.spinner("🔄 ה-AI מנתח את הנתונים..."):
             summary = generate_summary(entries)
             st.markdown(summary)
