@@ -25,14 +25,38 @@ CLASS_ROSTER = [
     "תלמיד אחר..." 
 ]
 
+# רשימת התגיות (תגיות מהירות לניתוח) - מעודכן
+OBSERVATION_TAGS = [
+    # כשלים ואתגרים
+    "התעלמות מקווים נסתרים",
+    "בלבול בין היטלים (צד/פנים/על)",
+    "קושי ברוטציה מנטלית",
+    "טעות בפרופורציות/מידות",
+    "מעבר בין היטלים",
+    
+    # אסטרטגיות עבודה
+    "שימוש בכלי מדידה",
+    "סיבוב פיזי של המודל",
+    "שימוש בתנועות ידיים (Embodiment)",
+    "ספירת משבצות",
+    "תיקון עצמי",
+    
+    # התנהגות
+    "בקשת אישור תכופה",
+    "ויתור/תסכול",
+    "עבודה עצמאית שוטפת",
+    "הבנה אינטואיטיבית מהירה"
+]
+
 # -----------------------------
-# פונקציית העיצוב (CSS מתוקן)
+# פונקציית העיצוב (CSS)
 # -----------------------------
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
     
     st.markdown("""
         <style>
+            /* הגדרות בסיס */
             .stApp, [data-testid="stAppViewContainer"] { background-color: #ffffff !important; }
             .block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; max-width: 100% !important; }
             [data-testid="stForm"], [data-testid="stVerticalBlock"] > div { background-color: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
@@ -44,13 +68,35 @@ def setup_design():
             [data-testid="stSlider"] label p { font-size: 18px !important; font-weight: 600 !important; margin-bottom: 5px !important; }
             [data-testid="stThumbValue"] { font-size: 16px !important; font-weight: bold !important; }
 
-            .stSelectbox > div > div { background-color: #f8f9fa !important; border: 1px solid #e0e0e0 !important; border-radius: 8px !important; color: #000000 !important; }
-            div[data-baseweb="popover"], div[data-baseweb="menu"], ul[role="listbox"] { background-color: #ffffff !important; color: #000000 !important; }
+            /* תיקון צבעים לתפריטים ותגיות */
+            .stSelectbox > div > div, .stMultiSelect > div > div { 
+                background-color: #f8f9fa !important; 
+                border: 1px solid #e0e0e0 !important; 
+                border-radius: 8px !important; 
+                color: #000000 !important;
+            }
+            
+            /* תפריטים נפתחים */
+            div[data-baseweb="popover"], div[data-baseweb="menu"], ul[role="listbox"] {
+                background-color: #ffffff !important;
+                color: #000000 !important;
+            }
             div[role="option"] { color: #000000 !important; background-color: #ffffff !important; }
             div[role="option"]:hover { background-color: #eef2ff !important; color: #000000 !important; }
 
+            /* תגיות נבחרות (Chips) */
+            span[data-baseweb="tag"] {
+                background-color: #eef2ff !important;
+                border: 1px solid #4361ee !important;
+            }
+            span[data-baseweb="tag"] span {
+                color: #4361ee !important; 
+                font-weight: bold;
+            }
+
             .stTextInput input, .stTextArea textarea { background-color: #f8f9fa !important; border: 1px solid #e0e0e0 !important; border-radius: 8px !important; direction: rtl !important; text-align: right; color: #000000 !important; }
             
+            /* תיקון העלאת קבצים */
             [data-testid="stFileUploader"] { padding: 10px; background-color: #f8f9fa; border-radius: 8px; }
             [data-testid="stFileUploader"] section { background-color: #ffffff !important; }
             [data-testid="stFileUploader"] small, [data-testid="stFileUploader"] span, [data-testid="stFileUploader"] div { color: #000000 !important; }
@@ -114,17 +160,11 @@ def load_last_week():
             if week_ago <= d <= today: out.append(e)
     return out
 
-# --- העלאת קבצים לדרייב (עם תיקון לכוננים משותפים) ---
+# --- העלאת קבצים לדרייב (עם תמיכה בתיקיות משותפות) ---
 def upload_file_to_drive(file_obj, filename, mime_type, drive_service):
     media = MediaIoBaseUpload(file_obj, mimetype=mime_type)
     file_metadata = {'name': filename, 'parents': [GDRIVE_FOLDER_ID], 'mimeType': mime_type}
-    
-    # התיקון כאן: הוספנו supportsAllDrives=True כדי לתמוך בתיקיות שיתופיות
-    drive_service.files().create(
-        body=file_metadata, 
-        media_body=media, 
-        supportsAllDrives=True
-    ).execute()
+    drive_service.files().create(body=file_metadata, media_body=media, supportsAllDrives=True).execute()
 
 # --- סיכום מחקרי ---
 def generate_summary(entries: list) -> str:
@@ -174,6 +214,10 @@ with tab1:
         work_method = st.radio("🛠️ כיצד התבצע השרטוט?", ["🎨 ללא גוף (דמיון)", "🧊 בעזרת גוף פיזי"], horizontal=True)
 
         st.markdown("#### 3. תיאור תצפית")
+        
+        # --- תגיות מהירות (מעודכן) ---
+        selected_tags = st.multiselect("🏷️ תגיות מהירות (ניתן לבחור כמה):", OBSERVATION_TAGS)
+        
         col_text1, col_text2 = st.columns(2)
         with col_text1:
             planned = st.text_area("📋 תיאור המטלה", height=100, placeholder="מה נדרש לעשות?")
@@ -183,97 +227,4 @@ with tab1:
         
         # --- העלאת תמונה ---
         st.markdown("#### 📷 תיעוד ויזואלי")
-        uploaded_image = st.file_uploader("צרף צילום שרטוט/גוף (מהמצלמה או מהגלריה)", type=['jpg', 'jpeg', 'png'])
-
-        st.markdown("#### 4. מדדי הערכה (1-5)")
-        c1, c2 = st.columns(2)
-        with c1:
-            cat_convert = st.slider("🔄 המרת ייצוגים", 1, 5, 3)
-            cat_dims = st.slider("📏 מידות ופרופורציות", 1, 5, 3)
-        with c2:
-            cat_proj = st.slider("📐 מעבר בין היטלים", 1, 5, 3)
-            cat_3d_support = st.slider("🧊 שימוש בגוף מודפס", 1, 5, 3)
-        
-        cat_self_efficacy = st.slider("💪 מסוגלות עצמית", 1, 5, 3)
-
-        submitted = st.form_submit_button("💾 שמור תצפית")
-
-        if submitted:
-            # 1. שמירת הנתונים
-            entry = {
-                "type": "reflection", "student_name": student_name, "lesson_id": lesson_id,
-                "work_method": work_method, "planned": planned, "done": done, 
-                "challenge": challenge, "cat_convert_rep": cat_convert, 
-                "cat_dims_props": cat_dims, "cat_proj_trans": cat_proj, 
-                "cat_3d_support": cat_3d_support, "cat_self_efficacy": cat_self_efficacy,
-                "date": date.today().isoformat(), "timestamp": datetime.now().isoformat(),
-                "has_image": uploaded_image is not None
-            }
-            save_reflection(entry)
-            
-            # 2. העלאה לדרייב
-            svc = get_drive_service()
-            if svc:
-                try:
-                    # העלאת ה-JSON
-                    json_bytes = io.BytesIO(json.dumps(entry, ensure_ascii=False, indent=4).encode('utf-8'))
-                    upload_file_to_drive(json_bytes, f"ref-{student_name}-{entry['date']}.json", 'application/json', svc)
-                    
-                    # העלאת התמונה (אם יש)
-                    if uploaded_image:
-                        image_bytes = io.BytesIO(uploaded_image.getvalue())
-                        upload_file_to_drive(image_bytes, f"img-{student_name}-{entry['date']}.jpg", 'image/jpeg', svc)
-                        st.success("📸 התמונה והנתונים נשמרו בדרייב!")
-                    else:
-                        st.success("✅ הנתונים נשמרו בהצלחה!")
-                except Exception as e:
-                    st.error(f"שגיאה בגיבוי לענן: {e}")
-            else:
-                st.warning("נשמר מקומית בלבד (אין חיבור לדרייב).")
-
-# --- לשונית 2: לוח בקרה וייצוא ---
-with tab2:
-    st.markdown("### 🕵️ מעקב התפתחות וייצוא נתונים")
-    df = load_data_as_dataframe()
-    
-    if df.empty:
-        st.warning("⚠️ אין נתונים.")
-    else:
-        # --- אזור ייצוא נתונים ---
-        st.markdown("#### 📥 ייצוא נתונים למחקר")
-        col_ex1, col_ex2 = st.columns(2)
-        with col_ex1:
-            csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button("📄 הורד כ-CSV", data=csv, file_name="thesis_data.csv", mime="text/csv", help="פורמט מתאים לתוכנות סטטיסטיות")
-        
-        with col_ex2:
-            try:
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df.to_excel(writer, index=False, sheet_name='Data')
-                st.download_button("📊 הורד כ-Excel", data=output.getvalue(), file_name="thesis_data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            except:
-                st.error("נדרשת ספריית openpyxl לאקסל")
-
-        st.divider()
-
-        metric_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_3d_support', 'cat_self_efficacy']
-        heb_names = {'cat_convert_rep': 'המרת ייצוגים', 'cat_dims_props': 'מידות', 'cat_proj_trans': 'היטלים', 'cat_3d_support': 'שימוש בגוף', 'cat_self_efficacy': 'מסוגלות עצמית'}
-        
-        all_students = df['student_name'].unique() if 'student_name' in df.columns else []
-        if len(all_students) > 0:
-            selected_student_graph = st.selectbox("🎓 בחר תלמיד:", all_students)
-            student_df = df[df['student_name'] == selected_student_graph].sort_values("date")
-            
-            if not student_df.empty:
-                chart_data = student_df.set_index("date")[metric_cols].rename(columns=heb_names)
-                st.line_chart(chart_data)
-                st.dataframe(student_df[['date', 'work_method', 'challenge', 'has_image']].tail(5), hide_index=True)
-
-# --- לשונית 3: AI ---
-with tab3:
-    st.markdown("### 🤖 עוזר מחקרי")
-    if st.button("✨ צור סיכום שבועי"):
-        entries = load_last_week()
-        with st.spinner("מנתח..."):
-            st.markdown(generate_summary(entries))
+        uploaded_image = st.file_uploader("צרף צילום שרטוט/ג
