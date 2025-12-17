@@ -34,13 +34,10 @@ def setup_design():
     
     st.markdown("""
         <style>
-            /* 1. ביטול הרווח הריק העליון */
             .block-container {
                 padding-top: 2rem !important;
                 padding-bottom: 2rem !important;
             }
-
-            /* 2. אילוץ מצב בהיר (Light Mode) */
             [data-testid="stAppViewContainer"] {
                 background-color: #f4f6f9 !important;
                 color: #000000 !important;
@@ -48,20 +45,15 @@ def setup_design():
             [data-testid="stHeader"] {
                 background-color: #f4f6f9 !important;
             }
-
-            /* 3. עיצוב טקסטים וכותרות */
             h1, h2, h3, h4, h5, h6 {
                 color: #4361ee !important;
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 text-align: center !important;
             }
-            
             p, div, span, label, li {
                 color: #2c3e50 !important;
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             }
-
-            /* 4. עיצוב כרטיסיות נקי */
             [data-testid="stForm"], [data-testid="stVerticalBlock"] > div {
                 background-color: #ffffff !important;
                 border-radius: 12px;
@@ -69,19 +61,14 @@ def setup_design():
                 border: 1px solid #e0e0e0;
                 box-shadow: none !important;
             }
-
-            /* 5. תיקון קריטי - צביעת הרקע של בחירת התלמיד (Selectbox) בלבן */
             .stSelectbox > div > div {
                 background-color: #ffffff !important;
                 color: #000000 !important;
                 border-color: #cccccc !important;
             }
-            /* תיקון הטקסט הנבחר שיהיה שחור */
             .stSelectbox div[data-baseweb="select"] div {
                 color: #000000 !important;
             }
-
-            /* תיקון שאר תיבות הקלט */
             .stTextInput input, .stTextArea textarea {
                 background-color: #ffffff !important;
                 color: #000000 !important;
@@ -89,14 +76,10 @@ def setup_design():
                 direction: rtl !important;
                 text-align: right;
             }
-            
-            /* תיקון הרשימה הנפתחת עצמה */
             div[data-baseweb="popover"] li, div[data-baseweb="popover"] div {
                  color: #000000 !important;
                  background-color: #ffffff !important;
             }
-
-            /* 6. כפתור שמירה */
             [data-testid="stFormSubmitButton"] > button {
                 background-color: #4361ee !important;
                 color: white !important;
@@ -106,11 +89,8 @@ def setup_design():
                 font-size: 18px;
                 border-radius: 8px;
             }
-
-            /* 7. כיווניות RTL */
             html, body { direction: rtl; }
             [data-testid="stSlider"] { direction: rtl; }
-            
         </style>
         """, unsafe_allow_html=True)
 
@@ -177,15 +157,14 @@ def upload_reflection_to_drive(entry: dict, drive_service):
 def generate_summary(entries: list) -> str:
     if not entries: return "לא נמצאו נתונים לניתוח בטווח הזמן שנבחר."
     
-    # המרת הרשומות לטקסט קריא
     full_text = "רשומות תצפית גולמיות:\n" + "\n".join([str(e) for e in entries])
     
-    # --- הפרומפט המעודכן עם קטגוריית המסוגלות העצמית ---
+    # --- הפרומפט המעודכן עם השינוי לקטגוריה 4 ---
     prompt = f"""
     אתה עוזר מחקר אקדמי המנתח נתונים איכותניים לתזה בנושא חשיבה מרחבית.
     עליך לנתח את יומני התצפית ולהפיק דוח ממצאים המבוסס אך ורק על חמשת הקטגוריות המוגדרות של המחקר.
     
-    השתמש בהגדרות הבאות לניתוח התצפיות (שים לב לקטגוריה 5 החדשה):
+    השתמש בהגדרות הבאות לניתוח התצפיות:
 
     1. המרת ייצוגים (Conversion):
        - הגדרה: יכולת לבודד מבט ספציפי מתוך תלת-ממד (וההפך).
@@ -199,17 +178,18 @@ def generate_summary(entries: list) -> str:
        - הגדרה: שמירה על רציפות נקודות בין מבטים.
        - מה לחפש: קווי עזר, התאמה בין היטלים.
 
-    4. שימוש בגוף מודפס כתומך חשיבה (Physical Artifact Scaffolding):
-       - הגדרה: האופן בו נעשה שימוש פיזי בגוף (מניפולציה).
-       - מה לחפש: סיבוב הגוף, הנחה על הדף, השוואה פיזית.
+    4. שימוש בגוף מודפס (Use of Printed Body):
+       - הגדרה: מידת ההסתמכות והשימוש האקטיבי בגוף הפיזי (האינטנסיביות).
+       - מה לחפש: האם התלמיד החזיק את הגוף כל הזמן? האם השתמש בו רק לבדיקה? האם התעלם ממנו?
+       - סקאלה: משימוש אפסי ועד שימוש אינטנסיבי ומתמיד.
 
     5. מסוגלות עצמית ולמידה עצמאית (Self-Efficacy & Independence):
-       - הגדרה: המידה שבה התלמיד לומד לבד בעזרת הגוף המודפס ונזקק פחות לתיווך המורה.
-       - מה לחפש: האם התלמיד ניסה לפתור לבד לפני שפנה לעזרה? האם השימוש בגוף אפשר לו לתקן טעות באופן עצמאי? האם המורה נדרש להתערב הרבה או מעט?
+       - הגדרה: המידה שבה התלמיד לומד לבד ופותר בעיות ללא עזרת המורה.
+       - מה לחפש: ניסיונות עצמאיים, תיקון טעויות לבד, מיעוט פניות למורה.
 
     הוראות לכתיבת הדוח:
     - עבור כל קטגוריה, כתוב פסקה המסכמת את הממצאים שעלו מהתצפיות השבוע.
-    - הדגש במיוחד מקרים שבהם השימוש בגוף המודפס (קטגוריה 4) הוביל לעלייה במסוגלות העצמית (קטגוריה 5).
+    - נסה לזהות קשרים: האם שימוש מוגבר בגוף מודפס (קטגוריה 4) קשור לעלייה במסוגלות העצמית (קטגוריה 5)?
 
     הנתונים לניתוח:
     {full_text}
@@ -272,17 +252,18 @@ with tab1:
             done = st.text_area("👀 פעולות שנצפו", height=100, placeholder="מה ראית בפועל? (פעולות, מחיקות, היסוס...)")
         
         st.markdown("#### 4. מדדי הערכה (1-5)")
+        # שינוי מבנה: הסרת הרווח ויצירת זרימה טבעית
         c1, c2 = st.columns(2)
         with c1:
             cat_convert = st.slider("🔄 המרת ייצוגים", 1, 5, 3)
             cat_dims = st.slider("📏 מידות ופרופורציות", 1, 5, 3)
         with c2:
             cat_proj = st.slider("📐 מעבר בין היטלים", 1, 5, 3)
-            cat_3d_support = st.slider("🆘 תמיכה נדרשת (הפוך ממסוגלות)", 1, 5, 3, help="1=המורה עשה הכל, 5=עבד לבד לגמרי")
+            # שינוי התווית וההסבר לפי בקשתך
+            cat_3d_support = st.slider("🧊 שימוש בגוף מודפס", 1, 5, 3, help="1=כמעט ולא נגע בגוף, 5=השתמש בגוף כל הזמן")
         
-        # המדד החדש נוסף כאן
-        st.markdown("---")
-        cat_self_efficacy = st.slider("💪 מסוגלות עצמית (למידה עצמאית בעזרת הגוף)", 1, 5, 3, help="עד כמה התלמיד הצליח להתקדם לבד בזכות המודל?")
+        # הסרנו את הקו המפריד ושמנו את המסוגלות מיד אחרי
+        cat_self_efficacy = st.slider("💪 מסוגלות עצמית (למידה עצמאית)", 1, 5, 3, help="עד כמה התלמיד פתר לבד?")
 
         submitted = st.form_submit_button("💾 שמור תצפית ביומן")
 
@@ -295,7 +276,7 @@ with tab1:
                 "cat_dims_props": cat_dims, 
                 "cat_proj_trans": cat_proj, 
                 "cat_3d_support": cat_3d_support,
-                "cat_self_efficacy": cat_self_efficacy, # שמירת המדד החדש
+                "cat_self_efficacy": cat_self_efficacy,
                 "date": date.today().isoformat(),
                 "timestamp": datetime.now().isoformat()
             }
@@ -315,75 +296,4 @@ with tab2:
     if df.empty:
         st.warning("⚠️ עדיין אין נתונים. נא למלא תצפיות בלשונית הראשונה.")
     else:
-        # עדכון רשימת המדדים לגרף
-        metric_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_self_efficacy']
-        heb_names = {
-            'cat_convert_rep': 'המרת ייצוגים', 
-            'cat_dims_props': 'מידות', 
-            'cat_proj_trans': 'היטלים', 
-            'cat_3d_support': 'תמיכה (ישן)',
-            'cat_self_efficacy': 'מסוגלות עצמית' # שם המדד החדש בגרף
-        }
-        
-        all_students = df['student_name'].unique() if 'student_name' in df.columns else []
-        
-        if len(all_students) > 0:
-            selected_student_graph = st.selectbox("🎓 בחר תלמיד להצגת נתונים:", all_students)
-            
-            student_df = df[df['student_name'] == selected_student_graph].sort_values("date")
-            
-            if not student_df.empty:
-                st.caption(f"📅 מציג {len(student_df)} תצפיות עבור {selected_student_graph}")
-                
-                m1, m2, m3 = st.columns(3)
-                m1.metric("🔢 סה״כ תצפיות", len(student_df))
-                
-                last_method = student_df.iloc[-1].get('work_method', 'לא ידוע')
-                short_method = last_method.split(' ')[0] if isinstance(last_method, str) else "לא ידוע"
-                m2.metric("🛠️ שיטה אחרונה", short_method)
-                
-                # מציג את המדד החדש בכרטיסיה אם הוא קיים
-                last_efficacy = student_df.iloc[-1].get('cat_self_efficacy', 'N/A')
-                m3.metric("💪 מסוגלות אחרונה", last_efficacy)
-
-                st.divider()
-
-                existing_cols = [c for c in metric_cols if c in df.columns]
-                if existing_cols:
-                    st.subheader("📈 מגמת שיפור אישית")
-                    chart_data = student_df.set_index("date")[existing_cols]
-                    chart_data.columns = [heb_names.get(c, c) for c in chart_data.columns]
-                    st.line_chart(chart_data)
-                
-                st.divider()
-                st.subheader("📜 היסטוריית תצפיות")
-                
-                history_table = student_df[['date', 'work_method', 'planned', 'done', 'challenge']].tail(5)
-                history_table = history_table.rename(columns={
-                    'planned': '📋 מטלה',
-                    'done': '👀 פעולות',
-                    'challenge': '🗣️ ציטוטים',
-                    'work_method': '🛠️ שיטה',
-                    'date': '📅 תאריך'
-                })
-                
-                st.dataframe(
-                    history_table, 
-                    hide_index=True, 
-                    use_container_width=True
-                )
-            else:
-                st.info("ℹ️ אין נתונים לתלמיד זה.")
-        else:
-            st.info("ℹ️ לא נמצאו תלמידים במאגר הנתונים.")
-
-# --- לשונית 3: AI ---
-with tab3:
-    st.markdown("### 🤖 העוזר המחקרי החכם")
-    st.write("כאן תוכל לקבל ניתוח עומק על התקדמות הכיתה והתלמידים.")
-    
-    if st.button("✨ צור סיכום שבועי חכם"):
-        entries = load_last_week()
-        with st.spinner("🔄 ה-AI מנתח את הנתונים..."):
-            summary = generate_summary(entries)
-            st.markdown(summary)
+        metric_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_
