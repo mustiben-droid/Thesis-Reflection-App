@@ -32,7 +32,7 @@ CLASS_ROSTER = [
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
     
-    # התיקון לבעיה שראית בתמונה נמצא כאן - השימוש ב-st.markdown עם שלוש מרכאות
+    # התיקון נמצא כאן: הוספתי וודאתי שהמרכאות המשולשות קיימות וסוגרות את העיצוב
     st.markdown("""
         <style>
             /* 1. ביטול הרווח הריק העליון */
@@ -113,7 +113,8 @@ def setup_design():
             [data-testid="stSlider"] { direction: rtl; }
             
         </style>
-        """, unsafe_allow_html=True)
+    """, unsafe_allow_html=True) 
+    # ^ שים לב: הסוגריים והמרכאות כאן קריטיים!
 
 # -----------------------------
 # פונקציות לוגיקה
@@ -269,4 +270,122 @@ with tab1:
         st.markdown("#### 3. תיאור תצפית")
         col_text1, col_text2 = st.columns(2)
         with col_text1:
-            planned = st.text
+            planned = st.text_area("📋 תיאור המטלה", height=100, placeholder="מה התלמיד נדרש לעשות?")
+            challenge = st.text_area("🗣️ ציטוטים / תגובות", height=100, placeholder="דברים שהתלמיד אמר או שפת גוף...")
+        with col_text2:
+            done = st.text_area("👀 פעולות שנצפו", height=100, placeholder="מה ראית בפועל? (פעולות, מחיקות, היסוס...)")
+        
+        st.markdown("#### 4. מדדי הערכה (1-5)")
+        c1, c2 = st.columns(2)
+        with c1:
+            cat_convert = st.slider("🔄 המרת ייצוגים", 1, 5, 3)
+            cat_dims = st.slider("📏 מידות ופרופורציות", 1, 5, 3)
+        with c2:
+            cat_proj = st.slider("📐 מעבר בין היטלים", 1, 5, 3)
+            cat_3d_support = st.slider("🧊 שימוש בגוף מודפס", 1, 5, 3, help="1=כמעט ללא שימוש, 5=שימוש אינטנסיבי ומתמיד")
+        
+        cat_self_efficacy = st.slider("💪 מסוגלות עצמית (למידה עצמאית)", 1, 5, 3, help="1=נזקק לעזרה רבה, 5=עבד עצמאית לגמרי")
+
+        # הנה הכפתור שהיה חסר - הוא חייב להיות בתוך הבלוק של with st.form
+        submitted = st.form_submit_button("💾 שמור תצפית ביומן")
+
+        if submitted:
+            entry = {
+                "type": "reflection", "student_name": student_name, "lesson_id": lesson_id,
+                "work_method": work_method, "planned": planned, "done": done, 
+                "challenge": challenge, 
+                "cat_convert_rep": cat_convert, 
+                "cat_dims_props": cat_dims, 
+                "cat_proj_trans": cat_proj, 
+                "cat_3d_support": cat_3d_support,
+                "cat_self_efficacy": cat_self_efficacy,
+                "date": date.today().isoformat(),
+                "timestamp": datetime.now().isoformat()
+            }
+            save_reflection(entry)
+            st.success(f"🎉 המידע על {student_name} נשמר בהצלחה!")
+            svc = get_drive_service()
+            if svc:
+                try:
+                    upload_reflection_to_drive(entry, svc)
+                except: pass
+
+# --- לשונית 2: לוח בקרה אישי ---
+with tab2:
+    st.markdown("### 🕵️ מעקב התפתחות אישי")
+    df = load_data_as_dataframe()
+    
+    if df.empty:
+        st.warning("⚠️ עדיין אין נתונים. נא למלא תצפיות בלשונית הראשונה.")
+    else:
+        metric_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_3d_support', 'cat_self_efficacy']
+        
+        heb_names = {
+            'cat_convert_rep': 'המרת ייצוגים', 
+            'cat_dims_props': 'מידות', 
+            'cat_proj_trans': 'היטלים', 
+            'cat_3d_support': 'שימוש בגוף', 
+            'cat_self_efficacy': 'מסוגלות עצמית'
+        }
+        
+        all_students = df['student_name'].unique() if 'student_name' in df.columns else []
+        
+        if len(all_students) > 0:
+            selected_student_graph = st.selectbox("🎓 בחר תלמיד להצגת נתונים:", all_students)
+            
+            student_df = df[df['student_name'] == selected_student_graph].sort_values("date")
+            
+            if not student_df.empty:
+                st.caption(f"📅 מציג {len(student_df)} תצפיות עבור {selected_student_graph}")
+                
+                m1, m2, m3 = st.columns(3)
+                m1.metric("🔢 סה״כ תצפיות", len(student_df))
+                
+                last_method = student_df.iloc[-1].get('work_method', 'לא ידוע')
+                short_method = last_method.split(' ')[0] if isinstance(last_method, str) else "לא ידוע"
+                m2.metric("🛠️ שיטה אחרונה", short_method)
+                
+                last_efficacy = student_df.iloc[-1].get('cat_self_efficacy', 'N/A')
+                m3.metric("💪 מסוגלות אחרונה", last_efficacy)
+
+                st.divider()
+
+                existing_cols = [c for c in metric_cols if c in df.columns]
+                if existing_cols:
+                    st.subheader("📈 מגמת שיפור אישית")
+                    chart_data = student_df.set_index("date")[existing_cols]
+                    chart_data.columns = [heb_names.get(c, c) for c in chart_data.columns]
+                    st.line_chart(chart_data)
+                
+                st.divider()
+                st.subheader("📜 היסטוריית תצפיות")
+                
+                history_table = student_df[['date', 'work_method', 'planned', 'done', 'challenge']].tail(5)
+                history_table = history_table.rename(columns={
+                    'planned': '📋 מטלה',
+                    'done': '👀 פעולות',
+                    'challenge': '🗣️ ציטוטים',
+                    'work_method': '🛠️ שיטה',
+                    'date': '📅 תאריך'
+                })
+                
+                st.dataframe(
+                    history_table, 
+                    hide_index=True, 
+                    use_container_width=True
+                )
+            else:
+                st.info("ℹ️ אין נתונים לתלמיד זה.")
+        else:
+            st.info("ℹ️ לא נמצאו תלמידים במאגר הנתונים.")
+
+# --- לשונית 3: AI ---
+with tab3:
+    st.markdown("### 🤖 העוזר המחקרי החכם")
+    st.write("כאן תוכל לקבל ניתוח עומק על התקדמות הכיתה והתלמידים.")
+    
+    if st.button("✨ צור סיכום שבועי חכם"):
+        entries = load_last_week()
+        with st.spinner("🔄 ה-AI מנתח את הנתונים..."):
+            summary = generate_summary(entries)
+            st.markdown(summary)
