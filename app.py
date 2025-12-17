@@ -49,26 +49,28 @@ OBSERVATION_TAGS = [
 ]
 
 # -----------------------------
-# פונקציית העיצוב (CSS)
+# פונקציית העיצוב (CSS מתוקן לתגיות)
 # -----------------------------
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
     
     st.markdown("""
         <style>
-            /* הגדרות בסיס */
+            /* 1. הגדרות בסיס */
             .stApp, [data-testid="stAppViewContainer"] { background-color: #ffffff !important; }
             .block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; max-width: 100% !important; }
             [data-testid="stForm"], [data-testid="stVerticalBlock"] > div { background-color: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
             
+            /* 2. טקסטים וכותרות */
             h1, h2, h3, h4, h5, h6 { color: #4361ee !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center !important; }
             p, label, span, div { color: #2c3e50 !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
             
+            /* 3. סליידרים */
             [data-testid="stSlider"] { direction: rtl; padding-bottom: 10px; width: 100%; }
             [data-testid="stSlider"] label p { font-size: 18px !important; font-weight: 600 !important; margin-bottom: 5px !important; }
             [data-testid="stThumbValue"] { font-size: 16px !important; font-weight: bold !important; }
 
-            /* תיקון צבעים לתפריטים ותגיות */
+            /* 4. תיקון צבעים לתפריטים (Selectbox + Multiselect) */
             .stSelectbox > div > div, .stMultiSelect > div > div { 
                 background-color: #f8f9fa !important; 
                 border: 1px solid #e0e0e0 !important; 
@@ -76,7 +78,7 @@ def setup_design():
                 color: #000000 !important;
             }
             
-            /* תפריטים נפתחים */
+            /* תפריטים נפתחים (Dropdown) */
             div[data-baseweb="popover"], div[data-baseweb="menu"], ul[role="listbox"] {
                 background-color: #ffffff !important;
                 color: #000000 !important;
@@ -84,24 +86,33 @@ def setup_design():
             div[role="option"] { color: #000000 !important; background-color: #ffffff !important; }
             div[role="option"]:hover { background-color: #eef2ff !important; color: #000000 !important; }
 
-            /* תגיות נבחרות (Chips) */
+            /* 5. תיקון קריטי לתגיות (Tags) */
+            /* הרקע של התגית */
             span[data-baseweb="tag"] {
-                background-color: #eef2ff !important;
+                background-color: #eef2ff !important; /* תכלת בהיר */
                 border: 1px solid #4361ee !important;
             }
+            /* הטקסט בתוך התגית */
             span[data-baseweb="tag"] span {
-                color: #4361ee !important; 
-                font-weight: bold;
+                color: #000000 !important; /* שחור */
+                font-weight: 600 !important;
+            }
+            /* ה-X לסגירה */
+            span[data-baseweb="tag"] svg {
+                color: #000000 !important; 
+                fill: #000000 !important;
             }
 
+            /* 6. תיבות טקסט */
             .stTextInput input, .stTextArea textarea { background-color: #f8f9fa !important; border: 1px solid #e0e0e0 !important; border-radius: 8px !important; direction: rtl !important; text-align: right; color: #000000 !important; }
             
-            /* תיקון העלאת קבצים */
+            /* 7. תיקון העלאת קבצים */
             [data-testid="stFileUploader"] { padding: 10px; background-color: #f8f9fa; border-radius: 8px; }
             [data-testid="stFileUploader"] section { background-color: #ffffff !important; }
             [data-testid="stFileUploader"] small, [data-testid="stFileUploader"] span, [data-testid="stFileUploader"] div { color: #000000 !important; }
             [data-testid="stFileUploader"] button { color: #000000 !important; background-color: #e0e0e0 !important; border-color: #cccccc !important; }
 
+            /* 8. כפתור שמירה */
             [data-testid="stFormSubmitButton"] > button { background-color: #4361ee !important; color: white !important; border: none; width: 100%; padding: 15px; font-size: 20px; font-weight: bold; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 6px rgba(67, 97, 238, 0.3); }
 
             html, body { direction: rtl; }
@@ -225,7 +236,7 @@ with tab1:
         with col_text2:
             done = st.text_area("👀 פעולות שנצפו", height=100, placeholder="מה הוא עשה בפועל?")
         
-        # --- העלאת תמונה (התיקון כאן: שימוש במשתנה לטקסט) ---
+        # --- העלאת תמונה ---
         st.markdown("#### 📷 תיעוד ויזואלי")
         upload_label = "צרף צילום שרטוט/גוף (מהמצלמה או מהגלריה)"
         uploaded_image = st.file_uploader(upload_label, type=['jpg', 'jpeg', 'png'])
@@ -286,10 +297,9 @@ with tab2:
     if df.empty:
         st.warning("⚠️ אין נתונים.")
     else:
-        # עיבוד נתונים לפני ייצוא (כדי שהתגיות יראו יפה באקסל)
+        # עיבוד נתונים לפני ייצוא
         export_df = df.copy()
         if "tags" in export_df.columns:
-            # הופך את הרשימה ['תגית1', 'תגית2'] למחרוזת "תגית1, תגית2"
             export_df["tags"] = export_df["tags"].apply(lambda x: ", ".join(x) if isinstance(x, list) else x)
 
         # --- אזור ייצוא נתונים ---
