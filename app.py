@@ -48,7 +48,6 @@ def setup_design():
             [data-testid="stThumbValue"] { font-size: 16px !important; font-weight: bold !important; }
 
             /* 4. תיקון קריטי - תפריט נפתח (Selectbox) */
-            /* צבע הרקע של התיבה עצמה */
             .stSelectbox > div > div { 
                 background-color: #f8f9fa !important; 
                 border: 1px solid #e0e0e0 !important; 
@@ -56,19 +55,16 @@ def setup_design():
                 color: #000000 !important;
             }
             
-            /* תיקון הרשימה שנפתחת (הרקע השחור) */
             div[data-baseweb="popover"], div[data-baseweb="menu"], ul[role="listbox"] {
                 background-color: #ffffff !important;
                 color: #000000 !important;
             }
             
-            /* תיקון הפריטים בתוך הרשימה */
             div[role="option"] {
                 color: #000000 !important;
                 background-color: #ffffff !important;
             }
             
-            /* צבע כהה יותר כשעוברים עם העכבר/אצבע על פריט */
             div[role="option"]:hover, div[role="option"]:active, li[role="option"]:hover {
                 background-color: #eef2ff !important;
                 color: #000000 !important;
@@ -277,12 +273,10 @@ with tab2:
         st.markdown("#### 📥 ייצוא נתונים למחקר")
         col_ex1, col_ex2 = st.columns(2)
         with col_ex1:
-            # המרת הדאטהפריים ל-CSV
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button("📄 הורד כ-CSV", data=csv, file_name="thesis_data.csv", mime="text/csv", help="פורמט מתאים לתוכנות סטטיסטיות")
         
         with col_ex2:
-            # המרת הדאטהפריים לאקסל (דורש openpyxl)
             try:
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -301,5 +295,18 @@ with tab2:
         if len(all_students) > 0:
             selected_student_graph = st.selectbox("🎓 בחר תלמיד:", all_students)
             student_df = df[df['student_name'] == selected_student_graph].sort_values("date")
+            
             if not student_df.empty:
-                st.line_chart(student_df.
+                # התיקון כאן: פיצול השורה הארוכה כדי למנוע שגיאות תחביר
+                chart_data = student_df.set_index("date")[metric_cols].rename(columns=heb_names)
+                st.line_chart(chart_data)
+                
+                st.dataframe(student_df[['date', 'work_method', 'challenge', 'has_image']].tail(5), hide_index=True)
+
+# --- לשונית 3: AI ---
+with tab3:
+    st.markdown("### 🤖 עוזר מחקרי")
+    if st.button("✨ צור סיכום שבועי"):
+        entries = load_last_week()
+        with st.spinner("מנתח..."):
+            st.markdown(generate_summary(entries))
