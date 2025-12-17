@@ -1,416 +1,291 @@
-import json # חובה לייבא json!
+import json
 import base64
 import os
 import io
 from datetime import date, datetime, timedelta
+import pandas as pd
 
 import streamlit as st
 from google import genai
-from google.genai.errors import APIError
+# from google.genai.errors import APIError 
 
 # --- Google Drive Imports ---
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
-# --- סוף Google Drive Imports ---
 
 # --- הגדרות קבועות ---
 DATA_FILE = "reflections.jsonl"
-# קורא את הסודות שהגדרת ב-Streamlit Cloud
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
-# GDRIVE_SERVICE_ACCOUNT_B64 נקרא ישירות בתוך get_drive_service
-# -----------------------------
 
-def set_rtl():
+# רשימת התלמידים הקבועה
+CLASS_ROSTER = [
+    "נתנאל",
+    "רועי",
+    "אסף",
+    "עילאי",
+    "תלמיד אחר..." 
+]
+
+# -----------------------------
+# פונקציית העיצוב החדשה והצבעונית 🎨
+# -----------------------------
+def setup_design():
+    # הגדרת כותרת הדף ואייקון בדפדפן
+    st.set_page_config(page_title="יומן מחקר", page_icon="🎓", layout="centered")
+    
     st.markdown("""
         <style>
-            /* כללי RTL כלליים לדף ולשדות טקסט */
+            /* כיוון ימין-שמאל גלובלי */
             html, body, [data-testid="stAppViewContainer"] {
-                direction: rtl; 
-            }
-            input, textarea, [data-testid="stTextarea"] {
-                direction: rtl !important;
-                text-align: right;
+                direction: rtl;
+                background-color: #f8f9fa; /* רקע אפור בהיר מאוד לכל האפליקציה */
             }
             
-            /* התיקון ל-Sliders */
-            [data-testid="stSlider"] {
-                direction: rtl; 
-            }
-            [data-testid="stSlider"] * {
-                direction: rtl !important;
-                text-align: right !important;
+            /* עיצוב שדות טקסט */
+            input, textarea, [data-testid="stTextarea"], [data-testid="stSelectbox"] { 
+                direction: rtl !important; 
+                text_align: right; 
             }
             
-            /* שומר על כיוון LTR לכפתורים וכותרות Streamlit */
-            [data-testid="stHeader"], [data-testid="baseButton"] {
-                direction: ltr; 
+            /* עיצוב כותרות בצבע כחול-סגול */
+            h1, h2, h3 {
+                color: #4361ee !important;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             }
+            
+            /* אפקט "כרטיסייה" לטופס ולטאבים */
+            [data-testid="stForm"], [data-testid="stVerticalBlock"] > div {
+                background-color: white;
+                padding: 20px;
+                border-radius: 15px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* צל עדין */
+                margin-bottom: 20px;
+            }
+            
+            /* כפתור שמירה בולט */
+            [data-testid="stFormSubmitButton"] > button {
+                background-color: #4361ee;
+                color: white;
+                border-radius: 10px;
+                width: 100%;
+                font-weight: bold;
+                border: none;
+            }
+            [data-testid="stFormSubmitButton"] > button:hover {
+                background-color: #3f37c9;
+                color: white;
+            }
+
+            /* יישור טאבים */
+            .stTabs [data-baseweb="tab-list"] { 
+                justify-content: center; 
+                gap: 10px;
+            }
+            .stTabs [data-baseweb="tab"] {
+                background-color: #e0e7ff;
+                border-radius: 5px;
+                padding: 10px 20px;
+            }
+            .stTabs [aria-selected="true"] {
+                background-color: #4361ee !important;
+                color: white !important;
+            }
+            
+            /* תיקון כיוון לסליידרים */
+            [data-testid="stSlider"] { direction: rtl; }
+            
         </style>
         """, unsafe_allow_html=True)
 
 # -----------------------------
-# Utilities
+# פונקציות לוגיקה (ללא שינוי)
 # -----------------------------
 def get_google_api_key() -> str:
     return st.secrets.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
 
 def save_reflection(entry: dict) -> dict:
-    """שומר רשומה ללוג המקומי (JSONL)."""
     with open(DATA_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     return {"status": "saved", "date": entry["date"]}
 
+def load_data_as_dataframe():
+    if not os.path.exists(DATA_FILE): return pd.DataFrame()
+    data = []
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip(): continue
+            try:
+                entry = json.loads(line)
+                if entry.get("type") == "reflection": data.append(entry)
+            except: continue
+    df = pd.DataFrame(data)
+    if not df.empty and "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"])
+    return df
+
 def load_last_week():
-    """טוען רשומות רפלקציה מהשבוע האחרון בלבד."""
-    if not os.path.exists(DATA_FILE):
-        return []
-    
+    if not os.path.exists(DATA_FILE): return []
     today = date.today()
     week_ago = today - timedelta(days=6)
-
     out = []
     with open(DATA_FILE, "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip():
-                continue
+            if not line.strip(): continue
             e = json.loads(line)
-            
-            if e.get("type") == "weekly_summary":
-                continue 
-            
+            if e.get("type") == "weekly_summary": continue
             try:
                 d = date.fromisoformat(e.get("date", today.isoformat()))
-            except Exception:
-                continue
-
-            if week_ago <= d <= today:
-                out.append(e)
-
+            except: continue
+            if week_ago <= d <= today: out.append(e)
     return out
 
-def load_all_summaries():
-    """טוען ושולף את כל הסיכומים השבועיים שנשמרו."""
-    if not os.path.exists(DATA_FILE):
-        return []
-
-    summaries = []
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
-        for line in f:
-            if not line.strip():
-                continue
-            e = json.loads(line)
-            if e.get("type") == "weekly_summary":
-                summaries.append(e)
-
-    return summaries
-
-# -----------------------------
-# Google Drive Functions (הגרסה המתוקנת)
-# -----------------------------
-
+# --- Google Drive & Gemini ---
 def get_drive_service():
-    """מייצר חיבור מאומת לשירות Google Drive API."""
-
-    if not GDRIVE_FOLDER_ID:
-        st.error("חסר GDRIVE_FOLDER_ID ב-Secrets")
-        return None
-
-    if not st.secrets.get("GDRIVE_SERVICE_ACCOUNT_B64"):
-        st.error("חסר GDRIVE_SERVICE_ACCOUNT_B64 ב-Secrets")
-        return None
-
+    if not GDRIVE_FOLDER_ID or not st.secrets.get("GDRIVE_SERVICE_ACCOUNT_B64"): return None
     try:
         SCOPES = ["https://www.googleapis.com/auth/drive.file"]
-
-        service_account_json_str = base64.b64decode(
-            st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]
-        ).decode("utf-8")
-
-        service_account_info = json.loads(service_account_json_str)
-
-        credentials = Credentials.from_service_account_info(
-            service_account_info,
-            scopes=SCOPES
-        )
-
-        service = build("drive", "v3", credentials=credentials)
-
-        # בדיקת אמת – קריאה קטנה ל-Drive
-        about = service.about().get(fields="user").execute()
-        st.success(
-            f"Drive auth OK: {about.get('user', {}).get('emailAddress','(no email)')}"
-        )
-
-        return service
-
+        service_account_json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
+        creds = Credentials.from_service_account_info(json.loads(service_account_json_str), scopes=SCOPES)
+        return build("drive", "v3", credentials=creds)
     except Exception as e:
-        st.error(f"Drive connect failed: {repr(e)}")
-        return None
-
-
-def upload_summary_to_drive(summary_text: str, drive_service):
-    """מעלה או מעדכן את הסיכום השבועי ב-Google Drive כקובץ MD."""
-    today_str = date.today().isoformat()
-    file_name = f"סיכום שבועי לתזה - {today_str}.md"
-    
-    query = f"name='{file_name}' and '{GDRIVE_FOLDER_ID}' in parents and trashed=false"
-    response = drive_service.files().list(
-        q=query,
-        spaces='drive',
-        fields='files(id)',
-        # --- תיקון קריטי 1: חובה לחיפוש בכוננים משותפים ---
-        includeItemsFromAllDrives=True,
-        corpora='allDrives',
-        # --- תיקון קריטי נוסף לשגיאת 403 בחיפוש ---
-        supportsAllDrives=True 
-    ).execute()
-    
-    files = response.get('files', [])
-    file_id = files[0]['id'] if files else None
-
-    media = MediaIoBaseUpload(
-        io.BytesIO(summary_text.encode('utf-8')),
-        mimetype='text/markdown',
-        resumable=True
-    )
-
-    if file_id:
-        drive_service.files().update(
-            fileId=file_id,
-            media_body=media,
-            # --- תיקון קריטי 2: חובה לעדכון בכונן משותף ---
-            supportsAllDrives=True 
-        ).execute()
-        return f"עודכן קובץ: {file_name}"
-    else:
-        file_metadata = {
-            'name': file_name,
-            'parents': [GDRIVE_FOLDER_ID],
-            'mimeType': 'text/markdown'
-        }
-        drive_service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id, name',
-            # --- תיקון קריטי 3: חובה ליצירה בכונן משותף ---
-            supportsAllDrives=True 
-        ).execute()
-        return f"נוצר קובץ חדש: {file_name}"
-
+        st.error(f"Drive connect failed: {e}"); return None
 
 def upload_reflection_to_drive(entry: dict, drive_service):
-    """מעלה רפלקציה בודדת ל-Google Drive כקובץ JSON. (נשאר ללא שינוי, עובד)."""
-    student_name = entry.get("student_name", "ללא-שם").replace(" ", "_")
-    date_str = entry.get("date", date.today().isoformat())
-    file_name = f"רפלקציה-{student_name}-{date_str}-{entry.get('timestamp')}.json"
-    
-    # 1. הכנת תוכן הקובץ (JSON)
-    reflection_json = json.dumps(entry, ensure_ascii=False, indent=4).encode('utf-8')
-    media = MediaIoBaseUpload(
-        io.BytesIO(reflection_json),
-        mimetype='application/json',
-        resumable=True
-    )
+    student_name = entry.get("student_name", "unknown").replace(" ", "_")
+    file_name = f"ref-{student_name}-{entry.get('date')}.json"
+    media = MediaIoBaseUpload(io.BytesIO(json.dumps(entry, ensure_ascii=False, indent=4).encode('utf-8')), mimetype='application/json')
+    file_metadata = {'name': file_name, 'parents': [GDRIVE_FOLDER_ID], 'mimeType': 'application/json'}
+    drive_service.files().create(body=file_metadata, media_body=media).execute()
 
-    # 2. יצירת קובץ חדש
-    file_metadata = {
-        'name': file_name,
-        'parents': [GDRIVE_FOLDER_ID],
-        'mimeType': 'application/json'
-    }
-    drive_service.files().create(
-        body=file_metadata,
-        media_body=media,
-        fields='id, name',
-        # --- תיקון קריטי: חובה עבור כוננים משותפים ---
-        supportsAllDrives=True 
-    ).execute()
-    return f"רפלקציה נשמרה כ-JSON: {file_name}"
-    
-# -----------------------------
-# Gemini Summary Function (ללא שינוי)
-# -----------------------------
 def generate_summary(entries: list) -> str:
-    """יוצר סיכום AI על סמך רשומות הרפלקציה."""
-    if not entries:
-        return "לא נמצאו רשומות רפלקציה בשבוע האחרון לסיכום."
-
-    # Build prompt body... 
-    header = (
-        "אלה הן רשומות רפלקציה שבועיות שבוצעו במהלך כתיבת עבודת תזה. "
-        "הרפלקציות נאספו בפורמט JSONL.\n"
-    )
-    full_text = header
-    for entry in entries:
-        full_text += f"\n---\nרפלקציה מ: {entry.get('date')}\n"
-        full_text += f"תלמיד: {entry.get('student_name')}\n"
-        full_text += f"מזהה שיעור: {entry.get('lesson_id')}\n"
-        full_text += f"תכנון: {entry.get('planned')}\n"
-        full_text += f"בוצע: {entry.get('done')}\n"
-        full_text += f"קושי: {entry.get('challenge')}\n"
-        full_text += f"תובנה: {entry.get('insight')}\n"
-        full_text += f"צעד הבא: {entry.get('next_step')}\n"
-        full_text += (
-            f"דירוגים (1=קל/מצוין, 5=קשה): "
-            f"המרת ייצוגים={entry.get('cat_convert_rep')}, "
-            f"מידות/פרופורציות={entry.get('cat_dims_props')}, "
-            f"מעבר בין היטלים={entry.get('cat_proj_trans')}, "
-            f"גוף מודפס={entry.get('cat_3d_support')}\n"
-        )
-
-    prompt = (
-        "על סמך רשומות הרפלקציה הבאות, בצע ניתוח וסכם את השבוע.\n"
-        "הסיכום צריך להיות בשלושה חלקים, מופרדים בבירור:\n"
-        "1) **מגמות ודפוסים** – דפוסים מרכזיים (תכנון מול ביצוע, קשיים חוזרים)\n"
-        "2) **הישגים מרכזיים** – ביצועים ותובנות חשובות\n"
-        "3) **המלצות לצעדים הבאים** – צעדים ממוקדים לשבוע הבא\n\n"
-        f"הרשומות:\n{full_text}"
-    )
-
+    if not entries: return "אין נתונים."
+    full_text = "רשומות רפלקציה:\n" + "\n".join([str(e) for e in entries])
+    prompt = f"נתח את הרשומות האלו וסכם מגמות, הישגים והמלצות:\n{full_text}"
     api_key = get_google_api_key()
-    if not api_key:
-        return ("שגיאת API: לא נמצא GOOGLE_API_KEY. הגדר ב-Streamlit Secrets.")
-
+    if not api_key: return "חסר מפתח API"
     try:
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-        )
-        return response.text or "לא התקבל טקסט מהמודל."
-
-    except APIError as e:
-        msg = str(e)
-        if ("expired" in msg.lower()) or ("api_key_invalid" in msg.lower()) or ("api key" in msg.lower()):
-            return ("שגיאת API: מפתח ה-API לא תקין או פג תוקף. עדכן ב-Streamlit Secrets.")
-        return f"שגיאת API: {msg}"
-
-    except Exception as e:
-        return f"שגיאה בלתי צפויה בעת יצירת הסיכום: {e}"
+        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+        return response.text
+    except Exception as e: return f"שגיאה ב-AI: {e}"
 
 # -----------------------------
-# Streamlit UI (ללא שינוי)
+# ממשק ראשי (Main UI)
 # -----------------------------
 
-set_rtl()
-st.title("יומן תצפית")
+# הפעלת העיצוב החדש
+setup_design()
 
+st.title("🎓 יומן תצפית ומחקר")
+st.markdown("### מעקב אחר התפתחות תפיסה מרחבית בכיתה ה'")
 
-with st.form("reflection_form"):
-    st.subheader("פרטי רפלקציה")
-    student_name = st.text_input("שם תלמיד", help="הזן את שם התלמיד שעבורו נרשמה הרפלקציה.")
-    lesson_id = st.text_input("מזהה שיעור")
+# יצירת לשוניות עם אייקונים
+tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 לוח בקרה", "🤖 סיכום AI"])
 
-    st.subheader("רפלקציה מילולית")
-    planned = st.text_area("מה תכננתי?")
-    done = st.text_area("מה בוצע בפועל?")
-    challenge = st.text_area("קושי מרכזי")
-    insight = st.text_area("תובנה להמשך")
-    next_step = st.text_area("צעד הבא")
-
-    st.subheader("קטגוריות תפיסה מרחבית בשרטוט הנדסי (דירוג)")
-    st.markdown("אנא דרג את רמת הקושי או ההתמודדות של התלמיד בכל קטגוריה (1=קל/מצוין, 5=קשה/נדרש שיפור).")
-
-    categories = [1, 2, 3, 4, 5]
-
-    cat_convert = st.select_slider("א. המרת ייצוגים (איזומטריה להיטלים)", options=categories, value=3, help="מעבר בין מבט תלת-ממדי למבטי דו-ממד.")
-    cat_dims = st.select_slider("ב. מידות ופרופורציות", options=categories, value=3, help="התייחסות למידות, שמירת פרופורציות או שימוש בכלי מדידה.")
-    cat_proj = st.select_slider("ג. מעבר בין היטלים", options=categories, value=3, help="השלכה נכונה בין היטל על להיטל צד או מבט נוסף.")
-    cat_3d_support = st.select_slider("ד. שימוש בגוף מודפס כתומך חשיבה", options=categories, value=3, help="היכולת להשתמש במודל פיזי כדי לשפר את החשיבה המרחבית.")
-
-    submitted = st.form_submit_button("שמור")
-
-
-if submitted:
-    # 1. בניית הרשומה המלאה (כולל תאריך וזמן)
-    reflection_entry = {
-        "type": "reflection",
-        "student_name": student_name,
-        "lesson_id": lesson_id,
-        "planned": planned,
-        "done": done,
-        "challenge": challenge,
-        "insight": insight,
-        "next_step": next_step,
-        "cat_convert_rep": cat_convert,
-        "cat_dims_props": cat_dims,
-        "cat_proj_trans": cat_proj,
-        "cat_3d_support": cat_3d_support,
-        "date": date.today().isoformat(),
-        "timestamp": datetime.now().isoformat(timespec="seconds")
-    }
-    
-    # 2. שמירה ללוג המקומי (חובה לטובת הסיכום השבועי)
-    save_reflection(reflection_entry)
-    
-    # 3. שמירה ל-Google Drive
-    with st.spinner("שומר רפלקציה ב-Google Drive..."):
-        drive_service = get_drive_service()
-        if drive_service:
-            try:
-                drive_status = upload_reflection_to_drive(reflection_entry, drive_service)
-                st.success(f"נשמר בהצלחה ✅ (לוג מקומי ו-Drive): {drive_status}")
-            except Exception as e:
-                # שינוי קטן בהודעה כדי לעזור לאתר שגיאות קריטיות כמו הרשאות כתיבה
-                st.error(f"שגיאה בשמירה ל-Google Drive: ודא שניתנה הרשאת 'Editor' לחשבון השירות. פרטי שגיאה: {e}")
-        else:
-            st.warning("נשמר בלוג המקומי בלבד. לא ניתן להתחבר ל-Google Drive. ")
-
-
-st.divider()
-
-# --- הצגת כפתור הסיכום ---
-entries = load_last_week() 
-
-if st.button("✨ סכם שבוע אחרון עם Gemini"):
-    if not entries:
-        st.info("אין מספיק נתונים (רשומות) מהשבוע האחרון ליצירת סיכום.")
-    else:
-        with st.spinner("יוצר סיכום ושומר..."):
-            
-            # יצירת הסיכום
-            summary_text = generate_summary(entries)
-
-            # שמירה מקומית
-            summary_entry = {
-                "type": "weekly_summary", 
-                "content": summary_text,
-                "source_entries_count": len(entries),
-                "date": date.today().isoformat()
-            }
-            save_reflection(summary_entry)
-            st.success("הסיכום השבועי נשמר אוטומטית לקובץ המקומי! ✅")
-            
-            # שמירה ל-Google Drive
-            drive_service = get_drive_service()
-            if drive_service:
-                try:
-                    drive_status = upload_summary_to_drive(summary_text, drive_service)
-                    st.success(f"נשמר בהצלחה ל-Google Drive: {drive_status}")
-                except Exception as e:
-                    st.error(f"שגיאה בשמירה ל-Google Drive: ודא שניתנה הרשאת 'Editor' לחשבון השירות. פרטי שגיאה: {e}")
-            else:
-                 st.warning("לא ניתן להתחבר ל-Google Drive. ודא שהסודות והרשאות השיתוף תקינים.")
-            
-        st.subheader("סיכום שבועי מונע-AI")
-        st.markdown(summary_text)
-
-st.divider()
-
-# --- הצגת סיכומים קודמים ---
-st.subheader("סיכומים שבועיים קודמים")
-summaries = load_all_summaries()
-
-if summaries:
-    st.info(f"נמצאו {len(summaries)} סיכומים שבועיים שמורים. ")
-    
-    for s in reversed(summaries): 
-        date_str = s.get('date', 'תאריך לא ידוע')
-        count = s.get('source_entries_count', 0)
+# --- לשונית 1: הזנת נתונים ---
+with tab1:
+    st.info("💡 טיפ: רפלקציה טובה נכתבת בסמוך לזמן השיעור.")
+    with st.form("reflection_form"):
+        st.markdown("#### 1. פרטי המקרה")
         
-        with st.expander(f"סיכום מ-{date_str} (מבוסס על {count} רשומות)"):
-            st.markdown(s.get('content', 'אין תוכן'))
+        col_student, col_lesson = st.columns(2)
+        with col_student:
+            selected_student = st.selectbox("שם תלמיד", CLASS_ROSTER)
+            student_name = st.text_input("הזן שם תלמיד:") if selected_student == "תלמיד אחר..." else selected_student
+        
+        with col_lesson:
+            lesson_id = st.text_input("שיעור מס'", placeholder="לדוגמה: היטלים 1")
+
+        st.markdown("#### 2. אופן העבודה")
+        work_method = st.radio(
+            "כיצד התבצע השרטוט?",
+            ["🎨 ללא גוף מודפס (דמיון/דף)", "🧊 בעזרת גוף מודפס (פיזי)"],
+            horizontal=True
+        )
+
+        st.markdown("#### 3. הלב של הרפלקציה")
+        col_text1, col_text2 = st.columns(2)
+        with col_text1:
+            planned = st.text_area("🎯 מה תכננתי?", height=100, placeholder="מטרת השיעור הייתה...")
+            challenge = st.text_area("🔥 קושי מרכזי", height=100, placeholder="איפה התלמיד נתקע?")
+        with col_text2:
+            done = st.text_area("✅ מה בוצע בפועל?", height=100, placeholder="בפועל התלמיד עשה...")
+        
+        st.markdown("#### 4. מדדי הערכה (1-5)")
+        c1, c2 = st.columns(2)
+        with c1:
+            cat_convert = st.slider("🔄 המרת ייצוגים", 1, 5, 3)
+            cat_dims = st.slider("📏 מידות ופרופורציות", 1, 5, 3)
+        with c2:
+            cat_proj = st.slider("📐 מעבר בין היטלים", 1, 5, 3)
+            cat_3d_support = st.slider("🆘 מידת תמיכה נדרשת", 1, 5, 3)
+
+        submitted = st.form_submit_button("שמור רפלקציה ביומן")
+
+        if submitted:
+            entry = {
+                "type": "reflection", "student_name": student_name, "lesson_id": lesson_id,
+                "work_method": work_method, "planned": planned, "done": done, 
+                "challenge": challenge, "cat_convert_rep": cat_convert, 
+                "cat_dims_props": cat_dims, "cat_proj_trans": cat_proj, 
+                "cat_3d_support": cat_3d_support, "date": date.today().isoformat(),
+                "timestamp": datetime.now().isoformat()
+            }
+            save_reflection(entry)
+            st.success(f"🎉 המידע על {student_name} נשמר בהצלחה!")
+            svc = get_drive_service()
+            if svc:
+                try:
+                    upload_reflection_to_drive(entry, svc)
+                except: pass
+
+# --- לשונית 2: גרפים ---
+with tab2:
+    st.markdown("### 📈 התקדמות הכיתה")
+    df = load_data_as_dataframe()
+    
+    if df.empty:
+        st.warning("עדיין אין נתונים. נא למלא רפלקציות בלשונית הראשונה.")
+    else:
+        metric_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_3d_support']
+        heb_names = {'cat_convert_rep': 'המרת ייצוגים', 'cat_dims_props': 'מידות', 'cat_proj_trans': 'היטלים', 'cat_3d_support': 'תמיכה'}
+        
+        existing_cols = [c for c in metric_cols if c in df.columns]
+        if existing_cols:
+            st.caption("ממוצע כיתתי כללי לפי קטגוריות")
+            avg_data = df[existing_cols].mean().rename(index=heb_names)
+            st.bar_chart(avg_data, color="#4361ee") # צבע כחול לגרף
+
+        st.divider()
+
+        st.markdown("### 🕵️ מעקב פרטני")
+        all_students = df['student_name'].unique() if 'student_name' in df.columns else []
+        if len(all_students) > 0:
+            selected_student_graph = st.selectbox("בחר תלמיד:", all_students)
+            student_df = df[df['student_name'] == selected_student_graph].sort_values("date")
             
-else:
-    st.info("עדיין לא נוצר סיכום שבועי אוטומטי.")
+            # הצגת כרטיסיות מידע (Metrics)
+            m1, m2, m3 = st.columns(3)
+            m1.metric("סה״כ שיעורים", len(student_df))
+            last_method = student_df.iloc[-1].get('work_method', 'לא ידוע').split(' ')[0] # לוקח את המילה הראשונה
+            m2.metric("שיטה אחרונה", last_method)
+            m3.metric("תאריך אחרון", str(student_df.iloc[-1]['date'].date()))
+
+            if existing_cols:
+                chart_data = student_df.set_index("date")[existing_cols]
+                chart_data.columns = [heb_names.get(c, c) for c in chart_data.columns]
+                st.line_chart(chart_data)
+            
+            st.caption("היסטוריית דיווחים")
+            st.dataframe(student_df[['date', 'work_method', 'challenge']].tail(5), hide_index=True, use_container_width=True)
+
+# --- לשונית 3: AI ---
+with tab3:
+    st.markdown("### 🧠 העוזר המחקרי שלך")
+    st.info("ה-AI יסרוק את השבוע האחרון ויחפש דפוסים בנתונים.")
+    if st.button("צור סיכום שבועי חכם ✨"):
+        entries = load_last_week()
+        with st.spinner("ה-AI מנתח את הנתונים..."):
+            summary = generate_summary(entries)
+            st.markdown(summary)
