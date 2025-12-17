@@ -168,9 +168,9 @@ with tab1:
         with col_text2:
             done = st.text_area("👀 פעולות שנצפו", height=100, placeholder="מה הוא עשה בפועל?")
         
-        # --- צילום תמונה ---
+        # --- השינוי כאן: שימוש בהעלאת קובץ במקום במצלמה ישירה ---
         st.markdown("#### 📷 תיעוד ויזואלי")
-        uploaded_image = st.camera_input("צלם את השרטוט או הגוף")
+        uploaded_image = st.file_uploader("צרף צילום שרטוט/גוף (מהמצלמה או מהגלריה)", type=['jpg', 'jpeg', 'png'])
 
         st.markdown("#### 4. מדדי הערכה (1-5)")
         c1, c2 = st.columns(2)
@@ -208,6 +208,7 @@ with tab1:
                     
                     # העלאת התמונה (אם יש)
                     if uploaded_image:
+                        # קריאה מחדש של הקובץ כי file_uploader מתנהג קצת אחרת
                         image_bytes = io.BytesIO(uploaded_image.getvalue())
                         upload_file_to_drive(image_bytes, f"img-{student_name}-{entry['date']}.jpg", 'image/jpeg', svc)
                         st.success("📸 התמונה והנתונים נשמרו בדרייב!")
