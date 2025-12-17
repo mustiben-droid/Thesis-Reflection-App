@@ -27,21 +27,16 @@ CLASS_ROSTER = [
 
 # רשימת התגיות
 OBSERVATION_TAGS = [
-    # כשלים ואתגרים
     "התעלמות מקווים נסתרים",
     "בלבול בין היטלים (צד/פנים/על)",
     "קושי ברוטציה מנטלית",
     "טעות בפרופורציות/מידות",
-    "קושי במעבר בין היטלים", # תוקן כאן
-    
-    # אסטרטגיות עבודה
+    "קושי במעבר בין היטלים",
     "שימוש בכלי מדידה",
     "סיבוב פיזי של המודל",
     "שימוש בתנועות ידיים (Embodiment)",
     "ספירת משבצות",
     "תיקון עצמי",
-    
-    # התנהגות
     "בקשת אישור תכופה",
     "ויתור/תסכול",
     "עבודה עצמאית שוטפת",
@@ -49,26 +44,19 @@ OBSERVATION_TAGS = [
 ]
 
 # -----------------------------
-# פונקציית העיצוב (CSS)
+# עיצוב (CSS)
 # -----------------------------
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
     
     st.markdown("""
         <style>
-            /* 1. איפוס כללי */
             .stApp, [data-testid="stAppViewContainer"] { background-color: #ffffff !important; }
             .block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; max-width: 100% !important; }
-            
-            /* 2. כותרות וטקסטים */
             h1, h2, h3, h4, h5, h6 { color: #4361ee !important; font-family: sans-serif; text-align: center !important; }
             p, label, span, div { color: #000000 !important; }
             
-            /* 3. סליידרים - תיקון קריטי */
-            [data-testid="stSlider"] {
-                direction: ltr !important; 
-                padding-bottom: 5px;
-            }
+            [data-testid="stSlider"] { direction: ltr !important; padding-bottom: 5px; }
             div[data-testid="stThumbValue"] {
                 color: #ffffff !important;       
                 background-color: #4361ee !important; 
@@ -78,7 +66,6 @@ def setup_design():
                 border-radius: 6px !important;   
             }
 
-            /* 4. תגיות (Multiselect) */
             .stMultiSelect > div > div {
                 background-color: #f0f2f6 !important;
                 border: 1px solid #d1d5db !important;
@@ -93,37 +80,18 @@ def setup_design():
                 color: #000000 !important;
                 font-weight: bold !important;
             }
-            span[data-baseweb="tag"] svg {
-                fill: #000000 !important;
-            }
+            span[data-baseweb="tag"] svg { fill: #000000 !important; }
             ul[data-baseweb="menu"], li[role="option"] {
                 background-color: #ffffff !important;
                 color: #000000 !important;
                 direction: rtl !important;
             }
 
-            /* 5. מצלמה / העלאת קובץ */
-            [data-testid="stFileUploader"] {
-                background-color: #f0f2f6 !important;
-                border-radius: 10px;
-                padding: 10px;
-            }
-            [data-testid="stFileUploader"] section {
-                background-color: #ffffff !important;
-                border: 1px dashed #4361ee !important;
-            }
-            [data-testid="stFileUploader"] span, 
-            [data-testid="stFileUploader"] small, 
-            [data-testid="stFileUploader"] div {
-                color: #000000 !important;
-            }
-            [data-testid="stFileUploader"] button {
-                background-color: #e0e0e0 !important;
-                color: #000000 !important;
-                border: 1px solid #9e9e9e !important;
-            }
+            [data-testid="stFileUploader"] { background-color: #f0f2f6 !important; border-radius: 10px; padding: 10px; }
+            [data-testid="stFileUploader"] section { background-color: #ffffff !important; border: 1px dashed #4361ee !important; }
+            [data-testid="stFileUploader"] span, [data-testid="stFileUploader"] small, [data-testid="stFileUploader"] div { color: #000000 !important; }
+            [data-testid="stFileUploader"] button { background-color: #e0e0e0 !important; color: #000000 !important; border: 1px solid #9e9e9e !important; }
 
-            /* 6. שדות קלט */
             .stSelectbox > div > div, .stTextInput input, .stTextArea textarea {
                 background-color: #f5f5f5 !important;
                 color: #000000 !important;
@@ -134,15 +102,8 @@ def setup_design():
             [data-testid="stFormSubmitButton"] > button { 
                 background-color: #4361ee !important; 
                 color: white !important; 
-                border: none; 
-                width: 100%; 
-                padding: 15px; 
-                font-size: 20px; 
-                font-weight: bold; 
-                border-radius: 12px; 
-                margin-top: 20px; 
+                border: none; width: 100%; padding: 15px; font-size: 20px; font-weight: bold; border-radius: 12px; margin-top: 20px; 
             }
-
             html, body { direction: rtl; }
         </style>
     """, unsafe_allow_html=True)
@@ -205,44 +166,59 @@ def upload_file_to_drive(file_obj, filename, mime_type, drive_service):
     file_metadata = {'name': filename, 'parents': [GDRIVE_FOLDER_ID], 'mimeType': mime_type}
     drive_service.files().create(body=file_metadata, media_body=media, supportsAllDrives=True).execute()
 
-# --- סיכום מחקרי ---
+# --- סיכום מחקרי (פרומפט משופר) ---
 def generate_summary(entries: list) -> str:
     if not entries: return "לא נמצאו נתונים."
-    full_text = "\n".join([str(e) for e in entries])
-    prompt = f"""
-    אתה עוזר מחקר אקדמי. נתח את הנתונים לפי הקטגוריות:
-    1. המרת ייצוגים.
-    2. מידות ופרופורציות.
-    3. מעבר בין היטלים.
-    4. שימוש בגוף מודפס (מניפולציה פיזית).
-    5. מסוגלות עצמית.
     
-    נתונים: {full_text}
+    # המרת הנתונים לטקסט קריא יותר עבור ה-AI
+    readable_entries = []
+    for e in entries:
+        readable_entries.append(f"""
+        תלמיד: {e.get('student_name')}
+        תאריך: {e.get('date')}
+        שיעור: {e.get('lesson_id')} (קושי: {e.get('task_difficulty')})
+        תגיות שנבחרו: {', '.join(e.get('tags', []))}
+        תיאור קושי: {e.get('challenge')}
+        ציונים (1-5): המרה={e.get('cat_convert_rep')}, מידות={e.get('cat_dims_props')}, היטלים={e.get('cat_proj_trans')}, שימוש בגוף={e.get('cat_3d_support')}
+        """)
+    
+    full_text = "\n".join(readable_entries)
+    
+    prompt = f"""
+    אתה עוזר מחקר אקדמי מומחה בהוראת שרטוט וראייה מרחבית.
+    המטרה: לכתוב דוח סיכום שבועי קריא, ברור ומקצועי בעברית על סמך התצפיות הבאות.
+    
+    הנחיות כתיבה:
+    1. אל תשתמש בשמות משתנים באנגלית (כמו cat_dims). השתמש במונחים מקצועיים בעברית.
+    2. חלק את הדוח ל: "מגמות כלליות בכיתה", "ניתוח פרטני (תלמידים בולטים)", ו"המלצות לשבוע הבא".
+    3. התייחס ספציפית לקשר בין שימוש בגוף פיזי (מודל) לבין הצלחה במטלה.
+    4. זהה קשיים חוזרים לפי התגיות שנבחרו.
+    
+    הנתונים הגולמיים:
+    {full_text}
     """
+    
     api_key = get_google_api_key()
-    if not api_key: return "חסר מפתח"
+    if not api_key: return "חסר מפתח API"
     try:
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt, config={"temperature": 0.2})
+        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt, config={"temperature": 0.3})
         return response.text
     except Exception as e: return f"Error: {e}"
 
-# --- פונקציית עזר ליצירת סליידר עם הסבר ---
 def render_slider_metric(label, key):
     st.markdown(f"**{label}**")
     val = st.slider(label, 1, 5, 3, key=key, label_visibility="collapsed")
-    # שורת הסבר מתחת לסליידר
     st.markdown(
         """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555;">
         <span>1 (קושי רב)</span>
         <span>5 (שליטה מלאה)</span>
-        </div>""", 
-        unsafe_allow_html=True
+        </div>""", unsafe_allow_html=True
     )
     return val
 
 # -----------------------------
-# ממשק ראשי (Main UI)
+# ממשק ראשי
 # -----------------------------
 
 setup_design()
@@ -269,8 +245,6 @@ with tab1:
         work_method = st.radio("🛠️ כיצד התבצע השרטוט?", ["🎨 ללא גוף (דמיון)", "🧊 בעזרת גוף פיזי"], horizontal=True)
 
         st.markdown("#### 3. תיאור תצפית")
-        
-        # --- תגיות מהירות ---
         selected_tags = st.multiselect("🏷️ תגיות מהירות (ניתן לבחור כמה):", OBSERVATION_TAGS)
         
         col_text1, col_text2 = st.columns(2)
@@ -280,19 +254,17 @@ with tab1:
         with col_text2:
             done = st.text_area("👀 פעולות שנצפו", height=100, placeholder="מה הוא עשה בפועל?")
         
-        # --- העלאת תמונה ---
         st.markdown("#### 📷 תיעוד ויזואלי")
         upload_label = "צרף צילום שרטוט/גוף (מהמצלמה או מהגלריה)"
         uploaded_image = st.file_uploader(upload_label, type=['jpg', 'jpeg', 'png'])
 
         st.markdown("#### 4. מדדי הערכה")
-        
         c1, c2 = st.columns(2)
         with c1:
             cat_convert = render_slider_metric("🔄 המרת ייצוגים", "m1")
             cat_dims = render_slider_metric("📏 מידות ופרופורציות", "m2")
         with c2:
-            cat_proj = render_slider_metric("📐 קושי במעבר בין היטלים", "m3") # תוקן כאן
+            cat_proj = render_slider_metric("📐 קושי במעבר בין היטלים", "m3")
             cat_3d_support = render_slider_metric("🧊 שימוש בגוף מודפס", "m4")
         
         cat_self_efficacy = render_slider_metric("💪 מסוגלות עצמית", "m5")
@@ -300,14 +272,11 @@ with tab1:
         submitted = st.form_submit_button("💾 שמור תצפית")
 
         if submitted:
-            # 1. שמירת הנתונים
             entry = {
                 "type": "reflection", "student_name": student_name, "lesson_id": lesson_id,
                 "task_difficulty": task_difficulty, 
-                "work_method": work_method, 
-                "tags": selected_tags,  
-                "planned": planned, "done": done, 
-                "challenge": challenge, "cat_convert_rep": cat_convert, 
+                "work_method": work_method, "tags": selected_tags, "planned": planned, 
+                "done": done, "challenge": challenge, "cat_convert_rep": cat_convert, 
                 "cat_dims_props": cat_dims, "cat_proj_trans": cat_proj, 
                 "cat_3d_support": cat_3d_support, "cat_self_efficacy": cat_self_efficacy,
                 "date": date.today().isoformat(), "timestamp": datetime.now().isoformat(),
@@ -315,15 +284,11 @@ with tab1:
             }
             save_reflection(entry)
             
-            # 2. העלאה לדרייב
             svc = get_drive_service()
             if svc:
                 try:
-                    # העלאת ה-JSON
                     json_bytes = io.BytesIO(json.dumps(entry, ensure_ascii=False, indent=4).encode('utf-8'))
                     upload_file_to_drive(json_bytes, f"ref-{student_name}-{entry['date']}.json", 'application/json', svc)
-                    
-                    # העלאת התמונה (אם יש)
                     if uploaded_image:
                         image_bytes = io.BytesIO(uploaded_image.getvalue())
                         upload_file_to_drive(image_bytes, f"img-{student_name}-{entry['date']}.jpg", 'image/jpeg', svc)
@@ -333,9 +298,9 @@ with tab1:
                 except Exception as e:
                     st.error(f"שגיאה בגיבוי לענן: {e}")
             else:
-                st.warning("נשמר מקומית בלבד (אין חיבור לדרייב).")
+                st.warning("נשמר מקומית בלבד.")
 
-# --- לשונית 2: לוח בקרה וייצוא ---
+# --- לשונית 2: לוח בקרה ---
 with tab2:
     st.markdown("### 🕵️ מעקב התפתחות וייצוא נתונים")
     df = load_data_as_dataframe()
@@ -343,17 +308,15 @@ with tab2:
     if df.empty:
         st.warning("⚠️ אין נתונים.")
     else:
-        # עיבוד נתונים לפני ייצוא
         export_df = df.copy()
         if "tags" in export_df.columns:
             export_df["tags"] = export_df["tags"].apply(lambda x: ", ".join(x) if isinstance(x, list) else x)
 
-        # --- אזור ייצוא נתונים ---
         st.markdown("#### 📥 ייצוא נתונים למחקר")
         col_ex1, col_ex2 = st.columns(2)
         with col_ex1:
             csv = export_df.to_csv(index=False).encode('utf-8')
-            st.download_button("📄 הורד כ-CSV", data=csv, file_name="thesis_data.csv", mime="text/csv", help="פורמט מתאים לתוכנות סטטיסטיות")
+            st.download_button("📄 הורד כ-CSV", data=csv, file_name="thesis_data.csv", mime="text/csv")
         
         with col_ex2:
             try:
@@ -365,7 +328,6 @@ with tab2:
                 st.error("נדרשת ספריית openpyxl לאקסל")
 
         st.divider()
-
         metric_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_3d_support', 'cat_self_efficacy']
         heb_names = {'cat_convert_rep': 'המרת ייצוגים', 'cat_dims_props': 'מידות', 'cat_proj_trans': 'היטלים', 'cat_3d_support': 'שימוש בגוף', 'cat_self_efficacy': 'מסוגלות עצמית'}
         
@@ -373,20 +335,40 @@ with tab2:
         if len(all_students) > 0:
             selected_student_graph = st.selectbox("🎓 בחר תלמיד:", all_students)
             student_df = df[df['student_name'] == selected_student_graph].sort_values("date")
-            
             if not student_df.empty:
                 chart_data = student_df.set_index("date")[metric_cols].rename(columns=heb_names)
                 st.line_chart(chart_data)
-                
-                # הצגת טבלה עם תגיות
                 cols_to_show = ['date', 'task_difficulty', 'tags', 'has_image']
                 existing_cols = [c for c in cols_to_show if c in student_df.columns]
                 st.dataframe(student_df[existing_cols].tail(5), hide_index=True)
 
-# --- לשונית 3: AI ---
+# --- לשונית 3: AI (עם שמירה) ---
 with tab3:
     st.markdown("### 🤖 עוזר מחקרי")
-    if st.button("✨ צור סיכום שבועי"):
+    st.info("העוזר ינתח את הנתונים מהשבוע האחרון, יכתוב דוח מסודר וישמור אותו בדרייב.")
+    
+    if st.button("✨ צור סיכום שבועי ושמור"):
         entries = load_last_week()
-        with st.spinner("מנתח..."):
-            st.markdown(generate_summary(entries))
+        with st.spinner("מנתח נתונים, כותב דוח ושומר לענן..."):
+            # 1. יצירת הסיכום
+            summary_text = generate_summary(entries)
+            
+            # 2. הצגה על המסך
+            st.markdown("---")
+            st.markdown(summary_text)
+            
+            # 3. שמירה לדרייב
+            svc = get_drive_service()
+            if svc:
+                try:
+                    # הופך את הטקסט לקובץ בזיכרון
+                    file_bytes = io.BytesIO(summary_text.encode('utf-8'))
+                    filename = f"Weekly-Summary-{date.today()}.txt"
+                    
+                    # מעלה לדרייב
+                    upload_file_to_drive(file_bytes, filename, 'text/plain', svc)
+                    st.success(f"✅ הדוח נשמר בהצלחה בדרייב תחת השם: {filename}")
+                except Exception as e:
+                    st.error(f"הדוח הוצג אך השמירה לדרייב נכשלה: {e}")
+            else:
+                st.warning("הדוח נוצר אך לא נשמר (אין חיבור לדרייב).")
