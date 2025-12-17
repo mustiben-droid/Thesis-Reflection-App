@@ -25,7 +25,7 @@ CLASS_ROSTER = [
     "תלמיד אחר..." 
 ]
 
-# רשימת התגיות (תגיות מהירות לניתוח)
+# רשימת התגיות
 OBSERVATION_TAGS = [
     # כשלים ואתגרים
     "התעלמות מקווים נסתרים",
@@ -49,7 +49,7 @@ OBSERVATION_TAGS = [
 ]
 
 # -----------------------------
-# פונקציית העיצוב (CSS אגרסיבי למניעת רקע שחור)
+# פונקציית העיצוב (CSS מתוקן לסליידרים)
 # -----------------------------
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
@@ -60,87 +60,79 @@ def setup_design():
             .stApp, [data-testid="stAppViewContainer"] { background-color: #ffffff !important; }
             .block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; max-width: 100% !important; }
             
-            /* 2. כותרות וטקסטים כלליים */
+            /* 2. כותרות וטקסטים */
             h1, h2, h3, h4, h5, h6 { color: #4361ee !important; font-family: sans-serif; text-align: center !important; }
             p, label, span, div { color: #000000 !important; }
             
-            /* ----------------------------------------------------------- */
-            /* טיפול שורש: תגיות (Multiselect) */
-            /* ----------------------------------------------------------- */
-            
-            /* הקופסה החיצונית של הבחירה */
+            /* 3. תגיות (Multiselect) */
             .stMultiSelect > div > div {
-                background-color: #f0f2f6 !important; /* אפור בהיר מאוד */
+                background-color: #f0f2f6 !important;
                 border: 1px solid #d1d5db !important;
                 color: black !important;
             }
-            
-            /* התגית עצמה שנבחרה (הבועה) */
             span[data-baseweb="tag"] {
-                background-color: #bbdefb !important; /* כחול בהיר */
-                border: 1px solid #1976d2 !important; /* כחול כהה */
+                background-color: #fff9c4 !important;
+                border: 1px solid #fbc02d !important;
             }
-            
-            /* הטקסט בתוך התגית */
             span[data-baseweb="tag"] span {
-                color: #000000 !important; /* שחור */
+                color: #000000 !important;
                 font-weight: bold !important;
             }
-            
-            /* כפתור ה-X של התגית */
             span[data-baseweb="tag"] svg {
                 fill: #000000 !important;
             }
-            
-            /* התפריט שנפתח (האפשרויות לבחירה) */
             ul[data-baseweb="menu"], li[role="option"] {
                 background-color: #ffffff !important;
                 color: #000000 !important;
             }
 
-            /* ----------------------------------------------------------- */
-            /* טיפול שורש: מצלמה / העלאת קובץ (File Uploader) */
-            /* ----------------------------------------------------------- */
-            
-            /* הקופסה הראשית */
+            /* 4. מצלמה / העלאת קובץ */
             [data-testid="stFileUploader"] {
                 background-color: #f0f2f6 !important;
                 border-radius: 10px;
                 padding: 10px;
             }
-            
-            /* האזור הפנימי (Dropzone) */
             [data-testid="stFileUploader"] section {
-                background-color: #ffffff !important; /* לבן בוהק */
+                background-color: #ffffff !important;
                 border: 1px dashed #4361ee !important;
             }
-            
-            /* כל הטקסטים בתוך המצלמה (Drag and drop file here, Limit 200MB...) */
             [data-testid="stFileUploader"] span, 
             [data-testid="stFileUploader"] small, 
             [data-testid="stFileUploader"] div {
                 color: #000000 !important;
             }
-            
-            /* כפתור Browse files */
             [data-testid="stFileUploader"] button {
                 background-color: #e0e0e0 !important;
                 color: #000000 !important;
                 border: 1px solid #9e9e9e !important;
             }
 
-            /* ----------------------------------------------------------- */
-            /* שאר האלמנטים */
-            /* ----------------------------------------------------------- */
+            /* 5. תיקון סליידרים (Sliders) - התיקון המרכזי כאן */
             
-            /* שדות טקסט */
-            .stTextInput input, .stTextArea textarea {
+            /* המספר שזז עם הסליידר (Thumb Value) */
+            div[data-testid="stThumbValue"] {
+                color: #ffffff !important;       /* טקסט לבן */
+                background-color: #4361ee !important; /* רקע כחול בולט */
+                font-size: 20px !important;      /* פונט גדול */
+                font-weight: bold !important;
+                padding: 5px 10px !important;    /* רווח מסביב למספר */
+                border-radius: 8px !important;   /* פינות עגולות */
+                opacity: 1 !important;           /* תמיד נראה לעין */
+                margin-top: -10px !important;    /* הרמה קלה למעלה */
+            }
+            
+            /* הפס של הסליידר עצמו */
+            div[data-baseweb="slider"] {
+                padding-top: 15px !important; /* מרווח כדי שהמספר לא יחתך */
+            }
+
+            /* 6. שאר האלמנטים */
+            .stSelectbox > div > div, .stTextInput input, .stTextArea textarea {
                 background-color: #f5f5f5 !important;
                 color: #000000 !important;
                 border: 1px solid #cccccc !important;
             }
             
-            /* כפתור שמירה */
             [data-testid="stFormSubmitButton"] > button { 
                 background-color: #4361ee !important; 
                 color: white !important; 
@@ -209,7 +201,7 @@ def load_last_week():
             if week_ago <= d <= today: out.append(e)
     return out
 
-# --- העלאת קבצים לדרייב (עם תמיכה בתיקיות משותפות) ---
+# --- העלאת קבצים לדרייב ---
 def upload_file_to_drive(file_obj, filename, mime_type, drive_service):
     media = MediaIoBaseUpload(file_obj, mimetype=mime_type)
     file_metadata = {'name': filename, 'parents': [GDRIVE_FOLDER_ID], 'mimeType': mime_type}
@@ -256,8 +248,10 @@ with tab1:
         with col_student:
             selected_student = st.selectbox("👤 שם תלמיד", CLASS_ROSTER)
             student_name = st.text_input("✍️ הזן שם תלמיד:") if selected_student == "תלמיד אחר..." else selected_student
+        
         with col_lesson:
             lesson_id = st.text_input("📚 שיעור מס'", placeholder="לדוגמה: היטלים 1")
+            task_difficulty = st.selectbox("⚖️ רמת קושי המטלה", ["בסיסי", "בינוני", "מתקדם"])
 
         st.markdown("#### 2. אופן העבודה")
         work_method = st.radio("🛠️ כיצד התבצע השרטוט?", ["🎨 ללא גוף (דמיון)", "🧊 בעזרת גוף פיזי"], horizontal=True)
@@ -296,6 +290,7 @@ with tab1:
             # 1. שמירת הנתונים
             entry = {
                 "type": "reflection", "student_name": student_name, "lesson_id": lesson_id,
+                "task_difficulty": task_difficulty, 
                 "work_method": work_method, 
                 "tags": selected_tags,  
                 "planned": planned, "done": done, 
@@ -371,7 +366,7 @@ with tab2:
                 st.line_chart(chart_data)
                 
                 # הצגת טבלה עם תגיות
-                cols_to_show = ['date', 'work_method', 'tags', 'has_image']
+                cols_to_show = ['date', 'task_difficulty', 'tags', 'has_image']
                 existing_cols = [c for c in cols_to_show if c in student_df.columns]
                 st.dataframe(student_df[existing_cols].tail(5), hide_index=True)
 
