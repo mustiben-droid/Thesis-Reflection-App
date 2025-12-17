@@ -27,27 +27,29 @@ CLASS_ROSTER = [
 ]
 
 # -----------------------------
-# פונקציית העיצוב
+# פונקציית העיצוב (CSS מתוקן למובייל)
 # -----------------------------
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
     
-    # התיקון נמצא כאן: הוספתי וודאתי שהמרכאות המשולשות קיימות וסוגרות את העיצוב
     st.markdown("""
         <style>
-            /* 1. ביטול הרווח הריק העליון */
+            /* 1. איפוס ועיצוב כללי - רקע לבן חלק ללא שכבות */
+            .stApp, [data-testid="stAppViewContainer"] {
+                background-color: #ffffff !important;
+            }
             .block-container {
-                padding-top: 2rem !important;
-                padding-bottom: 2rem !important;
+                padding-top: 1rem !important;
+                padding-bottom: 5rem !important;
+                max-width: 100% !important;
             }
 
-            /* 2. אילוץ מצב בהיר (Light Mode) */
-            [data-testid="stAppViewContainer"] {
-                background-color: #f4f6f9 !important;
-                color: #000000 !important;
-            }
-            [data-testid="stHeader"] {
-                background-color: #f4f6f9 !important;
+            /* 2. ביטול מראה ה"כרטיסיות" (הפסים בצדדים) */
+            [data-testid="stForm"], [data-testid="stVerticalBlock"] > div {
+                background-color: transparent !important;
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
             }
 
             /* 3. עיצוב טקסטים וכותרות */
@@ -56,65 +58,64 @@ def setup_design():
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 text-align: center !important;
             }
-            
-            p, div, span, label, li {
+            p, label, span, div {
                 color: #2c3e50 !important;
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             }
 
-            /* 4. עיצוב כרטיסיות נקי */
-            [data-testid="stForm"], [data-testid="stVerticalBlock"] > div {
-                background-color: #ffffff !important;
-                border-radius: 12px;
-                padding: 20px;
-                border: 1px solid #e0e0e0;
-                box-shadow: none !important;
+            /* 4. תיקון הסליידרים (RTL + יישור) */
+            [data-testid="stSlider"] {
+                direction: rtl;
+                padding-bottom: 10px;
+                width: 100%;
+            }
+            
+            /* הגדלת הכותרת של הסליידר */
+            [data-testid="stSlider"] label p {
+                font-size: 18px !important;
+                font-weight: 600 !important;
+                margin-bottom: 5px !important;
+            }
+            
+            /* הגדלת המספר שמוצג ויישורו */
+            [data-testid="stThumbValue"], .st-emotion-cache-1aege4m { 
+                font-size: 16px !important;
+                font-weight: bold !important;
             }
 
-            /* 5. תיקון קריטי - צביעת הרקע של בחירת התלמיד (Selectbox) בלבן */
+            /* 5. תיקון בחירת תלמיד וקלט טקסט */
             .stSelectbox > div > div {
-                background-color: #ffffff !important;
-                color: #000000 !important;
-                border-color: #cccccc !important;
+                background-color: #f8f9fa !important; /* רקע אפור בהיר מאוד לתיבות */
+                border: 1px solid #e0e0e0 !important;
+                border-radius: 8px !important;
             }
-            /* תיקון הטקסט הנבחר שיהיה שחור */
-            .stSelectbox div[data-baseweb="select"] div {
-                color: #000000 !important;
-            }
-
-            /* תיקון שאר תיבות הקלט */
             .stTextInput input, .stTextArea textarea {
-                background-color: #ffffff !important;
-                color: #000000 !important;
-                border: 1px solid #cccccc !important;
+                background-color: #f8f9fa !important;
+                border: 1px solid #e0e0e0 !important;
+                border-radius: 8px !important;
                 direction: rtl !important;
                 text-align: right;
             }
-            
-            /* תיקון הרשימה הנפתחת עצמה */
-            div[data-baseweb="popover"] li, div[data-baseweb="popover"] div {
-                 color: #000000 !important;
-                 background-color: #ffffff !important;
-            }
 
-            /* 6. כפתור שמירה */
+            /* 6. כפתור שמירה גדול וברור */
             [data-testid="stFormSubmitButton"] > button {
                 background-color: #4361ee !important;
                 color: white !important;
                 border: none;
                 width: 100%;
-                padding: 12px;
-                font-size: 18px;
-                border-radius: 8px;
+                padding: 15px;
+                font-size: 20px;
+                font-weight: bold;
+                border-radius: 12px;
+                margin-top: 20px;
+                box-shadow: 0 4px 6px rgba(67, 97, 238, 0.3);
             }
 
-            /* 7. כיווניות RTL */
+            /* 7. כיווניות כללית */
             html, body { direction: rtl; }
-            [data-testid="stSlider"] { direction: rtl; }
             
         </style>
-    """, unsafe_allow_html=True) 
-    # ^ שים לב: הסוגריים והמרכאות כאן קריטיים!
+    """, unsafe_allow_html=True)
 
 # -----------------------------
 # פונקציות לוגיקה
@@ -181,7 +182,7 @@ def generate_summary(entries: list) -> str:
     
     full_text = "רשומות תצפית גולמיות:\n" + "\n".join([str(e) for e in entries])
     
-    # --- הפרומפט האקדמי המלא (כולל מסוגלות עצמית ושימוש בגוף) ---
+    # --- הפרומפט האקדמי המלא ---
     prompt = f"""
     אתה עוזר מחקר אקדמי המנתח נתונים איכותניים לתזה בנושא חשיבה מרחבית.
     עליך לנתח את יומני התצפית ולהפיק דוח ממצאים המבוסס אך ורק על חמשת הקטגוריות המוגדרות של המחקר.
@@ -238,14 +239,13 @@ def generate_summary(entries: list) -> str:
 
 setup_design()
 
-st.title("🎓 יומן תצפית אינטראקטיבי")
+st.title("🎓 יומן תצפית")
 st.markdown("### מעקב אחר מיומנויות תפיסה מרחבית")
 
 tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 התקדמות אישית", "🧠 עוזר מחקרי (AI)"])
 
 # --- לשונית 1: הזנת נתונים ---
 with tab1:
-    st.info("💡 טיפ: מומלץ למלא את התצפית תוך כדי או מיד אחרי השיעור.")
     with st.form("reflection_form"):
         st.markdown("#### 1. פרטי התצפית") 
         
@@ -286,7 +286,6 @@ with tab1:
         
         cat_self_efficacy = st.slider("💪 מסוגלות עצמית (למידה עצמאית)", 1, 5, 3, help="1=נזקק לעזרה רבה, 5=עבד עצמאית לגמרי")
 
-        # הנה הכפתור שהיה חסר - הוא חייב להיות בתוך הבלוק של with st.form
         submitted = st.form_submit_button("💾 שמור תצפית ביומן")
 
         if submitted:
