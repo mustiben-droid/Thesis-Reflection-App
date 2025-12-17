@@ -4,7 +4,6 @@ import os
 import io
 from datetime import date, datetime, timedelta
 import pandas as pd
-
 import streamlit as st
 from google import genai
 
@@ -27,93 +26,32 @@ CLASS_ROSTER = [
 ]
 
 # -----------------------------
-# פונקציית העיצוב (CSS מתוקן למובייל)
+# פונקציית העיצוב
 # -----------------------------
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
     
     st.markdown("""
         <style>
-            /* 1. איפוס ועיצוב כללי - רקע לבן חלק ללא שכבות */
-            .stApp, [data-testid="stAppViewContainer"] {
-                background-color: #ffffff !important;
-            }
-            .block-container {
-                padding-top: 1rem !important;
-                padding-bottom: 5rem !important;
-                max-width: 100% !important;
-            }
-
-            /* 2. ביטול מראה ה"כרטיסיות" (הפסים בצדדים) */
-            [data-testid="stForm"], [data-testid="stVerticalBlock"] > div {
-                background-color: transparent !important;
-                border: none !important;
-                box-shadow: none !important;
-                padding: 0 !important;
-            }
-
-            /* 3. עיצוב טקסטים וכותרות */
-            h1, h2, h3, h4, h5, h6 {
-                color: #4361ee !important;
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                text-align: center !important;
-            }
-            p, label, span, div {
-                color: #2c3e50 !important;
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            }
-
-            /* 4. תיקון הסליידרים (RTL + יישור) */
-            [data-testid="stSlider"] {
-                direction: rtl;
-                padding-bottom: 10px;
-                width: 100%;
-            }
+            .stApp, [data-testid="stAppViewContainer"] { background-color: #ffffff !important; }
+            .block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; max-width: 100% !important; }
+            [data-testid="stForm"], [data-testid="stVerticalBlock"] > div { background-color: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
+            h1, h2, h3, h4, h5, h6 { color: #4361ee !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center !important; }
+            p, label, span, div { color: #2c3e50 !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
             
-            /* הגדלת הכותרת של הסליידר */
-            [data-testid="stSlider"] label p {
-                font-size: 18px !important;
-                font-weight: 600 !important;
-                margin-bottom: 5px !important;
-            }
-            
-            /* הגדלת המספר שמוצג ויישורו */
-            [data-testid="stThumbValue"], .st-emotion-cache-1aege4m { 
-                font-size: 16px !important;
-                font-weight: bold !important;
-            }
+            /* עיצוב סליידרים */
+            [data-testid="stSlider"] { direction: rtl; padding-bottom: 10px; width: 100%; }
+            [data-testid="stSlider"] label p { font-size: 18px !important; font-weight: 600 !important; margin-bottom: 5px !important; }
+            [data-testid="stThumbValue"] { font-size: 16px !important; font-weight: bold !important; }
 
-            /* 5. תיקון בחירת תלמיד וקלט טקסט */
-            .stSelectbox > div > div {
-                background-color: #f8f9fa !important; /* רקע אפור בהיר מאוד לתיבות */
-                border: 1px solid #e0e0e0 !important;
-                border-radius: 8px !important;
-            }
-            .stTextInput input, .stTextArea textarea {
-                background-color: #f8f9fa !important;
-                border: 1px solid #e0e0e0 !important;
-                border-radius: 8px !important;
-                direction: rtl !important;
-                text-align: right;
-            }
+            /* עיצוב תיבות קלט */
+            .stSelectbox > div > div { background-color: #f8f9fa !important; border: 1px solid #e0e0e0 !important; border-radius: 8px !important; }
+            .stTextInput input, .stTextArea textarea { background-color: #f8f9fa !important; border: 1px solid #e0e0e0 !important; border-radius: 8px !important; direction: rtl !important; text-align: right; }
 
-            /* 6. כפתור שמירה גדול וברור */
-            [data-testid="stFormSubmitButton"] > button {
-                background-color: #4361ee !important;
-                color: white !important;
-                border: none;
-                width: 100%;
-                padding: 15px;
-                font-size: 20px;
-                font-weight: bold;
-                border-radius: 12px;
-                margin-top: 20px;
-                box-shadow: 0 4px 6px rgba(67, 97, 238, 0.3);
-            }
+            /* כפתור שמירה */
+            [data-testid="stFormSubmitButton"] > button { background-color: #4361ee !important; color: white !important; border: none; width: 100%; padding: 15px; font-size: 20px; font-weight: bold; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 6px rgba(67, 97, 238, 0.3); }
 
-            /* 7. כיווניות כללית */
             html, body { direction: rtl; }
-            
         </style>
     """, unsafe_allow_html=True)
 
@@ -122,6 +60,16 @@ def setup_design():
 # -----------------------------
 def get_google_api_key() -> str:
     return st.secrets.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
+
+def get_drive_service():
+    if not GDRIVE_FOLDER_ID or not st.secrets.get("GDRIVE_SERVICE_ACCOUNT_B64"): return None
+    try:
+        SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+        service_account_json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
+        creds = Credentials.from_service_account_info(json.loads(service_account_json_str), scopes=SCOPES)
+        return build("drive", "v3", credentials=creds)
+    except Exception as e:
+        st.error(f"Drive connect failed: {e}"); return None
 
 def save_reflection(entry: dict) -> dict:
     with open(DATA_FILE, "a", encoding="utf-8") as f:
@@ -159,79 +107,33 @@ def load_last_week():
             if week_ago <= d <= today: out.append(e)
     return out
 
-# --- Google Drive & Gemini ---
-def get_drive_service():
-    if not GDRIVE_FOLDER_ID or not st.secrets.get("GDRIVE_SERVICE_ACCOUNT_B64"): return None
-    try:
-        SCOPES = ["https://www.googleapis.com/auth/drive.file"]
-        service_account_json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
-        creds = Credentials.from_service_account_info(json.loads(service_account_json_str), scopes=SCOPES)
-        return build("drive", "v3", credentials=creds)
-    except Exception as e:
-        st.error(f"Drive connect failed: {e}"); return None
-
-def upload_reflection_to_drive(entry: dict, drive_service):
-    student_name = entry.get("student_name", "unknown").replace(" ", "_")
-    file_name = f"ref-{student_name}-{entry.get('date')}.json"
-    media = MediaIoBaseUpload(io.BytesIO(json.dumps(entry, ensure_ascii=False, indent=4).encode('utf-8')), mimetype='application/json')
-    file_metadata = {'name': file_name, 'parents': [GDRIVE_FOLDER_ID], 'mimeType': 'application/json'}
+# --- העלאת קבצים (JSON ותמונה) לדרייב ---
+def upload_file_to_drive(file_obj, filename, mime_type, drive_service):
+    media = MediaIoBaseUpload(file_obj, mimetype=mime_type)
+    file_metadata = {'name': filename, 'parents': [GDRIVE_FOLDER_ID], 'mimeType': mime_type}
     drive_service.files().create(body=file_metadata, media_body=media).execute()
 
+# --- סיכום מחקרי ---
 def generate_summary(entries: list) -> str:
-    if not entries: return "לא נמצאו נתונים לניתוח בטווח הזמן שנבחר."
-    
-    full_text = "רשומות תצפית גולמיות:\n" + "\n".join([str(e) for e in entries])
-    
-    # --- הפרומפט האקדמי המלא ---
+    if not entries: return "לא נמצאו נתונים."
+    full_text = "\n".join([str(e) for e in entries])
     prompt = f"""
-    אתה עוזר מחקר אקדמי המנתח נתונים איכותניים לתזה בנושא חשיבה מרחבית.
-    עליך לנתח את יומני התצפית ולהפיק דוח ממצאים המבוסס אך ורק על חמשת הקטגוריות המוגדרות של המחקר.
+    אתה עוזר מחקר אקדמי. נתח את הנתונים לפי הקטגוריות:
+    1. המרת ייצוגים.
+    2. מידות ופרופורציות.
+    3. מעבר בין היטלים.
+    4. שימוש בגוף מודפס (מניפולציה פיזית).
+    5. מסוגלות עצמית.
     
-    השתמש בהגדרות הבאות לניתוח התצפיות:
-
-    1. המרת ייצוגים (Conversion):
-       - הגדרה: יכולת לבודד מבט ספציפי מתוך תלת-ממד (וההפך).
-       - מה לחפש: זיהוי נכון של מבטים, שרטוט תלת-ממדי, מעבר מדו-ממד לתלת-ממד.
-
-    2. מידות ופרופורציות (Measurement & Proportions):
-       - הגדרה: יכולת לפרש מידות ולשמור על יחסים נכונים.
-       - מה לחפש: ספירת משבצות, שימוש בסרגל, השוואה ויזואלית של גדלים.
-
-    3. מעבר בין היטלים (View Transition):
-       - הגדרה: שמירה על רציפות נקודות בין מבטים.
-       - מה לחפש: קווי עזר, התאמה בין היטלים, בדיקת עקביות.
-
-    4. שימוש בגוף מודפס (Use of Printed Body):
-       - הגדרה: מידת ההסתמכות והשימוש האקטיבי בגוף הפיזי.
-       - מה לחפש: האם התלמיד החזיק את הגוף? סובב אותו? האם השתמש בו רק לבדיקה או לכל אורך הדרך?
-       - סקאלה: משימוש אפסי ועד שימוש אינטנסיבי ומתמיד.
-
-    5. מסוגלות עצמית ולמידה עצמאית (Self-Efficacy & Independence):
-       - הגדרה: המידה שבה התלמיד לומד לבד ופותר בעיות ללא עזרת המורה.
-       - מה לחפש: ניסיונות עצמאיים, תיקון טעויות לבד, מיעוט פניות למורה, ביטויים של ביטחון.
-
-    הוראות לכתיבת הדוח:
-    - כתוב בעברית אקדמית.
-    - עבור כל קטגוריה, כתוב פסקה המסכמת את הממצאים שעלו מהתצפיות השבוע.
-    - שלב ציטוטים או דוגמאות ספציפיות מתוך הנתונים כדי לבסס את הטענות.
-    - נסה לזהות קשרים: האם שימוש מוגבר בגוף מודפס (קטגוריה 4) קשור לעלייה במסוגלות העצמית (קטגוריה 5)?
-
-    הנתונים לניתוח:
-    {full_text}
+    נתונים: {full_text}
     """
-    
     api_key = get_google_api_key()
-    if not api_key: return "שגיאה: חסר מפתח API"
-    
+    if not api_key: return "חסר מפתח"
     try:
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-2.0-flash", 
-            contents=prompt,
-            config={"temperature": 0.2} 
-        )
+        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt, config={"temperature": 0.2})
         return response.text
-    except Exception as e: return f"שגיאה בניתוח ה-AI: {e}"
+    except Exception as e: return f"Error: {e}"
 
 # -----------------------------
 # ממשק ראשי (Main UI)
@@ -242,39 +144,34 @@ setup_design()
 st.title("🎓 יומן תצפית")
 st.markdown("### מעקב אחר מיומנויות תפיסה מרחבית")
 
-tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 התקדמות אישית", "🧠 עוזר מחקרי (AI)"])
+tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 התקדמות וייצוא", "🧠 עוזר מחקרי"])
 
 # --- לשונית 1: הזנת נתונים ---
 with tab1:
     with st.form("reflection_form"):
         st.markdown("#### 1. פרטי התצפית") 
-        
         col_student, col_lesson = st.columns(2)
         with col_student:
             selected_student = st.selectbox("👤 שם תלמיד", CLASS_ROSTER)
-            if selected_student == "תלמיד אחר...":
-                student_name = st.text_input("✍️ הזן שם תלמיד:")
-            else:
-                student_name = selected_student
-        
+            student_name = st.text_input("✍️ הזן שם תלמיד:") if selected_student == "תלמיד אחר..." else selected_student
         with col_lesson:
             lesson_id = st.text_input("📚 שיעור מס'", placeholder="לדוגמה: היטלים 1")
 
         st.markdown("#### 2. אופן העבודה")
-        work_method = st.radio(
-            "🛠️ כיצד התבצע השרטוט?",
-            ["🎨 ללא גוף מודפס (דמיון/דף)", "🧊 בעזרת גוף מודפס (פיזי)"],
-            horizontal=True
-        )
+        work_method = st.radio("🛠️ כיצד התבצע השרטוט?", ["🎨 ללא גוף (דמיון)", "🧊 בעזרת גוף פיזי"], horizontal=True)
 
         st.markdown("#### 3. תיאור תצפית")
         col_text1, col_text2 = st.columns(2)
         with col_text1:
-            planned = st.text_area("📋 תיאור המטלה", height=100, placeholder="מה התלמיד נדרש לעשות?")
-            challenge = st.text_area("🗣️ ציטוטים / תגובות", height=100, placeholder="דברים שהתלמיד אמר או שפת גוף...")
+            planned = st.text_area("📋 תיאור המטלה", height=100, placeholder="מה נדרש לעשות?")
+            challenge = st.text_area("🗣️ ציטוטים / תגובות", height=100, placeholder="ציטוטים, שפת גוף...")
         with col_text2:
-            done = st.text_area("👀 פעולות שנצפו", height=100, placeholder="מה ראית בפועל? (פעולות, מחיקות, היסוס...)")
+            done = st.text_area("👀 פעולות שנצפו", height=100, placeholder="מה הוא עשה בפועל?")
         
+        # --- צילום תמונה ---
+        st.markdown("#### 📷 תיעוד ויזואלי")
+        uploaded_image = st.camera_input("צלם את השרטוט או הגוף")
+
         st.markdown("#### 4. מדדי הערכה (1-5)")
         c1, c2 = st.columns(2)
         with c1:
@@ -282,109 +179,89 @@ with tab1:
             cat_dims = st.slider("📏 מידות ופרופורציות", 1, 5, 3)
         with c2:
             cat_proj = st.slider("📐 מעבר בין היטלים", 1, 5, 3)
-            cat_3d_support = st.slider("🧊 שימוש בגוף מודפס", 1, 5, 3, help="1=כמעט ללא שימוש, 5=שימוש אינטנסיבי ומתמיד")
+            cat_3d_support = st.slider("🧊 שימוש בגוף מודפס", 1, 5, 3)
         
-        cat_self_efficacy = st.slider("💪 מסוגלות עצמית (למידה עצמאית)", 1, 5, 3, help="1=נזקק לעזרה רבה, 5=עבד עצמאית לגמרי")
+        cat_self_efficacy = st.slider("💪 מסוגלות עצמית", 1, 5, 3)
 
-        submitted = st.form_submit_button("💾 שמור תצפית ביומן")
+        submitted = st.form_submit_button("💾 שמור תצפית")
 
         if submitted:
+            # 1. שמירת הנתונים
             entry = {
                 "type": "reflection", "student_name": student_name, "lesson_id": lesson_id,
                 "work_method": work_method, "planned": planned, "done": done, 
-                "challenge": challenge, 
-                "cat_convert_rep": cat_convert, 
-                "cat_dims_props": cat_dims, 
-                "cat_proj_trans": cat_proj, 
-                "cat_3d_support": cat_3d_support,
-                "cat_self_efficacy": cat_self_efficacy,
-                "date": date.today().isoformat(),
-                "timestamp": datetime.now().isoformat()
+                "challenge": challenge, "cat_convert_rep": cat_convert, 
+                "cat_dims_props": cat_dims, "cat_proj_trans": cat_proj, 
+                "cat_3d_support": cat_3d_support, "cat_self_efficacy": cat_self_efficacy,
+                "date": date.today().isoformat(), "timestamp": datetime.now().isoformat(),
+                "has_image": uploaded_image is not None
             }
             save_reflection(entry)
-            st.success(f"🎉 המידע על {student_name} נשמר בהצלחה!")
+            
+            # 2. העלאה לדרייב
             svc = get_drive_service()
             if svc:
                 try:
-                    upload_reflection_to_drive(entry, svc)
-                except: pass
+                    # העלאת ה-JSON
+                    json_bytes = io.BytesIO(json.dumps(entry, ensure_ascii=False, indent=4).encode('utf-8'))
+                    upload_file_to_drive(json_bytes, f"ref-{student_name}-{entry['date']}.json", 'application/json', svc)
+                    
+                    # העלאת התמונה (אם יש)
+                    if uploaded_image:
+                        image_bytes = io.BytesIO(uploaded_image.getvalue())
+                        upload_file_to_drive(image_bytes, f"img-{student_name}-{entry['date']}.jpg", 'image/jpeg', svc)
+                        st.success("📸 התמונה והנתונים נשמרו בדרייב!")
+                    else:
+                        st.success("✅ הנתונים נשמרו בהצלחה!")
+                except Exception as e:
+                    st.error(f"שגיאה בגיבוי לענן: {e}")
+            else:
+                st.warning("נשמר מקומית בלבד (אין חיבור לדרייב).")
 
-# --- לשונית 2: לוח בקרה אישי ---
+# --- לשונית 2: לוח בקרה וייצוא ---
 with tab2:
-    st.markdown("### 🕵️ מעקב התפתחות אישי")
+    st.markdown("### 🕵️ מעקב התפתחות וייצוא נתונים")
     df = load_data_as_dataframe()
     
     if df.empty:
-        st.warning("⚠️ עדיין אין נתונים. נא למלא תצפיות בלשונית הראשונה.")
+        st.warning("⚠️ אין נתונים.")
     else:
-        metric_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_3d_support', 'cat_self_efficacy']
+        # --- אזור ייצוא נתונים ---
+        st.markdown("#### 📥 ייצוא נתונים למחקר")
+        col_ex1, col_ex2 = st.columns(2)
+        with col_ex1:
+            # המרת הדאטהפריים ל-CSV
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button("📄 הורד כ-CSV", data=csv, file_name="thesis_data.csv", mime="text/csv", help="פורמט מתאים לתוכנות סטטיסטיות")
         
-        heb_names = {
-            'cat_convert_rep': 'המרת ייצוגים', 
-            'cat_dims_props': 'מידות', 
-            'cat_proj_trans': 'היטלים', 
-            'cat_3d_support': 'שימוש בגוף', 
-            'cat_self_efficacy': 'מסוגלות עצמית'
-        }
+        with col_ex2:
+            # המרת הדאטהפריים לאקסל (דורש openpyxl)
+            try:
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df.to_excel(writer, index=False, sheet_name='Data')
+                st.download_button("📊 הורד כ-Excel", data=output.getvalue(), file_name="thesis_data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            except:
+                st.error("נדרשת ספריית openpyxl לאקסל")
+
+        st.divider()
+
+        # גרפים (כמו קודם)
+        metric_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_3d_support', 'cat_self_efficacy']
+        heb_names = {'cat_convert_rep': 'המרת ייצוגים', 'cat_dims_props': 'מידות', 'cat_proj_trans': 'היטלים', 'cat_3d_support': 'שימוש בגוף', 'cat_self_efficacy': 'מסוגלות עצמית'}
         
         all_students = df['student_name'].unique() if 'student_name' in df.columns else []
-        
         if len(all_students) > 0:
-            selected_student_graph = st.selectbox("🎓 בחר תלמיד להצגת נתונים:", all_students)
-            
+            selected_student_graph = st.selectbox("🎓 בחר תלמיד:", all_students)
             student_df = df[df['student_name'] == selected_student_graph].sort_values("date")
-            
             if not student_df.empty:
-                st.caption(f"📅 מציג {len(student_df)} תצפיות עבור {selected_student_graph}")
-                
-                m1, m2, m3 = st.columns(3)
-                m1.metric("🔢 סה״כ תצפיות", len(student_df))
-                
-                last_method = student_df.iloc[-1].get('work_method', 'לא ידוע')
-                short_method = last_method.split(' ')[0] if isinstance(last_method, str) else "לא ידוע"
-                m2.metric("🛠️ שיטה אחרונה", short_method)
-                
-                last_efficacy = student_df.iloc[-1].get('cat_self_efficacy', 'N/A')
-                m3.metric("💪 מסוגלות אחרונה", last_efficacy)
-
-                st.divider()
-
-                existing_cols = [c for c in metric_cols if c in df.columns]
-                if existing_cols:
-                    st.subheader("📈 מגמת שיפור אישית")
-                    chart_data = student_df.set_index("date")[existing_cols]
-                    chart_data.columns = [heb_names.get(c, c) for c in chart_data.columns]
-                    st.line_chart(chart_data)
-                
-                st.divider()
-                st.subheader("📜 היסטוריית תצפיות")
-                
-                history_table = student_df[['date', 'work_method', 'planned', 'done', 'challenge']].tail(5)
-                history_table = history_table.rename(columns={
-                    'planned': '📋 מטלה',
-                    'done': '👀 פעולות',
-                    'challenge': '🗣️ ציטוטים',
-                    'work_method': '🛠️ שיטה',
-                    'date': '📅 תאריך'
-                })
-                
-                st.dataframe(
-                    history_table, 
-                    hide_index=True, 
-                    use_container_width=True
-                )
-            else:
-                st.info("ℹ️ אין נתונים לתלמיד זה.")
-        else:
-            st.info("ℹ️ לא נמצאו תלמידים במאגר הנתונים.")
+                st.line_chart(student_df.set_index("date")[metric_cols].rename(columns=heb_names))
+                st.dataframe(student_df[['date', 'work_method', 'challenge', 'has_image']].tail(5), hide_index=True)
 
 # --- לשונית 3: AI ---
 with tab3:
-    st.markdown("### 🤖 העוזר המחקרי החכם")
-    st.write("כאן תוכל לקבל ניתוח עומק על התקדמות הכיתה והתלמידים.")
-    
-    if st.button("✨ צור סיכום שבועי חכם"):
+    st.markdown("### 🤖 עוזר מחקרי")
+    if st.button("✨ צור סיכום שבועי"):
         entries = load_last_week()
-        with st.spinner("🔄 ה-AI מנתח את הנתונים..."):
-            summary = generate_summary(entries)
-            st.markdown(summary)
+        with st.spinner("מנתח..."):
+            st.markdown(generate_summary(entries))
