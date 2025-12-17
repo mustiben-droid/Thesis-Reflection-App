@@ -28,78 +28,84 @@ CLASS_ROSTER = [
 ]
 
 # -----------------------------
-# פונקציית העיצוב החדשה והצבעונית 🎨
+# פונקציית העיצוב (המתוקנת - נקי, מיושר לאמצע, ללא רווח עליון)
 # -----------------------------
 def setup_design():
-    # הגדרת כותרת הדף ואייקון בדפדפן
-    st.set_page_config(page_title="יומן מחקר", page_icon="🎓", layout="centered")
+    st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
     
     st.markdown("""
         <style>
-            /* כיוון ימין-שמאל גלובלי */
-            html, body, [data-testid="stAppViewContainer"] {
-                direction: rtl;
-                background-color: #f8f9fa; /* רקע אפור בהיר מאוד לכל האפליקציה */
-            }
-            
-            /* עיצוב שדות טקסט */
-            input, textarea, [data-testid="stTextarea"], [data-testid="stSelectbox"] { 
-                direction: rtl !important; 
-                text_align: right; 
-            }
-            
-            /* עיצוב כותרות בצבע כחול-סגול */
-            h1, h2, h3 {
-                color: #4361ee !important;
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            }
-            
-            /* אפקט "כרטיסייה" לטופס ולטאבים */
-            [data-testid="stForm"], [data-testid="stVerticalBlock"] > div {
-                background-color: white;
-                padding: 20px;
-                border-radius: 15px;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* צל עדין */
-                margin-bottom: 20px;
-            }
-            
-            /* כפתור שמירה בולט */
-            [data-testid="stFormSubmitButton"] > button {
-                background-color: #4361ee;
-                color: white;
-                border-radius: 10px;
-                width: 100%;
-                font-weight: bold;
-                border: none;
-            }
-            [data-testid="stFormSubmitButton"] > button:hover {
-                background-color: #3f37c9;
-                color: white;
+            /* 1. ביטול הרווח הריק העליון */
+            .block-container {
+                padding-top: 2rem !important;
+                padding-bottom: 2rem !important;
             }
 
-            /* יישור טאבים */
-            .stTabs [data-baseweb="tab-list"] { 
-                justify-content: center; 
-                gap: 10px;
+            /* 2. אילוץ מצב בהיר (Light Mode) באופן גורף */
+            [data-testid="stAppViewContainer"] {
+                background-color: #f4f6f9 !important;
+                color: #000000 !important;
             }
-            .stTabs [data-baseweb="tab"] {
-                background-color: #e0e7ff;
-                border-radius: 5px;
-                padding: 10px 20px;
+            [data-testid="stHeader"] {
+                background-color: #f4f6f9 !important;
             }
-            .stTabs [aria-selected="true"] {
-                background-color: #4361ee !important;
-                color: white !important;
+
+            /* 3. עיצוב טקסטים וכותרות */
+            h1, h2, h3, h4, h5, h6 {
+                color: #4361ee !important;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                text-align: center !important; /* יישור כל הכותרות למרכז */
             }
             
-            /* תיקון כיוון לסליידרים */
+            p, div, span, label, li {
+                color: #2c3e50 !important;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            }
+
+            /* 4. עיצוב כרטיסיות נקי ושטוח (בלי גלים/צללים) */
+            [data-testid="stForm"], [data-testid="stVerticalBlock"] > div {
+                background-color: #ffffff !important;
+                border-radius: 12px;
+                padding: 20px;
+                border: 1px solid #e0e0e0; /* מסגרת עדינה בלבד */
+                box-shadow: none !important; /* ביטול הצללים שיוצרים את ה"גלים" */
+            }
+
+            /* 5. תיקון צבעים לתיבות הקלט (שיהיו לבנות וקריאות) */
+            .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {
+                background-color: #ffffff !important;
+                color: #000000 !important;
+                border: 1px solid #cccccc !important;
+                direction: rtl !important;
+                text-align: right;
+            }
+            
+            /* תיקון צבעים לרשימות נפתחות */
+            div[data-baseweb="popover"] li, div[data-baseweb="popover"] div {
+                 color: #000000 !important;
+                 background-color: #ffffff !important;
+            }
+
+            /* 6. כפתור שמירה מעוצב */
+            [data-testid="stFormSubmitButton"] > button {
+                background-color: #4361ee !important;
+                color: white !important;
+                border: none;
+                width: 100%;
+                padding: 12px;
+                font-size: 18px;
+                border-radius: 8px;
+            }
+
+            /* 7. כיווניות RTL */
+            html, body { direction: rtl; }
             [data-testid="stSlider"] { direction: rtl; }
             
         </style>
         """, unsafe_allow_html=True)
 
 # -----------------------------
-# פונקציות לוגיקה (ללא שינוי)
+# פונקציות לוגיקה
 # -----------------------------
 def get_google_api_key() -> str:
     return st.secrets.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
@@ -174,25 +180,28 @@ def generate_summary(entries: list) -> str:
 # ממשק ראשי (Main UI)
 # -----------------------------
 
-# הפעלת העיצוב החדש
 setup_design()
 
-st.title("🎓 יומן תצפית ומחקר")
-st.markdown("### מעקב אחר התפתחות תפיסה מרחבית בכיתה ה'")
+# --- כותרות מיושרות למרכז ---
+st.title("🎓 יומן תצפית")
+st.markdown("### מעקב אחר מיומנויות תפיסה מרחבית")
 
-# יצירת לשוניות עם אייקונים
 tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 לוח בקרה", "🤖 סיכום AI"])
 
 # --- לשונית 1: הזנת נתונים ---
 with tab1:
     st.info("💡 טיפ: רפלקציה טובה נכתבת בסמוך לזמן השיעור.")
     with st.form("reflection_form"):
-        st.markdown("#### 1. פרטי המקרה")
+        # --- הכותרת החדשה: פרטי התצפית ---
+        st.markdown("#### 1. פרטי התצפית") 
         
         col_student, col_lesson = st.columns(2)
         with col_student:
             selected_student = st.selectbox("שם תלמיד", CLASS_ROSTER)
-            student_name = st.text_input("הזן שם תלמיד:") if selected_student == "תלמיד אחר..." else selected_student
+            if selected_student == "תלמיד אחר...":
+                student_name = st.text_input("הזן שם תלמיד:")
+            else:
+                student_name = selected_student
         
         with col_lesson:
             lesson_id = st.text_input("שיעור מס'", placeholder="לדוגמה: היטלים 1")
@@ -207,10 +216,10 @@ with tab1:
         st.markdown("#### 3. הלב של הרפלקציה")
         col_text1, col_text2 = st.columns(2)
         with col_text1:
-            planned = st.text_area("🎯 מה תכננתי?", height=100, placeholder="מטרת השיעור הייתה...")
-            challenge = st.text_area("🔥 קושי מרכזי", height=100, placeholder="איפה התלמיד נתקע?")
+            planned = st.text_area("🎯 מה תכננתי?", height=100, placeholder="מטרת המטלה...")
+            challenge = st.text_area("🔥 קושי מרכזי", height=100, placeholder="תיאור הפער בתפיסה...")
         with col_text2:
-            done = st.text_area("✅ מה בוצע בפועל?", height=100, placeholder="בפועל התלמיד עשה...")
+            done = st.text_area("✅ מה בוצע בפועל?", height=100, placeholder="תיאור הביצוע...")
         
         st.markdown("#### 4. מדדי הערכה (1-5)")
         c1, c2 = st.columns(2)
@@ -242,7 +251,7 @@ with tab1:
 
 # --- לשונית 2: גרפים ---
 with tab2:
-    st.markdown("### 📈 התקדמות הכיתה")
+    st.markdown("### 📈 התקדמות הקבוצה")
     df = load_data_as_dataframe()
     
     if df.empty:
@@ -253,22 +262,21 @@ with tab2:
         
         existing_cols = [c for c in metric_cols if c in df.columns]
         if existing_cols:
-            st.caption("ממוצע כיתתי כללי לפי קטגוריות")
+            st.caption("ממוצע כללי לפי קטגוריות")
             avg_data = df[existing_cols].mean().rename(index=heb_names)
-            st.bar_chart(avg_data, color="#4361ee") # צבע כחול לגרף
+            st.bar_chart(avg_data, color="#4361ee")
 
         st.divider()
 
         st.markdown("### 🕵️ מעקב פרטני")
         all_students = df['student_name'].unique() if 'student_name' in df.columns else []
         if len(all_students) > 0:
-            selected_student_graph = st.selectbox("בחר תלמיד:", all_students)
+            selected_student_graph = st.selectbox("בחר נבדק:", all_students)
             student_df = df[df['student_name'] == selected_student_graph].sort_values("date")
             
-            # הצגת כרטיסיות מידע (Metrics)
             m1, m2, m3 = st.columns(3)
-            m1.metric("סה״כ שיעורים", len(student_df))
-            last_method = student_df.iloc[-1].get('work_method', 'לא ידוע').split(' ')[0] # לוקח את המילה הראשונה
+            m1.metric("סה״כ תצפיות", len(student_df))
+            last_method = student_df.iloc[-1].get('work_method', 'לא ידוע').split(' ')[0]
             m2.metric("שיטה אחרונה", last_method)
             m3.metric("תאריך אחרון", str(student_df.iloc[-1]['date'].date()))
 
@@ -282,8 +290,7 @@ with tab2:
 
 # --- לשונית 3: AI ---
 with tab3:
-    st.markdown("### 🧠 העוזר המחקרי שלך")
-    st.info("ה-AI יסרוק את השבוע האחרון ויחפש דפוסים בנתונים.")
+    st.markdown("### 🧠 העוזר המחקרי")
     if st.button("צור סיכום שבועי חכם ✨"):
         entries = load_last_week()
         with st.spinner("ה-AI מנתח את הנתונים..."):
