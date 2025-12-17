@@ -25,7 +25,7 @@ CLASS_ROSTER = [
     "תלמיד אחר..." 
 ]
 
-# רשימת התגיות (תגיות מהירות לניתוח) - מעודכן
+# רשימת התגיות (תגיות מהירות לניתוח)
 OBSERVATION_TAGS = [
     # כשלים ואתגרים
     "התעלמות מקווים נסתרים",
@@ -215,7 +215,7 @@ with tab1:
 
         st.markdown("#### 3. תיאור תצפית")
         
-        # --- תגיות מהירות (מעודכן) ---
+        # --- תגיות מהירות ---
         selected_tags = st.multiselect("🏷️ תגיות מהירות (ניתן לבחור כמה):", OBSERVATION_TAGS)
         
         col_text1, col_text2 = st.columns(2)
@@ -225,6 +225,112 @@ with tab1:
         with col_text2:
             done = st.text_area("👀 פעולות שנצפו", height=100, placeholder="מה הוא עשה בפועל?")
         
-        # --- העלאת תמונה ---
+        # --- העלאת תמונה (התיקון כאן: שימוש במשתנה לטקסט) ---
         st.markdown("#### 📷 תיעוד ויזואלי")
-        uploaded_image = st.file_uploader("צרף צילום שרטוט/ג
+        upload_label = "צרף צילום שרטוט/גוף (מהמצלמה או מהגלריה)"
+        uploaded_image = st.file_uploader(upload_label, type=['jpg', 'jpeg', 'png'])
+
+        st.markdown("#### 4. מדדי הערכה (1-5)")
+        c1, c2 = st.columns(2)
+        with c1:
+            cat_convert = st.slider("🔄 המרת ייצוגים", 1, 5, 3)
+            cat_dims = st.slider("📏 מידות ופרופורציות", 1, 5, 3)
+        with c2:
+            cat_proj = st.slider("📐 מעבר בין היטלים", 1, 5, 3)
+            cat_3d_support = st.slider("🧊 שימוש בגוף מודפס", 1, 5, 3)
+        
+        cat_self_efficacy = st.slider("💪 מסוגלות עצמית", 1, 5, 3)
+
+        submitted = st.form_submit_button("💾 שמור תצפית")
+
+        if submitted:
+            # 1. שמירת הנתונים
+            entry = {
+                "type": "reflection", "student_name": student_name, "lesson_id": lesson_id,
+                "work_method": work_method, 
+                "tags": selected_tags,  
+                "planned": planned, "done": done, 
+                "challenge": challenge, "cat_convert_rep": cat_convert, 
+                "cat_dims_props": cat_dims, "cat_proj_trans": cat_proj, 
+                "cat_3d_support": cat_3d_support, "cat_self_efficacy": cat_self_efficacy,
+                "date": date.today().isoformat(), "timestamp": datetime.now().isoformat(),
+                "has_image": uploaded_image is not None
+            }
+            save_reflection(entry)
+            
+            # 2. העלאה לדרייב
+            svc = get_drive_service()
+            if svc:
+                try:
+                    # העלאת ה-JSON
+                    json_bytes = io.BytesIO(json.dumps(entry, ensure_ascii=False, indent=4).encode('utf-8'))
+                    upload_file_to_drive(json_bytes, f"ref-{student_name}-{entry['date']}.json", 'application/json', svc)
+                    
+                    # העלאת התמונה (אם יש)
+                    if uploaded_image:
+                        image_bytes = io.BytesIO(uploaded_image.getvalue())
+                        upload_file_to_drive(image_bytes, f"img-{student_name}-{entry['date']}.jpg", 'image/jpeg', svc)
+                        st.success("📸 התמונה והנתונים נשמרו בדרייב!")
+                    else:
+                        st.success("✅ הנתונים נשמרו בהצלחה!")
+                except Exception as e:
+                    st.error(f"שגיאה בגיבוי לענן: {e}")
+            else:
+                st.warning("נשמר מקומית בלבד (אין חיבור לדרייב).")
+
+# --- לשונית 2: לוח בקרה וייצוא ---
+with tab2:
+    st.markdown("### 🕵️ מעקב התפתחות וייצוא נתונים")
+    df = load_data_as_dataframe()
+    
+    if df.empty:
+        st.warning("⚠️ אין נתונים.")
+    else:
+        # עיבוד נתונים לפני ייצוא (כדי שהתגיות יראו יפה באקסל)
+        export_df = df.copy()
+        if "tags" in export_df.columns:
+            # הופך את הרשימה ['תגית1', 'תגית2'] למחרוזת "תגית1, תגית2"
+            export_df["tags"] = export_df["tags"].apply(lambda x: ", ".join(x) if isinstance(x, list) else x)
+
+        # --- אזור ייצוא נתונים ---
+        st.markdown("#### 📥 ייצוא נתונים למחקר")
+        col_ex1, col_ex2 = st.columns(2)
+        with col_ex1:
+            csv = export_df.to_csv(index=False).encode('utf-8')
+            st.download_button("📄 הורד כ-CSV", data=csv, file_name="thesis_data.csv", mime="text/csv", help="פורמט מתאים לתוכנות סטטיסטיות")
+        
+        with col_ex2:
+            try:
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    export_df.to_excel(writer, index=False, sheet_name='Data')
+                st.download_button("📊 הורד כ-Excel", data=output.getvalue(), file_name="thesis_data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            except:
+                st.error("נדרשת ספריית openpyxl לאקסל")
+
+        st.divider()
+
+        metric_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_3d_support', 'cat_self_efficacy']
+        heb_names = {'cat_convert_rep': 'המרת ייצוגים', 'cat_dims_props': 'מידות', 'cat_proj_trans': 'היטלים', 'cat_3d_support': 'שימוש בגוף', 'cat_self_efficacy': 'מסוגלות עצמית'}
+        
+        all_students = df['student_name'].unique() if 'student_name' in df.columns else []
+        if len(all_students) > 0:
+            selected_student_graph = st.selectbox("🎓 בחר תלמיד:", all_students)
+            student_df = df[df['student_name'] == selected_student_graph].sort_values("date")
+            
+            if not student_df.empty:
+                chart_data = student_df.set_index("date")[metric_cols].rename(columns=heb_names)
+                st.line_chart(chart_data)
+                
+                # הצגת טבלה עם תגיות
+                cols_to_show = ['date', 'work_method', 'tags', 'has_image']
+                existing_cols = [c for c in cols_to_show if c in student_df.columns]
+                st.dataframe(student_df[existing_cols].tail(5), hide_index=True)
+
+# --- לשונית 3: AI ---
+with tab3:
+    st.markdown("### 🤖 עוזר מחקרי")
+    if st.button("✨ צור סיכום שבועי"):
+        entries = load_last_week()
+        with st.spinner("מנתח..."):
+            st.markdown(generate_summary(entries))
