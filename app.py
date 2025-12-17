@@ -26,30 +26,77 @@ CLASS_ROSTER = [
 ]
 
 # -----------------------------
-# פונקציית העיצוב
+# פונקציית העיצוב (CSS מתוקן לרקע שחור בבחירה)
 # -----------------------------
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
     
     st.markdown("""
         <style>
+            /* 1. הגדרות בסיס */
             .stApp, [data-testid="stAppViewContainer"] { background-color: #ffffff !important; }
             .block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; max-width: 100% !important; }
             [data-testid="stForm"], [data-testid="stVerticalBlock"] > div { background-color: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
+            
+            /* 2. טקסטים וכותרות */
             h1, h2, h3, h4, h5, h6 { color: #4361ee !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center !important; }
             p, label, span, div { color: #2c3e50 !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
             
-            /* עיצוב סליידרים */
+            /* 3. עיצוב סליידרים */
             [data-testid="stSlider"] { direction: rtl; padding-bottom: 10px; width: 100%; }
             [data-testid="stSlider"] label p { font-size: 18px !important; font-weight: 600 !important; margin-bottom: 5px !important; }
             [data-testid="stThumbValue"] { font-size: 16px !important; font-weight: bold !important; }
 
-            /* עיצוב תיבות קלט */
-            .stSelectbox > div > div { background-color: #f8f9fa !important; border: 1px solid #e0e0e0 !important; border-radius: 8px !important; }
-            .stTextInput input, .stTextArea textarea { background-color: #f8f9fa !important; border: 1px solid #e0e0e0 !important; border-radius: 8px !important; direction: rtl !important; text-align: right; }
+            /* 4. תיקון קריטי - תפריט נפתח (Selectbox) */
+            /* צבע הרקע של התיבה עצמה */
+            .stSelectbox > div > div { 
+                background-color: #f8f9fa !important; 
+                border: 1px solid #e0e0e0 !important; 
+                border-radius: 8px !important; 
+                color: #000000 !important;
+            }
+            
+            /* תיקון הרשימה שנפתחת (הרקע השחור) */
+            div[data-baseweb="popover"], div[data-baseweb="menu"], ul[role="listbox"] {
+                background-color: #ffffff !important;
+                color: #000000 !important;
+            }
+            
+            /* תיקון הפריטים בתוך הרשימה */
+            div[role="option"] {
+                color: #000000 !important;
+                background-color: #ffffff !important;
+            }
+            
+            /* צבע כהה יותר כשעוברים עם העכבר/אצבע על פריט */
+            div[role="option"]:hover, div[role="option"]:active, li[role="option"]:hover {
+                background-color: #eef2ff !important;
+                color: #000000 !important;
+            }
 
-            /* כפתור שמירה */
-            [data-testid="stFormSubmitButton"] > button { background-color: #4361ee !important; color: white !important; border: none; width: 100%; padding: 15px; font-size: 20px; font-weight: bold; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 6px rgba(67, 97, 238, 0.3); }
+            /* 5. תיבות טקסט רגילות */
+            .stTextInput input, .stTextArea textarea { 
+                background-color: #f8f9fa !important; 
+                border: 1px solid #e0e0e0 !important; 
+                border-radius: 8px !important; 
+                direction: rtl !important; 
+                text-align: right; 
+                color: #000000 !important;
+            }
+
+            /* 6. כפתור שמירה */
+            [data-testid="stFormSubmitButton"] > button { 
+                background-color: #4361ee !important; 
+                color: white !important; 
+                border: none; 
+                width: 100%; 
+                padding: 15px; 
+                font-size: 20px; 
+                font-weight: bold; 
+                border-radius: 12px; 
+                margin-top: 20px; 
+                box-shadow: 0 4px 6px rgba(67, 97, 238, 0.3); 
+            }
 
             html, body { direction: rtl; }
         </style>
@@ -168,7 +215,7 @@ with tab1:
         with col_text2:
             done = st.text_area("👀 פעולות שנצפו", height=100, placeholder="מה הוא עשה בפועל?")
         
-        # --- השינוי כאן: שימוש בהעלאת קובץ במקום במצלמה ישירה ---
+        # --- העלאת תמונה ---
         st.markdown("#### 📷 תיעוד ויזואלי")
         uploaded_image = st.file_uploader("צרף צילום שרטוט/גוף (מהמצלמה או מהגלריה)", type=['jpg', 'jpeg', 'png'])
 
@@ -208,7 +255,6 @@ with tab1:
                     
                     # העלאת התמונה (אם יש)
                     if uploaded_image:
-                        # קריאה מחדש של הקובץ כי file_uploader מתנהג קצת אחרת
                         image_bytes = io.BytesIO(uploaded_image.getvalue())
                         upload_file_to_drive(image_bytes, f"img-{student_name}-{entry['date']}.jpg", 'image/jpeg', svc)
                         st.success("📸 התמונה והנתונים נשמרו בדרייב!")
@@ -256,13 +302,4 @@ with tab2:
             selected_student_graph = st.selectbox("🎓 בחר תלמיד:", all_students)
             student_df = df[df['student_name'] == selected_student_graph].sort_values("date")
             if not student_df.empty:
-                st.line_chart(student_df.set_index("date")[metric_cols].rename(columns=heb_names))
-                st.dataframe(student_df[['date', 'work_method', 'challenge', 'has_image']].tail(5), hide_index=True)
-
-# --- לשונית 3: AI ---
-with tab3:
-    st.markdown("### 🤖 עוזר מחקרי")
-    if st.button("✨ צור סיכום שבועי"):
-        entries = load_last_week()
-        with st.spinner("מנתח..."):
-            st.markdown(generate_summary(entries))
+                st.line_chart(student_df.
