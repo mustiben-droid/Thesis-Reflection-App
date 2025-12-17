@@ -49,54 +49,98 @@ OBSERVATION_TAGS = [
 ]
 
 # -----------------------------
-# פונקציית העיצוב (CSS חזק במיוחד לתגיות)
+# פונקציית העיצוב (CSS אגרסיבי למניעת רקע שחור)
 # -----------------------------
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
     
     st.markdown("""
         <style>
-            /* 1. איפוס כללי - רקע לבן לאפליקציה */
+            /* 1. איפוס כללי */
             .stApp, [data-testid="stAppViewContainer"] { background-color: #ffffff !important; }
             .block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; max-width: 100% !important; }
             
-            /* 2. כותרות וטקסטים - הכל לשחור/כחול */
-            h1, h2, h3, h4, h5, h6 { color: #4361ee !important; font-family: 'Segoe UI', sans-serif; text-align: center !important; }
-            p, label, span, div { color: #000000 !important; font-family: 'Segoe UI', sans-serif; }
+            /* 2. כותרות וטקסטים כלליים */
+            h1, h2, h3, h4, h5, h6 { color: #4361ee !important; font-family: sans-serif; text-align: center !important; }
+            p, label, span, div { color: #000000 !important; }
             
-            /* 3. תיקון אגרסיבי לתגיות (Multiselect Tags) */
-            /* זה החלק שהיה בעייתי - צובע את הרקע לצהוב בהיר ואת הטקסט לשחור */
+            /* ----------------------------------------------------------- */
+            /* טיפול שורש: תגיות (Multiselect) */
+            /* ----------------------------------------------------------- */
+            
+            /* הקופסה החיצונית של הבחירה */
+            .stMultiSelect > div > div {
+                background-color: #f0f2f6 !important; /* אפור בהיר מאוד */
+                border: 1px solid #d1d5db !important;
+                color: black !important;
+            }
+            
+            /* התגית עצמה שנבחרה (הבועה) */
             span[data-baseweb="tag"] {
-                background-color: #fff9c4 !important; /* צהוב בהיר מאוד */
-                border: 1px solid #fbc02d !important; /* מסגרת צהובה כהה */
+                background-color: #bbdefb !important; /* כחול בהיר */
+                border: 1px solid #1976d2 !important; /* כחול כהה */
             }
             
             /* הטקסט בתוך התגית */
             span[data-baseweb="tag"] span {
-                color: #000000 !important; /* שחור מוחלט */
+                color: #000000 !important; /* שחור */
                 font-weight: bold !important;
             }
             
-            /* כפתור ה-X לסגירת התגית */
+            /* כפתור ה-X של התגית */
             span[data-baseweb="tag"] svg {
                 fill: #000000 !important;
+            }
+            
+            /* התפריט שנפתח (האפשרויות לבחירה) */
+            ul[data-baseweb="menu"], li[role="option"] {
+                background-color: #ffffff !important;
                 color: #000000 !important;
             }
 
-            /* 4. תיקון התפריט שנפתח (האפשרויות) */
-            ul[role="listbox"], li[role="option"], div[role="option"] {
-                background-color: #ffffff !important; /* רקע לבן */
-                color: #000000 !important; /* טקסט שחור */
+            /* ----------------------------------------------------------- */
+            /* טיפול שורש: מצלמה / העלאת קובץ (File Uploader) */
+            /* ----------------------------------------------------------- */
+            
+            /* הקופסה הראשית */
+            [data-testid="stFileUploader"] {
+                background-color: #f0f2f6 !important;
+                border-radius: 10px;
+                padding: 10px;
             }
             
-            /* 5. תיבות בחירה וקלט */
-            .stSelectbox > div > div, .stMultiSelect > div > div, .stTextInput input, .stTextArea textarea {
+            /* האזור הפנימי (Dropzone) */
+            [data-testid="stFileUploader"] section {
+                background-color: #ffffff !important; /* לבן בוהק */
+                border: 1px dashed #4361ee !important;
+            }
+            
+            /* כל הטקסטים בתוך המצלמה (Drag and drop file here, Limit 200MB...) */
+            [data-testid="stFileUploader"] span, 
+            [data-testid="stFileUploader"] small, 
+            [data-testid="stFileUploader"] div {
+                color: #000000 !important;
+            }
+            
+            /* כפתור Browse files */
+            [data-testid="stFileUploader"] button {
+                background-color: #e0e0e0 !important;
+                color: #000000 !important;
+                border: 1px solid #9e9e9e !important;
+            }
+
+            /* ----------------------------------------------------------- */
+            /* שאר האלמנטים */
+            /* ----------------------------------------------------------- */
+            
+            /* שדות טקסט */
+            .stTextInput input, .stTextArea textarea {
                 background-color: #f5f5f5 !important;
                 color: #000000 !important;
                 border: 1px solid #cccccc !important;
             }
-
-            /* 6. כפתור שמירה */
+            
+            /* כפתור שמירה */
             [data-testid="stFormSubmitButton"] > button { 
                 background-color: #4361ee !important; 
                 color: white !important; 
