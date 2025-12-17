@@ -49,71 +49,65 @@ OBSERVATION_TAGS = [
 ]
 
 # -----------------------------
-# פונקציית העיצוב (CSS מתוקן לתגיות)
+# פונקציית העיצוב (CSS חזק במיוחד לתגיות)
 # -----------------------------
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
     
     st.markdown("""
         <style>
-            /* 1. הגדרות בסיס */
+            /* 1. איפוס כללי - רקע לבן לאפליקציה */
             .stApp, [data-testid="stAppViewContainer"] { background-color: #ffffff !important; }
             .block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; max-width: 100% !important; }
-            [data-testid="stForm"], [data-testid="stVerticalBlock"] > div { background-color: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
             
-            /* 2. טקסטים וכותרות */
-            h1, h2, h3, h4, h5, h6 { color: #4361ee !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center !important; }
-            p, label, span, div { color: #2c3e50 !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+            /* 2. כותרות וטקסטים - הכל לשחור/כחול */
+            h1, h2, h3, h4, h5, h6 { color: #4361ee !important; font-family: 'Segoe UI', sans-serif; text-align: center !important; }
+            p, label, span, div { color: #000000 !important; font-family: 'Segoe UI', sans-serif; }
             
-            /* 3. סליידרים */
-            [data-testid="stSlider"] { direction: rtl; padding-bottom: 10px; width: 100%; }
-            [data-testid="stSlider"] label p { font-size: 18px !important; font-weight: 600 !important; margin-bottom: 5px !important; }
-            [data-testid="stThumbValue"] { font-size: 16px !important; font-weight: bold !important; }
-
-            /* 4. תיקון צבעים לתפריטים (Selectbox + Multiselect) */
-            .stSelectbox > div > div, .stMultiSelect > div > div { 
-                background-color: #f8f9fa !important; 
-                border: 1px solid #e0e0e0 !important; 
-                border-radius: 8px !important; 
-                color: #000000 !important;
-            }
-            
-            /* תפריטים נפתחים (Dropdown) */
-            div[data-baseweb="popover"], div[data-baseweb="menu"], ul[role="listbox"] {
-                background-color: #ffffff !important;
-                color: #000000 !important;
-            }
-            div[role="option"] { color: #000000 !important; background-color: #ffffff !important; }
-            div[role="option"]:hover { background-color: #eef2ff !important; color: #000000 !important; }
-
-            /* 5. תיקון קריטי לתגיות (Tags) */
-            /* הרקע של התגית */
+            /* 3. תיקון אגרסיבי לתגיות (Multiselect Tags) */
+            /* זה החלק שהיה בעייתי - צובע את הרקע לצהוב בהיר ואת הטקסט לשחור */
             span[data-baseweb="tag"] {
-                background-color: #eef2ff !important; /* תכלת בהיר */
-                border: 1px solid #4361ee !important;
+                background-color: #fff9c4 !important; /* צהוב בהיר מאוד */
+                border: 1px solid #fbc02d !important; /* מסגרת צהובה כהה */
             }
+            
             /* הטקסט בתוך התגית */
             span[data-baseweb="tag"] span {
-                color: #000000 !important; /* שחור */
-                font-weight: 600 !important;
+                color: #000000 !important; /* שחור מוחלט */
+                font-weight: bold !important;
             }
-            /* ה-X לסגירה */
-            span[data-baseweb="tag"] svg {
-                color: #000000 !important; 
-                fill: #000000 !important;
-            }
-
-            /* 6. תיבות טקסט */
-            .stTextInput input, .stTextArea textarea { background-color: #f8f9fa !important; border: 1px solid #e0e0e0 !important; border-radius: 8px !important; direction: rtl !important; text-align: right; color: #000000 !important; }
             
-            /* 7. תיקון העלאת קבצים */
-            [data-testid="stFileUploader"] { padding: 10px; background-color: #f8f9fa; border-radius: 8px; }
-            [data-testid="stFileUploader"] section { background-color: #ffffff !important; }
-            [data-testid="stFileUploader"] small, [data-testid="stFileUploader"] span, [data-testid="stFileUploader"] div { color: #000000 !important; }
-            [data-testid="stFileUploader"] button { color: #000000 !important; background-color: #e0e0e0 !important; border-color: #cccccc !important; }
+            /* כפתור ה-X לסגירת התגית */
+            span[data-baseweb="tag"] svg {
+                fill: #000000 !important;
+                color: #000000 !important;
+            }
 
-            /* 8. כפתור שמירה */
-            [data-testid="stFormSubmitButton"] > button { background-color: #4361ee !important; color: white !important; border: none; width: 100%; padding: 15px; font-size: 20px; font-weight: bold; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 6px rgba(67, 97, 238, 0.3); }
+            /* 4. תיקון התפריט שנפתח (האפשרויות) */
+            ul[role="listbox"], li[role="option"], div[role="option"] {
+                background-color: #ffffff !important; /* רקע לבן */
+                color: #000000 !important; /* טקסט שחור */
+            }
+            
+            /* 5. תיבות בחירה וקלט */
+            .stSelectbox > div > div, .stMultiSelect > div > div, .stTextInput input, .stTextArea textarea {
+                background-color: #f5f5f5 !important;
+                color: #000000 !important;
+                border: 1px solid #cccccc !important;
+            }
+
+            /* 6. כפתור שמירה */
+            [data-testid="stFormSubmitButton"] > button { 
+                background-color: #4361ee !important; 
+                color: white !important; 
+                border: none; 
+                width: 100%; 
+                padding: 15px; 
+                font-size: 20px; 
+                font-weight: bold; 
+                border-radius: 12px; 
+                margin-top: 20px; 
+            }
 
             html, body { direction: rtl; }
         </style>
