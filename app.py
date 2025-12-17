@@ -26,7 +26,7 @@ CLASS_ROSTER = [
 ]
 
 # -----------------------------
-# פונקציית העיצוב (CSS מתוקן לרקע שחור בבחירה)
+# פונקציית העיצוב (תיקון ספציפי למצלמה ולתפריטים)
 # -----------------------------
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
@@ -79,8 +79,28 @@ def setup_design():
                 text-align: right; 
                 color: #000000 !important;
             }
+            
+            /* 6. תיקון רכיב העלאת תמונה (File Uploader) */
+            [data-testid="stFileUploader"] {
+                padding: 10px;
+                background-color: #f8f9fa;
+                border-radius: 8px;
+            }
+            [data-testid="stFileUploader"] section {
+                background-color: #ffffff !important;
+            }
+            [data-testid="stFileUploader"] small, [data-testid="stFileUploader"] span, [data-testid="stFileUploader"] div {
+                color: #000000 !important;
+            }
+            /* כפתור ה-Browse בתוך ה-Uploader */
+            [data-testid="stFileUploader"] button {
+                color: #000000 !important;
+                background-color: #e0e0e0 !important;
+                border-color: #cccccc !important;
+            }
 
-            /* 6. כפתור שמירה */
+
+            /* 7. כפתור שמירה */
             [data-testid="stFormSubmitButton"] > button { 
                 background-color: #4361ee !important; 
                 color: white !important; 
@@ -297,7 +317,6 @@ with tab2:
             student_df = df[df['student_name'] == selected_student_graph].sort_values("date")
             
             if not student_df.empty:
-                # התיקון כאן: פיצול השורה הארוכה כדי למנוע שגיאות תחביר
                 chart_data = student_df.set_index("date")[metric_cols].rename(columns=heb_names)
                 st.line_chart(chart_data)
                 
