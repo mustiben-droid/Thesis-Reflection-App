@@ -7,7 +7,6 @@ import pandas as pd
 
 import streamlit as st
 from google import genai
-# from google.genai.errors import APIError 
 
 # --- Google Drive Imports ---
 from google.oauth2.service_account import Credentials
@@ -28,7 +27,7 @@ CLASS_ROSTER = [
 ]
 
 # -----------------------------
-# פונקציית העיצוב (המתוקנת - נקי, מיושר לאמצע, ללא רווח עליון)
+# פונקציית העיצוב (תיקון ספציפי לרקע השחור בבחירת תלמיד)
 # -----------------------------
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
@@ -41,7 +40,7 @@ def setup_design():
                 padding-bottom: 2rem !important;
             }
 
-            /* 2. אילוץ מצב בהיר (Light Mode) באופן גורף */
+            /* 2. אילוץ מצב בהיר (Light Mode) */
             [data-testid="stAppViewContainer"] {
                 background-color: #f4f6f9 !important;
                 color: #000000 !important;
@@ -54,7 +53,7 @@ def setup_design():
             h1, h2, h3, h4, h5, h6 {
                 color: #4361ee !important;
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                text-align: center !important; /* יישור כל הכותרות למרכז */
+                text-align: center !important;
             }
             
             p, div, span, label, li {
@@ -62,17 +61,28 @@ def setup_design():
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             }
 
-            /* 4. עיצוב כרטיסיות נקי ושטוח (בלי גלים/צללים) */
+            /* 4. עיצוב כרטיסיות נקי */
             [data-testid="stForm"], [data-testid="stVerticalBlock"] > div {
                 background-color: #ffffff !important;
                 border-radius: 12px;
                 padding: 20px;
-                border: 1px solid #e0e0e0; /* מסגרת עדינה בלבד */
-                box-shadow: none !important; /* ביטול הצללים שיוצרים את ה"גלים" */
+                border: 1px solid #e0e0e0;
+                box-shadow: none !important;
             }
 
-            /* 5. תיקון צבעים לתיבות הקלט (שיהיו לבנות וקריאות) */
-            .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {
+            /* 5. תיקון קריטי - צביעת הרקע של בחירת התלמיד (Selectbox) בלבן */
+            .stSelectbox > div > div {
+                background-color: #ffffff !important;
+                color: #000000 !important;
+                border-color: #cccccc !important;
+            }
+            /* תיקון הטקסט הנבחר שיהיה שחור */
+            .stSelectbox div[data-baseweb="select"] div {
+                color: #000000 !important;
+            }
+
+            /* תיקון שאר תיבות הקלט */
+            .stTextInput input, .stTextArea textarea {
                 background-color: #ffffff !important;
                 color: #000000 !important;
                 border: 1px solid #cccccc !important;
@@ -80,13 +90,13 @@ def setup_design():
                 text-align: right;
             }
             
-            /* תיקון צבעים לרשימות נפתחות */
+            /* תיקון הרשימה הנפתחת עצמה */
             div[data-baseweb="popover"] li, div[data-baseweb="popover"] div {
                  color: #000000 !important;
                  background-color: #ffffff !important;
             }
 
-            /* 6. כפתור שמירה מעוצב */
+            /* 6. כפתור שמירה */
             [data-testid="stFormSubmitButton"] > button {
                 background-color: #4361ee !important;
                 color: white !important;
@@ -182,17 +192,15 @@ def generate_summary(entries: list) -> str:
 
 setup_design()
 
-# --- כותרות מיושרות למרכז ---
 st.title("🎓 יומן תצפית")
 st.markdown("### מעקב אחר מיומנויות תפיסה מרחבית")
 
-tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 לוח בקרה", "🤖 סיכום AI"])
+tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 התקדמות אישית", "🤖 סיכום AI"])
 
 # --- לשונית 1: הזנת נתונים ---
 with tab1:
     st.info("💡 טיפ: רפלקציה טובה נכתבת בסמוך לזמן השיעור.")
     with st.form("reflection_form"):
-        # --- הכותרת החדשה: פרטי התצפית ---
         st.markdown("#### 1. פרטי התצפית") 
         
         col_student, col_lesson = st.columns(2)
@@ -249,9 +257,9 @@ with tab1:
                     upload_reflection_to_drive(entry, svc)
                 except: pass
 
-# --- לשונית 2: גרפים ---
+# --- לשונית 2: לוח בקרה אישי (ללא ממוצע קבוצתי) ---
 with tab2:
-    st.markdown("### 📈 התקדמות הקבוצה")
+    st.markdown("### 🕵️ מעקב התפתחות אישי")
     df = load_data_as_dataframe()
     
     if df.empty:
@@ -260,33 +268,51 @@ with tab2:
         metric_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_3d_support']
         heb_names = {'cat_convert_rep': 'המרת ייצוגים', 'cat_dims_props': 'מידות', 'cat_proj_trans': 'היטלים', 'cat_3d_support': 'תמיכה'}
         
-        existing_cols = [c for c in metric_cols if c in df.columns]
-        if existing_cols:
-            st.caption("ממוצע כללי לפי קטגוריות")
-            avg_data = df[existing_cols].mean().rename(index=heb_names)
-            st.bar_chart(avg_data, color="#4361ee")
-
-        st.divider()
-
-        st.markdown("### 🕵️ מעקב פרטני")
         all_students = df['student_name'].unique() if 'student_name' in df.columns else []
+        
         if len(all_students) > 0:
-            selected_student_graph = st.selectbox("בחר נבדק:", all_students)
+            # הבחירה היא הדבר הראשון שרואים
+            selected_student_graph = st.selectbox("בחר תלמיד להצגת נתונים:", all_students)
+            
+            # סינון הנתונים לתלמיד הספציפי
             student_df = df[df['student_name'] == selected_student_graph].sort_values("date")
             
-            m1, m2, m3 = st.columns(3)
-            m1.metric("סה״כ תצפיות", len(student_df))
-            last_method = student_df.iloc[-1].get('work_method', 'לא ידוע').split(' ')[0]
-            m2.metric("שיטה אחרונה", last_method)
-            m3.metric("תאריך אחרון", str(student_df.iloc[-1]['date'].date()))
+            if not student_df.empty:
+                st.caption(f"מציג {len(student_df)} תצפיות עבור {selected_student_graph}")
+                
+                # כרטיסיות מידע
+                m1, m2, m3 = st.columns(3)
+                m1.metric("סה״כ תצפיות", len(student_df))
+                
+                last_method = student_df.iloc[-1].get('work_method', 'לא ידוע')
+                # קיצור הטקסט אם הוא ארוך מדי לתצוגה
+                short_method = last_method.split(' ')[0] if isinstance(last_method, str) else "לא ידוע"
+                m2.metric("שיטה אחרונה", short_method)
+                
+                m3.metric("תאריך אחרון", str(student_df.iloc[-1]['date'].date()))
 
-            if existing_cols:
-                chart_data = student_df.set_index("date")[existing_cols]
-                chart_data.columns = [heb_names.get(c, c) for c in chart_data.columns]
-                st.line_chart(chart_data)
-            
-            st.caption("היסטוריית דיווחים")
-            st.dataframe(student_df[['date', 'work_method', 'challenge']].tail(5), hide_index=True, use_container_width=True)
+                st.divider()
+
+                # הגרף האישי - ביחס לעצמו
+                existing_cols = [c for c in metric_cols if c in df.columns]
+                if existing_cols:
+                    st.subheader("מגמת שיפור אישית")
+                    chart_data = student_df.set_index("date")[existing_cols]
+                    chart_data.columns = [heb_names.get(c, c) for c in chart_data.columns]
+                    st.line_chart(chart_data)
+                
+                st.divider()
+                st.subheader("הערות מילוליות (היסטוריה)")
+                # מציג טבלה רק עם עמודות רלוונטיות
+                st.dataframe(
+                    student_df[['date', 'work_method', 'challenge', 'done']].tail(5), 
+                    hide_index=True, 
+                    use_container_width=True
+                )
+            else:
+                st.info("אין נתונים לתלמיד זה.")
+        else:
+            st.info("לא נמצאו תלמידים במאגר הנתונים.")
 
 # --- לשונית 3: AI ---
 with tab3:
