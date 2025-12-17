@@ -26,93 +26,37 @@ CLASS_ROSTER = [
 ]
 
 # -----------------------------
-# פונקציית העיצוב (תיקון ספציפי למצלמה ולתפריטים)
+# פונקציית העיצוב (CSS מתוקן)
 # -----------------------------
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
     
     st.markdown("""
         <style>
-            /* 1. הגדרות בסיס */
             .stApp, [data-testid="stAppViewContainer"] { background-color: #ffffff !important; }
             .block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; max-width: 100% !important; }
             [data-testid="stForm"], [data-testid="stVerticalBlock"] > div { background-color: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
             
-            /* 2. טקסטים וכותרות */
             h1, h2, h3, h4, h5, h6 { color: #4361ee !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center !important; }
             p, label, span, div { color: #2c3e50 !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
             
-            /* 3. עיצוב סליידרים */
             [data-testid="stSlider"] { direction: rtl; padding-bottom: 10px; width: 100%; }
             [data-testid="stSlider"] label p { font-size: 18px !important; font-weight: 600 !important; margin-bottom: 5px !important; }
             [data-testid="stThumbValue"] { font-size: 16px !important; font-weight: bold !important; }
 
-            /* 4. תיקון קריטי - תפריט נפתח (Selectbox) */
-            .stSelectbox > div > div { 
-                background-color: #f8f9fa !important; 
-                border: 1px solid #e0e0e0 !important; 
-                border-radius: 8px !important; 
-                color: #000000 !important;
-            }
-            
-            div[data-baseweb="popover"], div[data-baseweb="menu"], ul[role="listbox"] {
-                background-color: #ffffff !important;
-                color: #000000 !important;
-            }
-            
-            div[role="option"] {
-                color: #000000 !important;
-                background-color: #ffffff !important;
-            }
-            
-            div[role="option"]:hover, div[role="option"]:active, li[role="option"]:hover {
-                background-color: #eef2ff !important;
-                color: #000000 !important;
-            }
+            .stSelectbox > div > div { background-color: #f8f9fa !important; border: 1px solid #e0e0e0 !important; border-radius: 8px !important; color: #000000 !important; }
+            div[data-baseweb="popover"], div[data-baseweb="menu"], ul[role="listbox"] { background-color: #ffffff !important; color: #000000 !important; }
+            div[role="option"] { color: #000000 !important; background-color: #ffffff !important; }
+            div[role="option"]:hover { background-color: #eef2ff !important; color: #000000 !important; }
 
-            /* 5. תיבות טקסט רגילות */
-            .stTextInput input, .stTextArea textarea { 
-                background-color: #f8f9fa !important; 
-                border: 1px solid #e0e0e0 !important; 
-                border-radius: 8px !important; 
-                direction: rtl !important; 
-                text-align: right; 
-                color: #000000 !important;
-            }
+            .stTextInput input, .stTextArea textarea { background-color: #f8f9fa !important; border: 1px solid #e0e0e0 !important; border-radius: 8px !important; direction: rtl !important; text-align: right; color: #000000 !important; }
             
-            /* 6. תיקון רכיב העלאת תמונה (File Uploader) */
-            [data-testid="stFileUploader"] {
-                padding: 10px;
-                background-color: #f8f9fa;
-                border-radius: 8px;
-            }
-            [data-testid="stFileUploader"] section {
-                background-color: #ffffff !important;
-            }
-            [data-testid="stFileUploader"] small, [data-testid="stFileUploader"] span, [data-testid="stFileUploader"] div {
-                color: #000000 !important;
-            }
-            /* כפתור ה-Browse בתוך ה-Uploader */
-            [data-testid="stFileUploader"] button {
-                color: #000000 !important;
-                background-color: #e0e0e0 !important;
-                border-color: #cccccc !important;
-            }
+            [data-testid="stFileUploader"] { padding: 10px; background-color: #f8f9fa; border-radius: 8px; }
+            [data-testid="stFileUploader"] section { background-color: #ffffff !important; }
+            [data-testid="stFileUploader"] small, [data-testid="stFileUploader"] span, [data-testid="stFileUploader"] div { color: #000000 !important; }
+            [data-testid="stFileUploader"] button { color: #000000 !important; background-color: #e0e0e0 !important; border-color: #cccccc !important; }
 
-
-            /* 7. כפתור שמירה */
-            [data-testid="stFormSubmitButton"] > button { 
-                background-color: #4361ee !important; 
-                color: white !important; 
-                border: none; 
-                width: 100%; 
-                padding: 15px; 
-                font-size: 20px; 
-                font-weight: bold; 
-                border-radius: 12px; 
-                margin-top: 20px; 
-                box-shadow: 0 4px 6px rgba(67, 97, 238, 0.3); 
-            }
+            [data-testid="stFormSubmitButton"] > button { background-color: #4361ee !important; color: white !important; border: none; width: 100%; padding: 15px; font-size: 20px; font-weight: bold; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 6px rgba(67, 97, 238, 0.3); }
 
             html, body { direction: rtl; }
         </style>
@@ -170,11 +114,17 @@ def load_last_week():
             if week_ago <= d <= today: out.append(e)
     return out
 
-# --- העלאת קבצים (JSON ותמונה) לדרייב ---
+# --- העלאת קבצים לדרייב (עם תיקון לכוננים משותפים) ---
 def upload_file_to_drive(file_obj, filename, mime_type, drive_service):
     media = MediaIoBaseUpload(file_obj, mimetype=mime_type)
     file_metadata = {'name': filename, 'parents': [GDRIVE_FOLDER_ID], 'mimeType': mime_type}
-    drive_service.files().create(body=file_metadata, media_body=media).execute()
+    
+    # התיקון כאן: הוספנו supportsAllDrives=True כדי לתמוך בתיקיות שיתופיות
+    drive_service.files().create(
+        body=file_metadata, 
+        media_body=media, 
+        supportsAllDrives=True
+    ).execute()
 
 # --- סיכום מחקרי ---
 def generate_summary(entries: list) -> str:
@@ -307,7 +257,6 @@ with tab2:
 
         st.divider()
 
-        # גרפים (כמו קודם)
         metric_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_3d_support', 'cat_self_efficacy']
         heb_names = {'cat_convert_rep': 'המרת ייצוגים', 'cat_dims_props': 'מידות', 'cat_proj_trans': 'היטלים', 'cat_3d_support': 'שימוש בגוף', 'cat_self_efficacy': 'מסוגלות עצמית'}
         
@@ -319,7 +268,6 @@ with tab2:
             if not student_df.empty:
                 chart_data = student_df.set_index("date")[metric_cols].rename(columns=heb_names)
                 st.line_chart(chart_data)
-                
                 st.dataframe(student_df[['date', 'work_method', 'challenge', 'has_image']].tail(5), hide_index=True)
 
 # --- לשונית 3: AI ---
