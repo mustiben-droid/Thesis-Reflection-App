@@ -32,7 +32,7 @@ OBSERVATION_TAGS = [
     "בלבול בין היטלים (צד/פנים/על)",
     "קושי ברוטציה מנטלית",
     "טעות בפרופורציות/מידות",
-    "מעבר בין היטלים",
+    "קושי במעבר בין היטלים", # תוקן כאן
     
     # אסטרטגיות עבודה
     "שימוש בכלי מדידה",
@@ -49,7 +49,7 @@ OBSERVATION_TAGS = [
 ]
 
 # -----------------------------
-# פונקציית העיצוב (CSS מתוקן לסליידרים)
+# פונקציית העיצוב (CSS)
 # -----------------------------
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
@@ -64,11 +64,26 @@ def setup_design():
             h1, h2, h3, h4, h5, h6 { color: #4361ee !important; font-family: sans-serif; text-align: center !important; }
             p, label, span, div { color: #000000 !important; }
             
-            /* 3. תגיות (Multiselect) */
+            /* 3. סליידרים - תיקון קריטי */
+            [data-testid="stSlider"] {
+                direction: ltr !important; 
+                padding-bottom: 5px;
+            }
+            div[data-testid="stThumbValue"] {
+                color: #ffffff !important;       
+                background-color: #4361ee !important; 
+                font-size: 18px !important;      
+                font-weight: bold !important;
+                padding: 4px 8px !important;    
+                border-radius: 6px !important;   
+            }
+
+            /* 4. תגיות (Multiselect) */
             .stMultiSelect > div > div {
                 background-color: #f0f2f6 !important;
                 border: 1px solid #d1d5db !important;
                 color: black !important;
+                direction: rtl !important;
             }
             span[data-baseweb="tag"] {
                 background-color: #fff9c4 !important;
@@ -84,9 +99,10 @@ def setup_design():
             ul[data-baseweb="menu"], li[role="option"] {
                 background-color: #ffffff !important;
                 color: #000000 !important;
+                direction: rtl !important;
             }
 
-            /* 4. מצלמה / העלאת קובץ */
+            /* 5. מצלמה / העלאת קובץ */
             [data-testid="stFileUploader"] {
                 background-color: #f0f2f6 !important;
                 border-radius: 10px;
@@ -107,30 +123,12 @@ def setup_design():
                 border: 1px solid #9e9e9e !important;
             }
 
-            /* 5. תיקון סליידרים (Sliders) - התיקון המרכזי כאן */
-            
-            /* המספר שזז עם הסליידר (Thumb Value) */
-            div[data-testid="stThumbValue"] {
-                color: #ffffff !important;       /* טקסט לבן */
-                background-color: #4361ee !important; /* רקע כחול בולט */
-                font-size: 20px !important;      /* פונט גדול */
-                font-weight: bold !important;
-                padding: 5px 10px !important;    /* רווח מסביב למספר */
-                border-radius: 8px !important;   /* פינות עגולות */
-                opacity: 1 !important;           /* תמיד נראה לעין */
-                margin-top: -10px !important;    /* הרמה קלה למעלה */
-            }
-            
-            /* הפס של הסליידר עצמו */
-            div[data-baseweb="slider"] {
-                padding-top: 15px !important; /* מרווח כדי שהמספר לא יחתך */
-            }
-
-            /* 6. שאר האלמנטים */
+            /* 6. שדות קלט */
             .stSelectbox > div > div, .stTextInput input, .stTextArea textarea {
                 background-color: #f5f5f5 !important;
                 color: #000000 !important;
                 border: 1px solid #cccccc !important;
+                direction: rtl;
             }
             
             [data-testid="stFormSubmitButton"] > button { 
@@ -229,6 +227,20 @@ def generate_summary(entries: list) -> str:
         return response.text
     except Exception as e: return f"Error: {e}"
 
+# --- פונקציית עזר ליצירת סליידר עם הסבר ---
+def render_slider_metric(label, key):
+    st.markdown(f"**{label}**")
+    val = st.slider(label, 1, 5, 3, key=key, label_visibility="collapsed")
+    # שורת הסבר מתחת לסליידר
+    st.markdown(
+        """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555;">
+        <span>1 (קושי רב)</span>
+        <span>5 (שליטה מלאה)</span>
+        </div>""", 
+        unsafe_allow_html=True
+    )
+    return val
+
 # -----------------------------
 # ממשק ראשי (Main UI)
 # -----------------------------
@@ -273,16 +285,17 @@ with tab1:
         upload_label = "צרף צילום שרטוט/גוף (מהמצלמה או מהגלריה)"
         uploaded_image = st.file_uploader(upload_label, type=['jpg', 'jpeg', 'png'])
 
-        st.markdown("#### 4. מדדי הערכה (1-5)")
+        st.markdown("#### 4. מדדי הערכה")
+        
         c1, c2 = st.columns(2)
         with c1:
-            cat_convert = st.slider("🔄 המרת ייצוגים", 1, 5, 3)
-            cat_dims = st.slider("📏 מידות ופרופורציות", 1, 5, 3)
+            cat_convert = render_slider_metric("🔄 המרת ייצוגים", "m1")
+            cat_dims = render_slider_metric("📏 מידות ופרופורציות", "m2")
         with c2:
-            cat_proj = st.slider("📐 מעבר בין היטלים", 1, 5, 3)
-            cat_3d_support = st.slider("🧊 שימוש בגוף מודפס", 1, 5, 3)
+            cat_proj = render_slider_metric("📐 קושי במעבר בין היטלים", "m3") # תוקן כאן
+            cat_3d_support = render_slider_metric("🧊 שימוש בגוף מודפס", "m4")
         
-        cat_self_efficacy = st.slider("💪 מסוגלות עצמית", 1, 5, 3)
+        cat_self_efficacy = render_slider_metric("💪 מסוגלות עצמית", "m5")
 
         submitted = st.form_submit_button("💾 שמור תצפית")
 
