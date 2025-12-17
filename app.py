@@ -32,12 +32,16 @@ CLASS_ROSTER = [
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
     
+    # התיקון לבעיה שראית בתמונה נמצא כאן - השימוש ב-st.markdown עם שלוש מרכאות
     st.markdown("""
         <style>
+            /* 1. ביטול הרווח הריק העליון */
             .block-container {
                 padding-top: 2rem !important;
                 padding-bottom: 2rem !important;
             }
+
+            /* 2. אילוץ מצב בהיר (Light Mode) */
             [data-testid="stAppViewContainer"] {
                 background-color: #f4f6f9 !important;
                 color: #000000 !important;
@@ -45,15 +49,20 @@ def setup_design():
             [data-testid="stHeader"] {
                 background-color: #f4f6f9 !important;
             }
+
+            /* 3. עיצוב טקסטים וכותרות */
             h1, h2, h3, h4, h5, h6 {
                 color: #4361ee !important;
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 text-align: center !important;
             }
+            
             p, div, span, label, li {
                 color: #2c3e50 !important;
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             }
+
+            /* 4. עיצוב כרטיסיות נקי */
             [data-testid="stForm"], [data-testid="stVerticalBlock"] > div {
                 background-color: #ffffff !important;
                 border-radius: 12px;
@@ -61,14 +70,19 @@ def setup_design():
                 border: 1px solid #e0e0e0;
                 box-shadow: none !important;
             }
+
+            /* 5. תיקון קריטי - צביעת הרקע של בחירת התלמיד (Selectbox) בלבן */
             .stSelectbox > div > div {
                 background-color: #ffffff !important;
                 color: #000000 !important;
                 border-color: #cccccc !important;
             }
+            /* תיקון הטקסט הנבחר שיהיה שחור */
             .stSelectbox div[data-baseweb="select"] div {
                 color: #000000 !important;
             }
+
+            /* תיקון שאר תיבות הקלט */
             .stTextInput input, .stTextArea textarea {
                 background-color: #ffffff !important;
                 color: #000000 !important;
@@ -76,10 +90,14 @@ def setup_design():
                 direction: rtl !important;
                 text-align: right;
             }
+            
+            /* תיקון הרשימה הנפתחת עצמה */
             div[data-baseweb="popover"] li, div[data-baseweb="popover"] div {
                  color: #000000 !important;
                  background-color: #ffffff !important;
             }
+
+            /* 6. כפתור שמירה */
             [data-testid="stFormSubmitButton"] > button {
                 background-color: #4361ee !important;
                 color: white !important;
@@ -89,8 +107,11 @@ def setup_design():
                 font-size: 18px;
                 border-radius: 8px;
             }
+
+            /* 7. כיווניות RTL */
             html, body { direction: rtl; }
             [data-testid="stSlider"] { direction: rtl; }
+            
         </style>
         """, unsafe_allow_html=True)
 
@@ -159,7 +180,7 @@ def generate_summary(entries: list) -> str:
     
     full_text = "רשומות תצפית גולמיות:\n" + "\n".join([str(e) for e in entries])
     
-    # --- הפרומפט המעודכן עם השינוי לקטגוריה 4 ---
+    # --- הפרומפט האקדמי המלא (כולל מסוגלות עצמית ושימוש בגוף) ---
     prompt = f"""
     אתה עוזר מחקר אקדמי המנתח נתונים איכותניים לתזה בנושא חשיבה מרחבית.
     עליך לנתח את יומני התצפית ולהפיק דוח ממצאים המבוסס אך ורק על חמשת הקטגוריות המוגדרות של המחקר.
@@ -168,27 +189,29 @@ def generate_summary(entries: list) -> str:
 
     1. המרת ייצוגים (Conversion):
        - הגדרה: יכולת לבודד מבט ספציפי מתוך תלת-ממד (וההפך).
-       - מה לחפש: זיהוי נכון של מבטים, שרטוט תלת-ממדי.
+       - מה לחפש: זיהוי נכון של מבטים, שרטוט תלת-ממדי, מעבר מדו-ממד לתלת-ממד.
 
     2. מידות ופרופורציות (Measurement & Proportions):
        - הגדרה: יכולת לפרש מידות ולשמור על יחסים נכונים.
-       - מה לחפש: ספירת משבצות, שימוש בסרגל, השוואה ויזואלית.
+       - מה לחפש: ספירת משבצות, שימוש בסרגל, השוואה ויזואלית של גדלים.
 
     3. מעבר בין היטלים (View Transition):
        - הגדרה: שמירה על רציפות נקודות בין מבטים.
-       - מה לחפש: קווי עזר, התאמה בין היטלים.
+       - מה לחפש: קווי עזר, התאמה בין היטלים, בדיקת עקביות.
 
     4. שימוש בגוף מודפס (Use of Printed Body):
-       - הגדרה: מידת ההסתמכות והשימוש האקטיבי בגוף הפיזי (האינטנסיביות).
-       - מה לחפש: האם התלמיד החזיק את הגוף כל הזמן? האם השתמש בו רק לבדיקה? האם התעלם ממנו?
+       - הגדרה: מידת ההסתמכות והשימוש האקטיבי בגוף הפיזי.
+       - מה לחפש: האם התלמיד החזיק את הגוף? סובב אותו? האם השתמש בו רק לבדיקה או לכל אורך הדרך?
        - סקאלה: משימוש אפסי ועד שימוש אינטנסיבי ומתמיד.
 
     5. מסוגלות עצמית ולמידה עצמאית (Self-Efficacy & Independence):
        - הגדרה: המידה שבה התלמיד לומד לבד ופותר בעיות ללא עזרת המורה.
-       - מה לחפש: ניסיונות עצמאיים, תיקון טעויות לבד, מיעוט פניות למורה.
+       - מה לחפש: ניסיונות עצמאיים, תיקון טעויות לבד, מיעוט פניות למורה, ביטויים של ביטחון.
 
     הוראות לכתיבת הדוח:
+    - כתוב בעברית אקדמית.
     - עבור כל קטגוריה, כתוב פסקה המסכמת את הממצאים שעלו מהתצפיות השבוע.
+    - שלב ציטוטים או דוגמאות ספציפיות מתוך הנתונים כדי לבסס את הטענות.
     - נסה לזהות קשרים: האם שימוש מוגבר בגוף מודפס (קטגוריה 4) קשור לעלייה במסוגלות העצמית (קטגוריה 5)?
 
     הנתונים לניתוח:
@@ -246,54 +269,4 @@ with tab1:
         st.markdown("#### 3. תיאור תצפית")
         col_text1, col_text2 = st.columns(2)
         with col_text1:
-            planned = st.text_area("📋 תיאור המטלה", height=100, placeholder="מה התלמיד נדרש לעשות?")
-            challenge = st.text_area("🗣️ ציטוטים / תגובות", height=100, placeholder="דברים שהתלמיד אמר או שפת גוף...")
-        with col_text2:
-            done = st.text_area("👀 פעולות שנצפו", height=100, placeholder="מה ראית בפועל? (פעולות, מחיקות, היסוס...)")
-        
-        st.markdown("#### 4. מדדי הערכה (1-5)")
-        # שינוי מבנה: הסרת הרווח ויצירת זרימה טבעית
-        c1, c2 = st.columns(2)
-        with c1:
-            cat_convert = st.slider("🔄 המרת ייצוגים", 1, 5, 3)
-            cat_dims = st.slider("📏 מידות ופרופורציות", 1, 5, 3)
-        with c2:
-            cat_proj = st.slider("📐 מעבר בין היטלים", 1, 5, 3)
-            # שינוי התווית וההסבר לפי בקשתך
-            cat_3d_support = st.slider("🧊 שימוש בגוף מודפס", 1, 5, 3, help="1=כמעט ולא נגע בגוף, 5=השתמש בגוף כל הזמן")
-        
-        # הסרנו את הקו המפריד ושמנו את המסוגלות מיד אחרי
-        cat_self_efficacy = st.slider("💪 מסוגלות עצמית (למידה עצמאית)", 1, 5, 3, help="עד כמה התלמיד פתר לבד?")
-
-        submitted = st.form_submit_button("💾 שמור תצפית ביומן")
-
-        if submitted:
-            entry = {
-                "type": "reflection", "student_name": student_name, "lesson_id": lesson_id,
-                "work_method": work_method, "planned": planned, "done": done, 
-                "challenge": challenge, 
-                "cat_convert_rep": cat_convert, 
-                "cat_dims_props": cat_dims, 
-                "cat_proj_trans": cat_proj, 
-                "cat_3d_support": cat_3d_support,
-                "cat_self_efficacy": cat_self_efficacy,
-                "date": date.today().isoformat(),
-                "timestamp": datetime.now().isoformat()
-            }
-            save_reflection(entry)
-            st.success(f"🎉 המידע על {student_name} נשמר בהצלחה!")
-            svc = get_drive_service()
-            if svc:
-                try:
-                    upload_reflection_to_drive(entry, svc)
-                except: pass
-
-# --- לשונית 2: לוח בקרה אישי ---
-with tab2:
-    st.markdown("### 🕵️ מעקב התפתחות אישי")
-    df = load_data_as_dataframe()
-    
-    if df.empty:
-        st.warning("⚠️ עדיין אין נתונים. נא למלא תצפיות בלשונית הראשונה.")
-    else:
-        metric_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_
+            planned = st.text
