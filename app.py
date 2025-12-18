@@ -54,7 +54,6 @@ def setup_design():
             /* 1. איפוס כללי */
             .stApp, [data-testid="stAppViewContainer"] { background-color: #ffffff !important; }
             
-            /* תיקון קריטי למובייל: מבטיח שהתוכן לא יחתך בצדדים */
             .block-container { 
                 padding-top: 1rem !important; 
                 padding-bottom: 5rem !important; 
@@ -131,8 +130,22 @@ def setup_design():
                 border: none; width: 100%; padding: 15px; font-size: 20px; font-weight: bold; border-radius: 12px; margin-top: 20px; 
             }
             [data-testid="stFormSubmitButton"] > button * { color: white !important; }
+            
+            /* 8. עיצוב בועות הצ'אט */
+            .stChatMessage {
+                background-color: #f8f9fa !important;
+                border: 1px solid #e0e0e0;
+                border-radius: 10px;
+                padding: 10px;
+                margin-bottom: 10px;
+                direction: rtl;
+            }
+            [data-testid="stChatMessageContent"] p {
+                color: #000000 !important;
+                text-align: right;
+            }
+            .stChatMessage .stAvatar { display: none; }
 
-            /* 8. העלמת התפריט העליון של Streamlit כדי לחסוך מקום */
             #MainMenu {visibility: hidden;}
             header {visibility: hidden;}
 
@@ -200,6 +213,36 @@ def load_last_week():
             if week_ago <= d <= today: out.append(e)
     return out
 
+# --- פונקציות AI לצ'אט ---
+def get_all_data_as_text():
+    df = load_data_as_dataframe()
+    if df.empty: return "אין נתונים עדיין במערכת."
+    text_data = ""
+    for index, row in df.iterrows():
+        text_data += f"""
+        [תצפית] תאריך: {row['date']}, תלמיד: {row['student_name']}
+        שיעור: {row['lesson_id']} (קושי: {row.get('task_difficulty')}), שיטה: {row.get('work_method')}
+        תגיות: {row.get('tags')}, תיאור: {row.get('done')}, פרשנות: {row.get('interpretation')}
+        אתגרים: {row.get('challenge')}, ציונים: המרה={row.get('cat_convert_rep')}, מידות={row.get('cat_dims_props')}, היטלים={row.get('cat_proj_trans')}, גוף={row.get('cat_3d_support')}
+        -------------------
+        """
+    return text_data
+
+def chat_with_data(user_query, context_data):
+    api_key = get_google_api_key()
+    if not api_key: return "חסר מפתח API."
+    prompt = f"""
+    אתה עוזר מחקר אקדמי. יש לך גישה ליומן תצפיות.
+    נתונים: {context_data}
+    שאלה: "{user_query}"
+    ענה על סמך הנתונים בלבד, בעברית, בצורה מקצועית.
+    """
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+        return response.text
+    except Exception as e: return f"שגיאה: {e}"
+
 # --- דרייב ---
 def upload_file_to_drive(file_obj, filename, mime_type, drive_service):
     media = MediaIoBaseUpload(file_obj, mimetype=mime_type)
@@ -213,16 +256,13 @@ def restore_from_drive():
         query = f"'{GDRIVE_FOLDER_ID}' in parents and mimeType='application/json' and trashed=false"
         results = svc.files().list(q=query, orderBy="createdTime desc").execute()
         files = results.get('files', [])
-        
         if not files:
-            st.toast("לא נמצאו קבצים לשחזור בדרייב.")
+            st.toast("לא נמצאו קבצים לשחזור.")
             return False
-
         existing_data = set()
         if os.path.exists(DATA_FILE):
              with open(DATA_FILE, "r", encoding="utf-8") as f:
                  for line in f: existing_data.add(line.strip())
-
         restored_count = 0
         for file in files:
             file_content = svc.files().get_media(fileId=file['id']).execute().decode('utf-8')
@@ -235,7 +275,6 @@ def restore_from_drive():
                     existing_data.add(json_line)
                     restored_count += 1
             except: pass
-            
         if restored_count > 0:
             st.toast(f"שוחזרו {restored_count} תצפיות!")
             return True
@@ -245,44 +284,6 @@ def restore_from_drive():
     except Exception as e:
         st.error(f"שגיאה בשחזור: {e}")
         return False
-
-# --- סיכום מחקרי ---
-def generate_summary(entries: list) -> str:
-    if not entries: return "לא נמצאו נתונים לניתוח מהשבוע האחרון."
-    
-    readable_entries = []
-    for e in entries:
-        readable_entries.append(f"""
-        תלמיד: {e.get('student_name')}
-        תאריך: {e.get('date')}
-        שיעור: {e.get('lesson_id')} (קושי: {e.get('task_difficulty')})
-        תגיות: {', '.join(e.get('tags', []))}
-        תיאור פעולות: {e.get('done')}
-        ציטוטים/אתגרים: {e.get('challenge')}
-        פרשנות המורה: {e.get('interpretation')}
-        ציונים (1-5): המרה={e.get('cat_convert_rep')}, מידות={e.get('cat_dims_props')}, היטלים={e.get('cat_proj_trans')}, שימוש בגוף={e.get('cat_3d_support')}
-        """)
-    
-    full_text = "\n".join(readable_entries)
-    
-    prompt = f"""
-    אתה עוזר מחקר אקדמי. כתוב דוח סיכום שבועי בעברית.
-    הנחיות:
-    1. השתמש במונחים מקצועיים.
-    2. חלק ל: "מגמות בכיתה", "ניתוח פרטני", "המלצות".
-    3. תן משקל משמעותי ל"פרשנות המורה" בניתוח שלך.
-    
-    הנתונים:
-    {full_text}
-    """
-    
-    api_key = get_google_api_key()
-    if not api_key: return "חסר מפתח API"
-    try:
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt, config={"temperature": 0.3})
-        return response.text
-    except Exception as e: return f"Error: {e}"
 
 def render_slider_metric(label, key):
     st.markdown(f"**{label}**")
@@ -301,12 +302,10 @@ def render_slider_metric(label, key):
 
 setup_design()
 
-# ביטלתי את סרגל הצד (Sidebar) כדי למנוע בעיות במובייל.
-# כותרת ראשית
 st.title("🎓 יומן תצפית")
 st.markdown("### מעקב אחר מיומנויות תפיסה מרחבית")
 
-tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 התקדמות וייצוא", "🧠 עוזר מחקרי"])
+tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 התקדמות וייצוא", "🤖 צ'אט עם הנתונים"])
 
 # --- לשונית 1: הזנת נתונים ---
 with tab1:
@@ -388,7 +387,6 @@ with tab1:
 with tab2:
     st.markdown("### 🕵️ מעקב התפתחות וייצוא נתונים")
     
-    # מיקום חדש לכפתור הסנכרון - בתוך הלשונית עצמה
     st.info("אם נכנסת ממכשיר חדש, לחץ כאן כדי למשוך נתונים ישנים:")
     if st.button("🔄 סנכרן נתונים מהדרייב", key="sync_btn"):
          with st.spinner("מושך נתונים..."):
@@ -430,32 +428,34 @@ with tab2:
             if not student_df.empty:
                 chart_data = student_df.set_index("date")[metric_cols].rename(columns=heb_names)
                 st.line_chart(chart_data)
+                
                 cols_to_show = ['date', 'task_difficulty', 'tags', 'interpretation', 'has_image']
                 existing_cols = [c for c in cols_to_show if c in student_df.columns]
                 st.dataframe(student_df[existing_cols].tail(5), hide_index=True)
     else:
         st.info("💡 אין נתונים. לחץ על 'סנכרן נתונים מהדרייב' למעלה.")
 
-# --- לשונית 3: AI ---
+# --- לשונית 3: AI (צ'אט) ---
 with tab3:
-    st.markdown("### 🤖 עוזר מחקרי")
-    st.info("העוזר ינתח את הנתונים מהשבוע האחרון, יכתוב דוח מסודר וישמור אותו בדרייב.")
+    st.markdown("### 🤖 עוזר מחקרי (צ'אט)")
+    st.markdown("שאל את הנתונים שלך שאלות חופשיות, ממש כמו ב-NotebookLM.")
     
-    if st.button("✨ צור סיכום שבועי ושמור"):
-        entries = load_last_week()
-        if not entries:
-            st.warning("לא נמצאו תצפיות מהשבוע האחרון.")
-        else:
-            with st.spinner("מנתח נתונים..."):
-                summary_text = generate_summary(entries)
-                st.markdown("---")
-                st.markdown(summary_text)
-                
-                svc = get_drive_service()
-                if svc:
-                    try:
-                        file_bytes = io.BytesIO(summary_text.encode('utf-8'))
-                        filename = f"Weekly-Summary-{date.today()}.txt"
-                        upload_file_to_drive(file_bytes, filename, 'text/plain', svc)
-                        st.success(f"✅ הדוח נשמר: {filename}")
-                    except: pass
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    if prompt := st.chat_input("שאל משהו על הנתונים..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner("חושב..."):
+                context = get_all_data_as_text()
+                response = chat_with_data(prompt, context)
+                st.markdown(response)
+        
+        st.session_state.messages.append({"role": "assistant", "content": response})
