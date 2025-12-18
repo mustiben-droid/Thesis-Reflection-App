@@ -53,7 +53,15 @@ def setup_design():
         <style>
             /* 1. איפוס כללי */
             .stApp, [data-testid="stAppViewContainer"] { background-color: #ffffff !important; }
-            .block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; max-width: 100% !important; }
+            
+            /* תיקון קריטי למובייל: מבטיח שהתוכן לא יחתך בצדדים */
+            .block-container { 
+                padding-top: 1rem !important; 
+                padding-bottom: 5rem !important; 
+                padding-left: 1rem !important;
+                padding-right: 1rem !important;
+                max-width: 100% !important; 
+            }
             
             /* 2. כותרות וטקסטים */
             h1, h2, h3, h4, h5, h6 { color: #4361ee !important; font-family: sans-serif; text-align: center !important; }
@@ -124,6 +132,10 @@ def setup_design():
             }
             [data-testid="stFormSubmitButton"] > button * { color: white !important; }
 
+            /* 8. העלמת התפריט העליון של Streamlit כדי לחסוך מקום */
+            #MainMenu {visibility: hidden;}
+            header {visibility: hidden;}
+
             html, body { direction: rtl; }
         </style>
     """, unsafe_allow_html=True)
@@ -150,7 +162,6 @@ def save_reflection(entry: dict) -> dict:
     return {"status": "saved", "date": entry["date"]}
 
 def load_data_as_dataframe():
-    # הוספתי את "interpretation" לרשימת העמודות
     columns = ["student_name", "lesson_id", "task_difficulty", "work_method", "tags", "planned", "done", "interpretation", "challenge", "cat_convert_rep", "cat_dims_props", "cat_proj_trans", "cat_3d_support", "cat_self_efficacy", "date", "timestamp", "has_image"]
     
     if not os.path.exists(DATA_FILE): 
@@ -241,7 +252,6 @@ def generate_summary(entries: list) -> str:
     
     readable_entries = []
     for e in entries:
-        # הוספתי את הפרשנות לטקסט הנשלח ל-AI
         readable_entries.append(f"""
         תלמיד: {e.get('student_name')}
         תאריך: {e.get('date')}
@@ -257,11 +267,10 @@ def generate_summary(entries: list) -> str:
     
     prompt = f"""
     אתה עוזר מחקר אקדמי. כתוב דוח סיכום שבועי בעברית.
-    
     הנחיות:
     1. השתמש במונחים מקצועיים.
     2. חלק ל: "מגמות בכיתה", "ניתוח פרטני", "המלצות".
-    3. תן משקל משמעותי ל"פרשנות המורה" בניתוח שלך, אם קיימת.
+    3. תן משקל משמעותי ל"פרשנות המורה" בניתוח שלך.
     
     הנתונים:
     {full_text}
@@ -292,14 +301,8 @@ def render_slider_metric(label, key):
 
 setup_design()
 
-with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/1903/1903162.png", width=50)
-    st.markdown("### ניהול נתונים")
-    if st.button("🔄 סנכרן נתונים מהדרייב"):
-        with st.spinner("מושך נתונים..."):
-            if restore_from_drive(): st.rerun()
-            else: st.info("הכל מסונכרן.")
-
+# ביטלתי את סרגל הצד (Sidebar) כדי למנוע בעיות במובייל.
+# כותרת ראשית
 st.title("🎓 יומן תצפית")
 st.markdown("### מעקב אחר מיומנויות תפיסה מרחבית")
 
@@ -330,11 +333,11 @@ with tab1:
             challenge = st.text_area("🗣️ ציטוטים / תגובות", height=100, placeholder="ציטוטים, שפת גוף...")
         with col_text2:
             done = st.text_area("👀 פעולות שנצפו", height=100, placeholder="מה הוא עשה בפועל?")
-            # שדה חדש!
-            interpretation = st.text_area("💡 פרשנות אישית (למה זה קרה?)", height=100, placeholder="התובנות שלך לגבי המקור לקושי/הצלחה...")
+            interpretation = st.text_area("💡 פרשנות אישית (למה זה קרה?)", height=100, placeholder="התובנות שלך...")
 
         st.markdown("#### 📷 תיעוד ויזואלי")
-        uploaded_image = st.file_uploader("צרף צילום שרטוט/גוף", type=['jpg', 'jpeg', 'png'])
+        upload_label = "צרף צילום שרטוט/גוף (מהמצלמה או מהגלריה)"
+        uploaded_image = st.file_uploader(upload_label, type=['jpg', 'jpeg', 'png'])
 
         st.markdown("#### 4. מדדי הערכה")
         c1, c2 = st.columns(2)
@@ -356,7 +359,7 @@ with tab1:
                 "work_method": work_method, "tags": selected_tags, 
                 "planned": planned, "done": done, 
                 "challenge": challenge, 
-                "interpretation": interpretation, # נשמר כאן
+                "interpretation": interpretation, 
                 "cat_convert_rep": cat_convert, 
                 "cat_dims_props": cat_dims, "cat_proj_trans": cat_proj, 
                 "cat_3d_support": cat_3d_support, "cat_self_efficacy": cat_self_efficacy,
@@ -384,8 +387,17 @@ with tab1:
 # --- לשונית 2: לוח בקרה ---
 with tab2:
     st.markdown("### 🕵️ מעקב התפתחות וייצוא נתונים")
-    df = load_data_as_dataframe()
     
+    # מיקום חדש לכפתור הסנכרון - בתוך הלשונית עצמה
+    st.info("אם נכנסת ממכשיר חדש, לחץ כאן כדי למשוך נתונים ישנים:")
+    if st.button("🔄 סנכרן נתונים מהדרייב", key="sync_btn"):
+         with st.spinner("מושך נתונים..."):
+            if restore_from_drive(): st.rerun()
+            else: st.info("הכל מסונכרן.")
+
+    st.divider()
+    
+    df = load_data_as_dataframe()
     export_df = df.copy()
     if "tags" in export_df.columns:
         export_df["tags"] = export_df["tags"].apply(lambda x: ", ".join(x) if isinstance(x, list) else x)
@@ -418,16 +430,17 @@ with tab2:
             if not student_df.empty:
                 chart_data = student_df.set_index("date")[metric_cols].rename(columns=heb_names)
                 st.line_chart(chart_data)
-                # הוספתי את interpretation לטבלה המוצגת
                 cols_to_show = ['date', 'task_difficulty', 'tags', 'interpretation', 'has_image']
                 existing_cols = [c for c in cols_to_show if c in student_df.columns]
                 st.dataframe(student_df[existing_cols].tail(5), hide_index=True)
     else:
-        st.info("💡 אין נתונים. לחץ על 'סנכרן נתונים' בסרגל הצד.")
+        st.info("💡 אין נתונים. לחץ על 'סנכרן נתונים מהדרייב' למעלה.")
 
 # --- לשונית 3: AI ---
 with tab3:
     st.markdown("### 🤖 עוזר מחקרי")
+    st.info("העוזר ינתח את הנתונים מהשבוע האחרון, יכתוב דוח מסודר וישמור אותו בדרייב.")
+    
     if st.button("✨ צור סיכום שבועי ושמור"):
         entries = load_last_week()
         if not entries:
