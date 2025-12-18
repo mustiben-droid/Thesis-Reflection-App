@@ -41,64 +41,53 @@ OBSERVATION_TAGS = [
     "הבנה אינטואיטיבית מהירה"
 ]
 
-# --- 2. עיצוב (CSS מתוקן ופשוט יותר) ---
+# --- 2. עיצוב (CSS) ---
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
     
     st.markdown("""
         <style>
-            /* ייבוא פונט */
             @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
 
-            /* --- הגדרות בסיס (כיוון וצבעים) --- */
-            html, body, [class*="css"] {
-                font-family: 'Heebo', sans-serif;
+            /* הגדרות בסיס: פונט, כיוון, צבעים */
+            :root {
+                --background-color: #ffffff;
+                --secondary-background-color: #f0f2f6;
+                --text-color: #000000;
+                --primary-color: #4361ee;
             }
 
-            /* הכרחת כיוון ימין-שמאל על כל האפליקציה */
-            .stApp {
+            html, body, .stApp {
+                background-color: #ffffff !important;
+                color: #000000 !important;
+                font-family: 'Heebo', sans-serif !important;
                 direction: rtl;
                 text-align: right;
-                background-color: #ffffff;
             }
 
             /* מניעת חיתוך במובייל */
             .block-container { 
                 padding-top: 1rem !important; 
                 padding-bottom: 5rem !important; 
+                padding-left: 0.5rem !important;
+                padding-right: 0.5rem !important;
                 max-width: 100% !important; 
             }
 
-            /* --- טיפול במצב לילה (הופך הכל לבהיר) --- */
-            h1, h2, h3, h4, h5, h6, p, label, span, div {
-                color: #000000 !important;
-            }
+            /* כותרות וטקסטים */
+            h1, h2, h3 { color: #2c3e50 !important; font-weight: 700; text-align: center; }
+            h4, h5, p, label, span, div { color: #000000 !important; }
 
-            /* תיקון שדות קלט */
+            /* שדות קלט (Input Fields) - רקע לבן, טקסט שחור */
             .stTextInput input, .stTextArea textarea, .stSelectbox > div > div {
                 background-color: #ffffff !important;
                 color: #000000 !important;
-                border: 1px solid #cccccc !important;
+                border: 1px solid #ced4da !important;
+                border-radius: 8px;
                 direction: rtl;
             }
 
-            /* --- תיקון כפתורים (החזרת כפתורי CSV/Excel) --- */
-            .stButton > button, .stDownloadButton > button {
-                background-color: #f0f2f6 !important;
-                color: #000000 !important;
-                border: 1px solid #b0b0b0 !important;
-                border-radius: 8px;
-                width: 100%;
-            }
-            
-            /* כפתור שמירה ראשי (מובדל בצבע) */
-            [data-testid="stFormSubmitButton"] > button {
-                background-color: #4361ee !important;
-                color: white !important;
-                border: none;
-            }
-
-            /* תיקון תפריטים נפתחים */
+            /* תפריטים נפתחים (Dropdowns) */
             div[data-baseweb="popover"], ul[data-baseweb="menu"] {
                 background-color: #ffffff !important;
                 border: 1px solid #cccccc !important;
@@ -109,17 +98,56 @@ def setup_design():
                 text-align: right !important;
                 direction: rtl !important;
             }
+            li[role="option"]:hover {
+                background-color: #eef2ff !important;
+            }
+            div[data-baseweb="select"] span {
+                color: #000000 !important;
+                -webkit-text-fill-color: #000000 !important;
+            }
 
-            /* סליידרים - חייבים להישאר משמאל לימין */
-            [data-testid="stSlider"] { direction: ltr !important; }
-            
+            /* כפתורים רגילים וכפתורי הורדה (CSV/Excel) */
+            .stButton > button, .stDownloadButton > button {
+                background-color: #f0f2f6 !important;
+                color: #000000 !important;
+                border: 1px solid #b0b0b0 !important;
+                border-radius: 8px;
+                width: 100%;
+                font-weight: bold;
+                -webkit-text-fill-color: #000000 !important;
+            }
+
+            /* כפתור שמירה ראשי (כחול) */
+            [data-testid="stFormSubmitButton"] > button {
+                background: linear-gradient(90deg, #4361ee 0%, #3a0ca3 100%) !important;
+                color: white !important;
+                -webkit-text-fill-color: white !important;
+                border: none;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            }
+
+            /* עיצוב כרטיס לטופס */
+            [data-testid="stForm"] {
+                background-color: #ffffff;
+                padding: 15px;
+                border-radius: 15px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+                border: 1px solid #e0e0e0;
+            }
+
             /* בועות צ'אט */
             .stChatMessage {
                 background-color: #f9f9f9 !important;
                 border: 1px solid #ddd;
+                color: black !important;
                 direction: rtl;
                 text-align: right;
             }
+            [data-testid="stChatMessageContent"] p { color: black !important; }
+            .stChatMessage .stAvatar { display: none; }
+
+            /* סליידרים */
+            [data-testid="stSlider"] { direction: ltr !important; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -191,7 +219,7 @@ def restore_from_drive():
         results = svc.files().list(q=query, orderBy="createdTime desc").execute()
         files = results.get('files', [])
         if not files:
-            st.toast("לא נמצאו קבצים לשחזור.")
+            st.toast("לא נמצאו קבצים.")
             return False
         existing_data = set()
         if os.path.exists(DATA_FILE):
@@ -277,6 +305,7 @@ st.markdown("### מעקב אחר מיומנויות תפיסה מרחבית")
 
 tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 התקדמות", "🤖 עוזר מחקרי"])
 
+# --- טאב 1: הזנה ---
 with tab1:
     with st.form("reflection_form"):
         st.markdown("#### 1. פרטי התצפית") 
@@ -335,9 +364,11 @@ with tab1:
                         image_bytes = io.BytesIO(uploaded_image.getvalue())
                         upload_file_to_drive(image_bytes, f"img-{student_name}-{entry['date']}.jpg", 'image/jpeg', svc)
                 except: pass
+            
             st.balloons()
             st.success("נשמר בהצלחה!")
 
+# --- טאב 2: דאשבורד ---
 with tab2:
     st.markdown("### 📊 לוח בקרה")
     if st.button("🔄 סנכרן מהדרייב"):
@@ -345,7 +376,27 @@ with tab2:
             if restore_from_drive(): st.rerun()
             else: st.info("הנתונים מעודכנים.")
     
+    st.divider()
+    
+    # תמיד טוען דאטה, גם אם ריק
     df = load_data_as_dataframe()
+    export_df = df.copy()
+    if "tags" in export_df.columns: export_df["tags"] = export_df["tags"].apply(lambda x: ", ".join(x) if isinstance(x, list) else x)
+    
+    # אזור הורדה - מופיע תמיד
+    st.markdown("#### 📥 ייצוא נתונים")
+    d1, d2 = st.columns(2)
+    with d1:
+        st.download_button("📄 הורד CSV", export_df.to_csv(index=False).encode('utf-8'), "data.csv", "text/csv")
+    with d2:
+        try:
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer: export_df.to_excel(writer, index=False)
+            st.download_button("📊 הורד Excel", output.getvalue(), "data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        except: st.error("חסרה ספריית openpyxl")
+
+    st.divider()
+
     if not df.empty:
         k1, k2, k3 = st.columns(3)
         k1.metric("סה'כ תצפיות", len(df))
@@ -353,25 +404,14 @@ with tab2:
         try: k3.metric("ממוצע היטלים", f"{df['cat_proj_trans'].mean():.1f}")
         except: pass
         
-        st.divider()
-        export_df = df.copy()
-        if "tags" in export_df.columns: export_df["tags"] = export_df["tags"].apply(lambda x: ", ".join(x) if isinstance(x, list) else x)
-        d1, d2 = st.columns(2)
-        d1.download_button("📄 הורד CSV", export_df.to_csv(index=False).encode('utf-8'), "data.csv", "text/csv")
-        try:
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer: export_df.to_excel(writer, index=False)
-            d2.download_button("📊 הורד Excel", output.getvalue(), "data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        except: pass
-        
-        st.divider()
-        if len(df) > 0:
-            student = st.selectbox("בחר תלמיד לגרף:", df['student_name'].unique())
-            st_df = df[df['student_name'] == student].sort_values("date")
-            st.line_chart(st_df.set_index("date")[['cat_proj_trans', 'cat_3d_support', 'cat_self_efficacy']])
+        st.markdown("#### 📈 גרף התקדמות")
+        student = st.selectbox("בחר תלמיד לגרף:", df['student_name'].unique())
+        st_df = df[df['student_name'] == student].sort_values("date")
+        st.line_chart(st_df.set_index("date")[['cat_proj_trans', 'cat_3d_support', 'cat_self_efficacy']])
     else:
-        st.info("אין נתונים להצגה.")
+        st.info("אין נתונים להצגה בגרפים (אך ניתן לייצא קובץ ריק).")
 
+# --- טאב 3: AI ---
 with tab3:
     st.markdown("### 🤖 עוזר מחקרי")
     
