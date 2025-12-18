@@ -322,7 +322,7 @@ with tab1:
             task_difficulty = st.selectbox("⚖️ רמת קושי המטלה", ["בסיסי", "בינוני", "מתקדם"])
 
         st.markdown("#### 2. אופן העבודה")
-        work_method = st.radio("🛠️ כיצד התבצע השרטוט?", ["🎨 ללא גוף (דמיון)", "🧊 בעזרת גוף פיזי"], horizontal=True)
+        work_method = st.radio("🛠️ כיצד התבצע השרטוט?", ["🎨 ללא גוף (דמיון)", "🧊 בעזרת גוף מודפס"], horizontal=True)
 
         st.markdown("#### 3. תיאור תצפית ופרשנות")
         selected_tags = st.multiselect("🏷️ תגיות מהירות (ניתן לבחור כמה):", OBSERVATION_TAGS)
