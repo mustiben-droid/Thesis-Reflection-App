@@ -49,7 +49,7 @@ def setup_design():
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
 
-            /* הגדרות בסיס */
+            /* --- הגדרות בסיס --- */
             :root {
                 --background-color: #ffffff;
                 --text-color: #000000;
@@ -59,26 +59,26 @@ def setup_design():
                 background-color: #ffffff !important;
                 color: #000000 !important;
                 font-family: 'Heebo', sans-serif !important;
-                direction: rtl;
-                text-align: right;
             }
 
-            .block-container { 
-                padding-top: 1rem !important; 
-                padding-bottom: 5rem !important; 
-                max-width: 100% !important; 
-            }
+            /* --- הסתרת אלמנטים מפריעים במובייל --- */
+            [data-testid="stSidebar"] { display: none !important; } /* מעלים את הסרגל הצדדי לגמרי */
+            #MainMenu { visibility: visible !important; } /* משאיר את ה-3 נקודות */
+            header { visibility: visible !important; background-color: transparent !important; }
 
-            /* --- כותרות וטקסטים --- */
+            /* --- תיקון כותרות (מונע את הטקסט האנכי) --- */
             h1, h2, h3, h4, h5, h6 { 
                 color: #2c3e50 !important; 
                 font-family: 'Heebo', sans-serif !important;
                 text-align: right !important;
                 direction: rtl !important;
-                width: 100%;
+                line-height: 1.4 !important;
+                white-space: normal !important; /* מונע שבירת מילים מוזרה */
+                width: auto !important;
             }
             h1 { text-align: center !important; } 
 
+            /* --- טקסטים כלליים --- */
             p, label, span, div, small { 
                 color: #000000 !important; 
                 text-align: right;
@@ -95,23 +95,25 @@ def setup_design():
                 text-align: right;
             }
 
-            /* --- תפריטים נפתחים --- */
+            /* --- תפריטים נפתחים (Dropdowns) --- */
             div[data-baseweb="popover"], ul[data-baseweb="menu"] {
                 background-color: #ffffff !important;
                 border: 1px solid #cccccc !important;
                 text-align: right !important;
+                direction: rtl !important;
             }
             li[role="option"] {
                 background-color: #ffffff !important;
                 color: black !important;
                 text-align: right !important;
                 direction: rtl !important;
-                justify-content: flex-end !important;
+                justify-content: flex-start !important; /* יישור לימין ברשימה */
             }
             div[data-baseweb="select"] span {
                 color: #000000 !important;
                 -webkit-text-fill-color: #000000 !important;
                 text-align: right !important;
+                direction: rtl !important;
             }
 
             /* --- כפתורים --- */
@@ -150,34 +152,32 @@ def setup_design():
             [data-testid="stChatMessageContent"] p { color: black !important; text-align: right !important; }
             .stChatMessage .stAvatar { display: none; }
 
-            /* === תיקון סליידרים (כיוון + תצוגת מספר) === */
+            /* === תיקון סליידרים (קריטי) === */
             
-            /* 1. כיוון הסליידר משמאל לימין (כדי ש-1 יהיה משמאל) */
+            /* 1. הסליידר עצמו: שמאל לימין (כדי ש-1 יהיה בשמאל ו-5 בימין) */
             [data-testid="stSlider"] {
                 direction: ltr !important;
                 text-align: left !important;
-                padding-top: 15px !important;
+                padding-top: 20px !important;
             }
 
-            /* 2. הכותרת מעל הסליידר - חזרה לימין */
-            [data-testid="stSlider"] label p {
+            /* 2. הכותרת של הסליידר: מימין לשמאל (כדי שהשם יהיה בעברית מימין) */
+            [data-testid="stSlider"] label {
                 direction: rtl !important;
                 text-align: right !important;
                 width: 100%;
                 display: block;
+                font-weight: bold;
+            }
+            [data-testid="stSlider"] label p {
+                text-align: right !important;
             }
 
-            /* 3. הבועה שמראה את המספר (התיקון החדש!) */
+            /* 3. הבועה הקופצת (ערך הסליידר) */
             div[data-testid="stThumbValue"] {
-                background-color: #4361ee !important; /* רקע כחול בולט */
-                color: #ffffff !important;           /* טקסט לבן */
-                font-weight: bold !important;
-                font-size: 16px !important;
-                border-radius: 6px !important;
-                padding: 2px 8px !important;
-                opacity: 1 !important; /* תמיד גלוי בגרירה */
-                z-index: 999 !important;
-                direction: ltr !important;
+                background-color: #4361ee !important;
+                color: #ffffff !important;
+                font-family: sans-serif !important;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -321,15 +321,15 @@ def chat_with_data(user_query, context_data):
     except: return "שגיאה."
 
 def render_slider_metric(label, key):
-    # הכותרת נשארת מימין
+    # כותרת - RTL (מימין לשמאל)
     st.markdown(f"**{label}**")
     
-    # הסליידר עצמו
+    # סליידר - LTR (שמאל לימין) כדי שהמספרים יהיו בסדר עולה משמאל לימין
     val = st.slider(label, 1, 5, 3, key=key, label_visibility="collapsed")
     
-    # טקסט עזר למטה - מיושר בצורה שמתאימה לסליידר (1 משמאל, 5 מימין)
+    # טקסט הסבר - LTR (כדי ש-1 יהיה בצד שמאל ו-5 בצד ימין)
     st.markdown(
-        """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555; margin-top: -10px;">
+        """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555; margin-top: -5px;">
         <span>1 (קושי רב)</span>
         <span>5 (שליטה מלאה)</span>
         </div>""", unsafe_allow_html=True
