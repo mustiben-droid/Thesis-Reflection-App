@@ -69,26 +69,23 @@ def setup_design():
                 max-width: 100% !important; 
             }
 
-            /* --- תיקון קריטי: יישור כותרות לימין --- */
+            /* --- כותרות וטקסטים מיושרים לימין --- */
             h1, h2, h3, h4, h5, h6 { 
                 color: #2c3e50 !important; 
                 font-family: 'Heebo', sans-serif !important;
-                text-align: right !important; /* מכריח ימין */
+                text-align: right !important;
                 direction: rtl !important;
                 width: 100%;
             }
-            
-            /* הכותרת הראשית יכולה להישאר במרכז אם תרצה, אבל כרגע הכל לימין */
             h1 { text-align: center !important; } 
 
-            /* טקסט רגיל, תוויות, ופסקאות */
             p, label, span, div, small { 
                 color: #000000 !important; 
-                text-align: right !important;
-                direction: rtl !important;
+                text-align: right;
+                direction: rtl;
             }
 
-            /* שדות קלט */
+            /* --- שדות קלט --- */
             .stTextInput input, .stTextArea textarea, .stSelectbox > div > div {
                 background-color: #ffffff !important;
                 color: #000000 !important;
@@ -98,7 +95,7 @@ def setup_design():
                 text-align: right;
             }
 
-            /* תפריטים נפתחים */
+            /* --- תפריטים נפתחים --- */
             div[data-baseweb="popover"], ul[data-baseweb="menu"] {
                 background-color: #ffffff !important;
                 border: 1px solid #cccccc !important;
@@ -109,7 +106,7 @@ def setup_design():
                 color: black !important;
                 text-align: right !important;
                 direction: rtl !important;
-                justify-content: flex-end !important; /* מצמיד לימין */
+                justify-content: flex-end !important;
             }
             div[data-baseweb="select"] span {
                 color: #000000 !important;
@@ -117,7 +114,7 @@ def setup_design():
                 text-align: right !important;
             }
 
-            /* כפתורים */
+            /* --- כפתורים --- */
             .stButton > button, .stDownloadButton > button {
                 background-color: #f0f2f6 !important;
                 color: #000000 !important;
@@ -127,8 +124,6 @@ def setup_design():
                 font-weight: bold;
                 -webkit-text-fill-color: #000000 !important;
             }
-
-            /* כפתור שמירה ראשי */
             [data-testid="stFormSubmitButton"] > button {
                 background: linear-gradient(90deg, #4361ee 0%, #3a0ca3 100%) !important;
                 color: white !important;
@@ -137,7 +132,7 @@ def setup_design():
                 box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             }
 
-            /* כרטיס */
+            /* --- כרטיס ובועות צ'אט --- */
             [data-testid="stForm"] {
                 background-color: #ffffff;
                 padding: 15px;
@@ -145,8 +140,6 @@ def setup_design():
                 box-shadow: 0 4px 15px rgba(0,0,0,0.05);
                 border: 1px solid #e0e0e0;
             }
-
-            /* בועות צ'אט */
             .stChatMessage {
                 background-color: #f9f9f9 !important;
                 border: 1px solid #ddd;
@@ -157,8 +150,16 @@ def setup_design():
             [data-testid="stChatMessageContent"] p { color: black !important; text-align: right !important; }
             .stChatMessage .stAvatar { display: none; }
 
-            /* סליידרים - נשארים משמאל לימין למען הנוחות */
-            [data-testid="stSlider"] { direction: ltr !important; }
+            /* --- סליידרים (תיקון כיוון ל-LTR) --- */
+            /* זה מכריח את הסרגל עצמו להיות 1 משמאל ו-5 מימין */
+            [data-testid="stSlider"] { 
+                direction: ltr !important; 
+            }
+            /* המילים מעל הסליידר עדיין יהיו לימין */
+            [data-testid="stSlider"] label {
+                direction: rtl !important;
+                text-align: right !important;
+            }
         </style>
     """, unsafe_allow_html=True)
 
@@ -301,9 +302,20 @@ def chat_with_data(user_query, context_data):
     except: return "שגיאה."
 
 def render_slider_metric(label, key):
+    # הכותרת נשארת מימין
     st.markdown(f"**{label}**")
+    
+    # הסליידר עצמו - הערכים 1-5
     val = st.slider(label, 1, 5, 3, key=key, label_visibility="collapsed")
-    st.markdown("""<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555;"><span>1 (קושי רב)</span><span>5 (שליטה מלאה)</span></div>""", unsafe_allow_html=True)
+    
+    # טקסט ההסבר למטה: אנחנו מכריחים LTR (שמאל לימין)
+    # 1 בצד שמאל, 5 בצד ימין
+    st.markdown(
+        """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555;">
+        <span>1 (קושי רב)</span>
+        <span>5 (שליטה מלאה)</span>
+        </div>""", unsafe_allow_html=True
+    )
     return val
 
 # -----------------------------
