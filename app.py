@@ -49,12 +49,10 @@ def setup_design():
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
 
-            /* הגדרות בסיס: פונט, כיוון, צבעים */
+            /* הגדרות בסיס */
             :root {
                 --background-color: #ffffff;
-                --secondary-background-color: #f0f2f6;
                 --text-color: #000000;
-                --primary-color: #4361ee;
             }
 
             html, body, .stApp {
@@ -65,48 +63,61 @@ def setup_design():
                 text-align: right;
             }
 
-            /* מניעת חיתוך במובייל */
             .block-container { 
                 padding-top: 1rem !important; 
                 padding-bottom: 5rem !important; 
-                padding-left: 0.5rem !important;
-                padding-right: 0.5rem !important;
                 max-width: 100% !important; 
             }
 
-            /* כותרות וטקסטים */
-            h1, h2, h3 { color: #2c3e50 !important; font-weight: 700; text-align: center; }
-            h4, h5, p, label, span, div { color: #000000 !important; }
+            /* --- תיקון קריטי: יישור כותרות לימין --- */
+            h1, h2, h3, h4, h5, h6 { 
+                color: #2c3e50 !important; 
+                font-family: 'Heebo', sans-serif !important;
+                text-align: right !important; /* מכריח ימין */
+                direction: rtl !important;
+                width: 100%;
+            }
+            
+            /* הכותרת הראשית יכולה להישאר במרכז אם תרצה, אבל כרגע הכל לימין */
+            h1 { text-align: center !important; } 
 
-            /* שדות קלט (Input Fields) - רקע לבן, טקסט שחור */
+            /* טקסט רגיל, תוויות, ופסקאות */
+            p, label, span, div, small { 
+                color: #000000 !important; 
+                text-align: right !important;
+                direction: rtl !important;
+            }
+
+            /* שדות קלט */
             .stTextInput input, .stTextArea textarea, .stSelectbox > div > div {
                 background-color: #ffffff !important;
                 color: #000000 !important;
                 border: 1px solid #ced4da !important;
                 border-radius: 8px;
                 direction: rtl;
+                text-align: right;
             }
 
-            /* תפריטים נפתחים (Dropdowns) */
+            /* תפריטים נפתחים */
             div[data-baseweb="popover"], ul[data-baseweb="menu"] {
                 background-color: #ffffff !important;
                 border: 1px solid #cccccc !important;
+                text-align: right !important;
             }
             li[role="option"] {
                 background-color: #ffffff !important;
                 color: black !important;
                 text-align: right !important;
                 direction: rtl !important;
-            }
-            li[role="option"]:hover {
-                background-color: #eef2ff !important;
+                justify-content: flex-end !important; /* מצמיד לימין */
             }
             div[data-baseweb="select"] span {
                 color: #000000 !important;
                 -webkit-text-fill-color: #000000 !important;
+                text-align: right !important;
             }
 
-            /* כפתורים רגילים וכפתורי הורדה (CSV/Excel) */
+            /* כפתורים */
             .stButton > button, .stDownloadButton > button {
                 background-color: #f0f2f6 !important;
                 color: #000000 !important;
@@ -117,7 +128,7 @@ def setup_design():
                 -webkit-text-fill-color: #000000 !important;
             }
 
-            /* כפתור שמירה ראשי (כחול) */
+            /* כפתור שמירה ראשי */
             [data-testid="stFormSubmitButton"] > button {
                 background: linear-gradient(90deg, #4361ee 0%, #3a0ca3 100%) !important;
                 color: white !important;
@@ -126,7 +137,7 @@ def setup_design():
                 box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             }
 
-            /* עיצוב כרטיס לטופס */
+            /* כרטיס */
             [data-testid="stForm"] {
                 background-color: #ffffff;
                 padding: 15px;
@@ -143,10 +154,10 @@ def setup_design():
                 direction: rtl;
                 text-align: right;
             }
-            [data-testid="stChatMessageContent"] p { color: black !important; }
+            [data-testid="stChatMessageContent"] p { color: black !important; text-align: right !important; }
             .stChatMessage .stAvatar { display: none; }
 
-            /* סליידרים */
+            /* סליידרים - נשארים משמאל לימין למען הנוחות */
             [data-testid="stSlider"] { direction: ltr !important; }
         </style>
     """, unsafe_allow_html=True)
@@ -378,12 +389,10 @@ with tab2:
     
     st.divider()
     
-    # תמיד טוען דאטה, גם אם ריק
     df = load_data_as_dataframe()
     export_df = df.copy()
     if "tags" in export_df.columns: export_df["tags"] = export_df["tags"].apply(lambda x: ", ".join(x) if isinstance(x, list) else x)
     
-    # אזור הורדה - מופיע תמיד
     st.markdown("#### 📥 ייצוא נתונים")
     d1, d2 = st.columns(2)
     with d1:
@@ -409,7 +418,7 @@ with tab2:
         st_df = df[df['student_name'] == student].sort_values("date")
         st.line_chart(st_df.set_index("date")[['cat_proj_trans', 'cat_3d_support', 'cat_self_efficacy']])
     else:
-        st.info("אין נתונים להצגה בגרפים (אך ניתן לייצא קובץ ריק).")
+        st.info("אין נתונים להצגה בגרפים.")
 
 # --- טאב 3: AI ---
 with tab3:
