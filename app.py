@@ -41,7 +41,7 @@ OBSERVATION_TAGS = [
     "הבנה אינטואיטיבית מהירה"
 ]
 
-# --- 2. עיצוב (CSS מתוקן לסליידרים LTR) ---
+# --- 2. עיצוב (CSS) ---
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
     
@@ -49,12 +49,8 @@ def setup_design():
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
 
-            /* הגדרות בסיס */
-            :root {
-                --background-color: #ffffff;
-                --text-color: #000000;
-            }
-
+            /* הגדרות בסיס - RTL לכל האפליקציה */
+            :root { --background-color: #ffffff; --text-color: #000000; }
             html, body, .stApp {
                 background-color: #ffffff !important;
                 color: #000000 !important;
@@ -63,127 +59,81 @@ def setup_design():
                 text-align: right;
             }
 
-            .block-container { 
-                padding-top: 1rem !important; 
-                padding-bottom: 5rem !important; 
-                max-width: 100% !important; 
-            }
+            .block-container { padding-top: 1rem; padding-bottom: 5rem; max-width: 100%; }
 
-            /* --- כותרות וטקסטים --- */
-            h1, h2, h3, h4, h5, h6 { 
-                color: #2c3e50 !important; 
-                font-family: 'Heebo', sans-serif !important;
-                text-align: right !important;
-                direction: rtl !important;
-                width: 100%;
-            }
-            h1 { text-align: center !important; } 
-
-            p, label, span, div, small { 
+            /* כותרות וטקסטים - הכל לימין */
+            h1, h2, h3, h4, h5, h6, p, label, span, div, small { 
                 color: #000000 !important; 
-                text-align: right;
-                direction: rtl;
+                text-align: right; 
+                direction: rtl; 
             }
+            h1 { text-align: center !important; }
 
-            /* --- שדות קלט --- */
+            /* שדות קלט */
             .stTextInput input, .stTextArea textarea, .stSelectbox > div > div {
                 background-color: #ffffff !important;
-                color: #000000 !important;
+                color: black !important;
                 border: 1px solid #ced4da !important;
                 border-radius: 8px;
                 direction: rtl;
                 text-align: right;
             }
 
-            /* --- תפריטים נפתחים --- */
+            /* כפתורים */
+            .stButton > button, .stDownloadButton > button {
+                background-color: #f0f2f6 !important;
+                color: black !important;
+                border: 1px solid #b0b0b0 !important;
+                width: 100%;
+                font-weight: bold;
+            }
+            [data-testid="stFormSubmitButton"] > button {
+                background: linear-gradient(90deg, #4361ee 0%, #3a0ca3 100%) !important;
+                color: white !important;
+                border: none;
+            }
+
+            /* === תיקון הסליידרים (החלק החשוב) === */
+            
+            /* 1. מכריחים את הסליידר להיות LTR כדי ש-1 יהיה משמאל ו-5 מימין */
+            [data-testid="stSlider"] {
+                direction: ltr !important;
+                padding-top: 0px !important;
+                padding-bottom: 20px !important;
+            }
+            
+            /* 2. הבועה עם המספר - גדולה וברורה */
+            div[data-testid="stThumbValue"] {
+                background-color: #4361ee !important;
+                color: white !important;
+                font-size: 14px !important;
+                font-weight: bold !important;
+                direction: ltr !important;
+                width: 30px !important; 
+                text-align: center !important;
+                border-radius: 50% !important;
+            }
+            
+            /* 3. קו הסליידר */
+            div[data-baseweb="slider"] {
+                width: 100%; 
+            }
+
+            /* תפריטים נפתחים */
             div[data-baseweb="popover"], ul[data-baseweb="menu"] {
-                background-color: #ffffff !important;
-                border: 1px solid #cccccc !important;
+                background-color: white !important;
                 text-align: right !important;
             }
             li[role="option"] {
-                background-color: #ffffff !important;
                 color: black !important;
                 text-align: right !important;
                 direction: rtl !important;
                 justify-content: flex-end !important;
             }
-            div[data-baseweb="select"] span {
-                color: #000000 !important;
-                -webkit-text-fill-color: #000000 !important;
-                text-align: right !important;
-            }
-
-            /* --- כפתורים --- */
-            .stButton > button, .stDownloadButton > button {
-                background-color: #f0f2f6 !important;
-                color: #000000 !important;
-                border: 1px solid #b0b0b0 !important;
-                border-radius: 8px;
-                width: 100%;
-                font-weight: bold;
-                -webkit-text-fill-color: #000000 !important;
-            }
-            [data-testid="stFormSubmitButton"] > button {
-                background: linear-gradient(90deg, #4361ee 0%, #3a0ca3 100%) !important;
-                color: white !important;
-                -webkit-text-fill-color: white !important;
-                border: none;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            }
-
-            /* --- כרטיס ובועות צ'אט --- */
-            [data-testid="stForm"] {
-                background-color: #ffffff;
-                padding: 15px;
-                border-radius: 15px;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-                border: 1px solid #e0e0e0;
-            }
-            .stChatMessage {
-                background-color: #f9f9f9 !important;
-                border: 1px solid #ddd;
-                color: black !important;
-                direction: rtl;
-                text-align: right;
-            }
-            [data-testid="stChatMessageContent"] p { color: black !important; text-align: right !important; }
-            .stChatMessage .stAvatar { display: none; }
-
-            /* === תיקון סליידרים אגרסיבי === */
             
-            /* 1. הופך את כל הקונטיינר של הסליידר לשמאל-לימין */
-            [data-testid="stSlider"] {
-                direction: ltr !important;
-                transform: scale(1); /* טריק לריענון רינדור */
-            }
-
-            /* 2. מסדר את הכותרת מעל הסליידר שתחזור להיות מימין לשמאל */
-            [data-testid="stSlider"] > label {
-                direction: rtl !important;
-                text-align: right !important;
-                width: 100%;
-                display: flex;
-                justify-content: flex-end;
-            }
-            
-            /* 3. מוודא שהפס עצמו עובד משמאל לימין */
-            div[data-baseweb="slider"] {
-                direction: ltr !important;
-            }
-
-            /* 4. עיצוב הבועה (Thumb Value) */
-            div[data-testid="stThumbValue"] {
-                background-color: #4361ee !important;
-                color: #ffffff !important;
-                font-family: sans-serif !important;
-                direction: ltr !important; /* המספר בפנים */
-            }
-            
-            /* 5. טקסטים של Min/Max מתחת לסליידר */
-            div[data-testid="stTickBar"] {
-                direction: ltr !important;
-            }
+            /* בועות צ'אט */
+            .stChatMessage { direction: rtl; text-align: right; background-color: #f9f9f9; }
+            [data-testid="stChatMessageContent"] p { color: black !important; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -326,15 +276,17 @@ def chat_with_data(user_query, context_data):
     except: return "שגיאה."
 
 def render_slider_metric(label, key):
-    # הכותרת מוצגת כטקסט רגיל (RTL בגלל ה-CSS הגלובלי)
-    st.markdown(f"**{label}**")
+    # 1. כותרת המדד - מיושרת לימין בנפרד (RTL)
+    st.markdown(f"<div style='text-align: right; direction: rtl; font-weight: bold; margin-bottom: 5px;'>{label}</div>", unsafe_allow_html=True)
     
-    # הסליידר עצמו - יקבל כיוון LTR בגלל ה-CSS הספציפי
-    val = st.slider(label, 1, 5, 3, key=key, label_visibility="collapsed")
+    # 2. הסליידר עצמו - ללא כותרת פנימית, כדי שלא תשבש את הכיוון
+    # אנחנו שמים אותו ב-LTR (שמאל לימין) דרך ה-CSS
+    val = st.slider("", 1, 5, 3, key=key, label_visibility="collapsed")
     
-    # טקסט הסבר מתחת לסליידר - LTR כדי שיתאים למספרים (1 משמאל, 5 מימין)
+    # 3. סרגל המספרים למטה - מיושר משמאל לימין (LTR) כדי להתאים לסליידר
+    # 1 בצד שמאל, 5 בצד ימין
     st.markdown(
-        """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555; margin-top: -5px;">
+        """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555; margin-top: -10px;">
         <span>1 (קושי רב)</span>
         <span>5 (שליטה מלאה)</span>
         </div>""", unsafe_allow_html=True
