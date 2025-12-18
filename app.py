@@ -87,6 +87,7 @@ def setup_design():
                 width: 100%;
                 font-weight: bold;
             }
+            /* כפתור שמירה ראשי - כחול */
             [data-testid="stFormSubmitButton"] > button {
                 background: linear-gradient(90deg, #4361ee 0%, #3a0ca3 100%) !important;
                 color: white !important;
@@ -107,13 +108,13 @@ def setup_design():
 
             /* === תיקון הסליידרים (Select Slider) === */
             
-            /* 1. מכריחים את אזור הסליידר לעבוד משמאל לימין (LTR) */
+            /* מכריחים את אזור הסליידר לעבוד משמאל לימין (LTR) */
             [data-testid="stSlider"] {
                 direction: ltr !important;
                 text-align: left !important;
             }
             
-            /* 2. מכריחים את הטקסטים בתוך הסליידר (המספרים 1-5) להיות ישרים */
+            /* מכריחים את הטקסטים בתוך הסליידר (המספרים 1-5) להיות ישרים */
             [data-testid="stSlider"] p {
                 direction: ltr !important; 
                 text-align: center !important;
@@ -121,7 +122,7 @@ def setup_design():
                 font-size: 16px;
             }
             
-            /* 3. הבועה שמראה את המספר הנבחר */
+            /* הבועה שמראה את המספר הנבחר */
             div[data-testid="stThumbValue"] {
                 direction: ltr !important;
             }
@@ -284,7 +285,6 @@ def render_slider_metric(label, key):
     st.markdown(f"<div style='text-align: right; direction: rtl; font-weight: bold; margin-bottom: 5px;'>{label}</div>", unsafe_allow_html=True)
     
     # שימוש ב-select_slider במקום slider רגיל
-    # זה מאפשר לנו לכפות כיוון LTR על כל הבלוק ולקבל את המספרים 1-5 בסדר הנכון
     val = st.select_slider(
         "", 
         options=[1, 2, 3, 4, 5], 
@@ -293,7 +293,7 @@ def render_slider_metric(label, key):
         label_visibility="collapsed"
     )
     
-    # טקסט עזר (1 משמאל, 5 מימין)
+    # טקסט עזר (1 משמאל, 5 מימין) - כפוי LTR
     st.markdown(
         """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555; margin-top: -10px;">
         <span>1 (קושי רב)</span>
@@ -394,11 +394,17 @@ with tab2:
     with d1:
         st.download_button("📄 הורד CSV", export_df.to_csv(index=False).encode('utf-8'), "data.csv", "text/csv")
     with d2:
-        try:
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer: export_df.to_excel(writer, index=False)
-            st.download_button("📊 הורד Excel", output.getvalue(), "data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        except: st.error("חסרה ספריית openpyxl")
+        # כאן הוספתי את הכפתור החדש לשמירה בענן
+        if st.button("☁️ שמור אקסל בדרייב"):
+            try:
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer: export_df.to_excel(writer, index=False)
+                svc = get_drive_service()
+                if svc:
+                    upload_file_to_drive(io.BytesIO(output.getvalue()), f"Master-Data-{date.today()}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", svc)
+                    st.success("הקובץ נשמר בדרייב בהצלחה!")
+                else: st.error("אין חיבור לדרייב.")
+            except: st.error("שגיאה ביצירת הקובץ.")
 
     st.divider()
 
