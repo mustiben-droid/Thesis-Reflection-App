@@ -213,8 +213,45 @@ def load_last_week():
             if week_ago <= d <= today: out.append(e)
     return out
 
-# --- פונקציות AI לצ'אט ---
+# --- פונקציות AI (סיכום + צ'אט) ---
+
+def generate_summary(entries: list) -> str:
+    """יוצר סיכום שבועי מובנה לתזה"""
+    if not entries: return "לא נמצאו נתונים מהשבוע האחרון."
+    
+    readable_entries = []
+    for e in entries:
+        readable_entries.append(f"""
+        תלמיד: {e.get('student_name')}
+        תאריך: {e.get('date')}
+        קושי מטלה: {e.get('task_difficulty')}
+        תגיות: {e.get('tags')}
+        תיאור ופרשנות: {e.get('done')} | {e.get('interpretation')}
+        ציונים: היטלים={e.get('cat_proj_trans')}, גוף מודפס={e.get('cat_3d_support')}
+        """)
+    full_text = "\n".join(readable_entries)
+    
+    prompt = f"""
+    אתה עוזר מחקר אקדמי. כתוב דוח סיכום שבועי בעברית עבור תזה.
+    הנחיות:
+    1. השתמש במונחים מקצועיים (רוטציה מנטלית, היטלים, ייצוגים).
+    2. חלק ל: "מגמות כלליות בכיתה", "ניתוח פרטני (תלמידים בולטים)", "המלצות להמשך".
+    3. תן משקל משמעותי ל"פרשנות המורה" ולשימוש במודלים פיזיים/מודפסים.
+    
+    הנתונים מהשבוע האחרון:
+    {full_text}
+    """
+    
+    api_key = get_google_api_key()
+    if not api_key: return "חסר מפתח API."
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+        return response.text
+    except Exception as e: return f"שגיאה: {e}"
+
 def get_all_data_as_text():
+    """מכין את כל הנתונים לצ'אט"""
     df = load_data_as_dataframe()
     if df.empty: return "אין נתונים עדיין במערכת."
     text_data = ""
@@ -229,13 +266,21 @@ def get_all_data_as_text():
     return text_data
 
 def chat_with_data(user_query, context_data):
+    """צ'אט חופשי עם כל הנתונים"""
     api_key = get_google_api_key()
     if not api_key: return "חסר מפתח API."
     prompt = f"""
-    אתה עוזר מחקר אקדמי. יש לך גישה ליומן תצפיות.
-    נתונים: {context_data}
-    שאלה: "{user_query}"
-    ענה על סמך הנתונים בלבד, בעברית, בצורה מקצועית.
+    אתה עוזר מחקר אקדמי ("Research Buddy"). יש לך גישה ליומן התצפיות המלא.
+    
+    הנתונים המלאים:
+    {context_data}
+    
+    השאלה של המורה: "{user_query}"
+    
+    הנחיות:
+    1. ענה אך ורק על סמך הנתונים.
+    2. חפש דפוסים וקשרים (למשל השפעת מודל על הצלחה).
+    3. ענה בעברית מקצועית.
     """
     try:
         client = genai.Client(api_key=api_key)
@@ -305,7 +350,7 @@ setup_design()
 st.title("🎓 יומן תצפית")
 st.markdown("### מעקב אחר מיומנויות תפיסה מרחבית")
 
-tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 התקדמות וייצוא", "🤖 צ'אט עם הנתונים"])
+tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 התקדמות וייצוא", "🤖 עוזר מחקרי"])
 
 # --- לשונית 1: הזנת נתונים ---
 with tab1:
@@ -435,11 +480,35 @@ with tab2:
     else:
         st.info("💡 אין נתונים. לחץ על 'סנכרן נתונים מהדרייב' למעלה.")
 
-# --- לשונית 3: AI (צ'אט) ---
+# --- לשונית 3: AI (סיכום + צ'אט) ---
 with tab3:
-    st.markdown("### 🤖 עוזר מחקרי (צ'אט)")
-    st.markdown("שאל את הנתונים שלך שאלות חופשיות, ממש כמו ב-NotebookLM.")
+    st.markdown("### 🤖 עוזר מחקרי")
     
+    # חלק 1: סיכום שבועי (סטטי)
+    st.markdown("#### 📄 דוח שבועי (לשמירה בדרייב)")
+    if st.button("✨ צור סיכום שבועי ושמור"):
+        entries = load_last_week()
+        if not entries:
+            st.warning("לא נמצאו תצפיות מהשבוע האחרון.")
+        else:
+            with st.spinner("מנתח נתונים, כותב דוח ושומר לענן..."):
+                summary_text = generate_summary(entries)
+                st.markdown("---")
+                st.markdown(summary_text)
+                
+                svc = get_drive_service()
+                if svc:
+                    try:
+                        file_bytes = io.BytesIO(summary_text.encode('utf-8'))
+                        filename = f"Weekly-Summary-{date.today()}.txt"
+                        upload_file_to_drive(file_bytes, filename, 'text/plain', svc)
+                        st.success(f"✅ הדוח נשמר בדרייב: {filename}")
+                    except: pass
+    
+    st.divider()
+
+    # חלק 2: צ'אט חופשי (דינמי)
+    st.markdown("#### 💬 צ'אט עם הנתונים (חקירה חופשית)")
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -447,13 +516,13 @@ with tab3:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    if prompt := st.chat_input("שאל משהו על הנתונים..."):
+    if prompt := st.chat_input("שאל משהו על הנתונים (למשל: מי התקשה בהיטלים?)..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("חושב..."):
+            with st.spinner("מנתח..."):
                 context = get_all_data_as_text()
                 response = chat_with_data(prompt, context)
                 st.markdown(response)
