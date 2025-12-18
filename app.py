@@ -87,7 +87,6 @@ def setup_design():
                 width: 100%;
                 font-weight: bold;
             }
-            /* כפתור שמירה ראשי - כחול */
             [data-testid="stFormSubmitButton"] > button {
                 background: linear-gradient(90deg, #4361ee 0%, #3a0ca3 100%) !important;
                 color: white !important;
@@ -108,13 +107,13 @@ def setup_design():
 
             /* === תיקון הסליידרים (Select Slider) === */
             
-            /* מכריחים את אזור הסליידר לעבוד משמאל לימין (LTR) */
+            /* 1. מכריחים את אזור הסליידר לעבוד משמאל לימין (LTR) */
             [data-testid="stSlider"] {
                 direction: ltr !important;
                 text-align: left !important;
             }
             
-            /* מכריחים את הטקסטים בתוך הסליידר (המספרים 1-5) להיות ישרים */
+            /* 2. מכריחים את הטקסטים בתוך הסליידר (המספרים 1-5) להיות ישרים */
             [data-testid="stSlider"] p {
                 direction: ltr !important; 
                 text-align: center !important;
@@ -122,7 +121,7 @@ def setup_design():
                 font-size: 16px;
             }
             
-            /* הבועה שמראה את המספר הנבחר */
+            /* 3. הבועה שמראה את המספר הנבחר */
             div[data-testid="stThumbValue"] {
                 direction: ltr !important;
             }
@@ -393,8 +392,25 @@ with tab2:
     d1, d2 = st.columns(2)
     with d1:
         st.download_button("📄 הורד CSV", export_df.to_csv(index=False).encode('utf-8'), "data.csv", "text/csv")
+        # --- כפתור חדש לשמירת CSV בדרייב ---
+        if st.button("☁️ שמור CSV בדרייב"):
+            try:
+                csv_bytes = io.BytesIO(export_df.to_csv(index=False).encode('utf-8'))
+                svc = get_drive_service()
+                if svc:
+                    upload_file_to_drive(csv_bytes, f"Master-Data-{date.today()}.csv", "text/csv", svc)
+                    st.success("קובץ CSV נשמר בדרייב!")
+                else: st.error("אין חיבור לדרייב.")
+            except Exception as e: st.error(f"שגיאה: {e}")
+
     with d2:
-        # כאן הוספתי את הכפתור החדש לשמירה בענן
+        try:
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer: export_df.to_excel(writer, index=False)
+            st.download_button("📊 הורד Excel", output.getvalue(), "data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        except: st.error("חסרה ספריית openpyxl")
+        
+        # --- כפתור שמירת אקסל בדרייב ---
         if st.button("☁️ שמור אקסל בדרייב"):
             try:
                 output = io.BytesIO()
@@ -402,9 +418,9 @@ with tab2:
                 svc = get_drive_service()
                 if svc:
                     upload_file_to_drive(io.BytesIO(output.getvalue()), f"Master-Data-{date.today()}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", svc)
-                    st.success("הקובץ נשמר בדרייב בהצלחה!")
+                    st.success("קובץ Excel נשמר בדרייב!")
                 else: st.error("אין חיבור לדרייב.")
-            except: st.error("שגיאה ביצירת הקובץ.")
+            except Exception as e: st.error(f"שגיאה: {e}")
 
     st.divider()
 
