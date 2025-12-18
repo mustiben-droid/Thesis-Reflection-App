@@ -49,8 +49,9 @@ def setup_design():
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
 
-            /* הגדרות בסיס - RTL לכל האפליקציה */
+            /* הגדרות בסיס */
             :root { --background-color: #ffffff; --text-color: #000000; }
+            
             html, body, .stApp {
                 background-color: #ffffff !important;
                 color: #000000 !important;
@@ -61,7 +62,7 @@ def setup_design():
 
             .block-container { padding-top: 1rem; padding-bottom: 5rem; max-width: 100%; }
 
-            /* כותרות וטקסטים - הכל לימין */
+            /* כותרות וטקסטים */
             h1, h2, h3, h4, h5, h6, p, label, span, div, small { 
                 color: #000000 !important; 
                 text-align: right; 
@@ -93,32 +94,6 @@ def setup_design():
                 border: none;
             }
 
-            /* === תיקון הסליידרים (החלק החשוב) === */
-            
-            /* 1. מכריחים את הסליידר להיות LTR כדי ש-1 יהיה משמאל ו-5 מימין */
-            [data-testid="stSlider"] {
-                direction: ltr !important;
-                padding-top: 0px !important;
-                padding-bottom: 20px !important;
-            }
-            
-            /* 2. הבועה עם המספר - גדולה וברורה */
-            div[data-testid="stThumbValue"] {
-                background-color: #4361ee !important;
-                color: white !important;
-                font-size: 14px !important;
-                font-weight: bold !important;
-                direction: ltr !important;
-                width: 30px !important; 
-                text-align: center !important;
-                border-radius: 50% !important;
-            }
-            
-            /* 3. קו הסליידר */
-            div[data-baseweb="slider"] {
-                width: 100%; 
-            }
-
             /* תפריטים נפתחים */
             div[data-baseweb="popover"], ul[data-baseweb="menu"] {
                 background-color: white !important;
@@ -130,8 +105,35 @@ def setup_design():
                 direction: rtl !important;
                 justify-content: flex-end !important;
             }
+
+            /* === תיקון סליידרים אגרסיבי === */
             
-            /* בועות צ'אט */
+            /* הסליידר עצמו: תמיד משמאל לימין כדי שהמספרים יהיו נכונים */
+            [data-testid="stSlider"] {
+                direction: ltr !important;
+                padding-top: 0px !important;
+                padding-bottom: 20px !important;
+            }
+            
+            /* הבועה עם המספר */
+            div[data-testid="stThumbValue"] {
+                background-color: #4361ee !important;
+                color: white !important;
+                font-weight: bold !important;
+                direction: ltr !important; 
+                border-radius: 50% !important;
+            }
+            
+            /* כרטיס */
+            [data-testid="stForm"] {
+                background-color: #ffffff;
+                padding: 15px;
+                border-radius: 15px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+                border: 1px solid #e0e0e0;
+            }
+            
+            /* צ'אט */
             .stChatMessage { direction: rtl; text-align: right; background-color: #f9f9f9; }
             [data-testid="stChatMessageContent"] p { color: black !important; }
         </style>
@@ -276,17 +278,16 @@ def chat_with_data(user_query, context_data):
     except: return "שגיאה."
 
 def render_slider_metric(label, key):
-    # 1. כותרת המדד - מיושרת לימין בנפרד (RTL)
-    st.markdown(f"<div style='text-align: right; direction: rtl; font-weight: bold; margin-bottom: 5px;'>{label}</div>", unsafe_allow_html=True)
+    # 1. כותרת ידנית מעל הסליידר - מיושרת לימין
+    st.markdown(f"<div style='text-align: right; direction: rtl; font-weight: bold;'>{label}</div>", unsafe_allow_html=True)
     
-    # 2. הסליידר עצמו - ללא כותרת פנימית, כדי שלא תשבש את הכיוון
-    # אנחנו שמים אותו ב-LTR (שמאל לימין) דרך ה-CSS
+    # 2. סליידר ריק מכותרת, שמוגדר ב-CSS כ-LTR (שמאל לימין)
     val = st.slider("", 1, 5, 3, key=key, label_visibility="collapsed")
     
-    # 3. סרגל המספרים למטה - מיושר משמאל לימין (LTR) כדי להתאים לסליידר
-    # 1 בצד שמאל, 5 בצד ימין
+    # 3. טקסט עזר למטה - מותאם ויזואלית לסליידר LTR (אנגלית)
+    # צד שמאל = 1, צד ימין = 5
     st.markdown(
-        """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555; margin-top: -10px;">
+        """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555; margin-top: -15px;">
         <span>1 (קושי רב)</span>
         <span>5 (שליטה מלאה)</span>
         </div>""", unsafe_allow_html=True
