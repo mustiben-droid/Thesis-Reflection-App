@@ -41,112 +41,85 @@ OBSERVATION_TAGS = [
     "הבנה אינטואיטיבית מהירה"
 ]
 
-# --- 2. עיצוב (CSS) - כולל תיקון מצב לילה ---
+# --- 2. עיצוב (CSS מתוקן ופשוט יותר) ---
 def setup_design():
     st.set_page_config(page_title="יומן תצפית", page_icon="🎓", layout="centered")
     
     st.markdown("""
         <style>
-            /* פונט היבו */
+            /* ייבוא פונט */
             @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
 
-            /* כפיית מצב בהיר (Light Mode) על כל האלמנטים */
-            :root {
-                --background-color: #ffffff;
-                --secondary-background-color: #f0f2f6;
-                --text-color: #000000;
-                --primary-color: #4361ee;
+            /* --- הגדרות בסיס (כיוון וצבעים) --- */
+            html, body, [class*="css"] {
+                font-family: 'Heebo', sans-serif;
             }
 
-            html, body, .stApp {
-                background-color: #ffffff !important;
-                color: #000000 !important;
-                font-family: 'Heebo', sans-serif !important;
+            /* הכרחת כיוון ימין-שמאל על כל האפליקציה */
+            .stApp {
+                direction: rtl;
+                text-align: right;
+                background-color: #ffffff;
             }
 
             /* מניעת חיתוך במובייל */
             .block-container { 
                 padding-top: 1rem !important; 
                 padding-bottom: 5rem !important; 
-                padding-left: 0.5rem !important;
-                padding-right: 0.5rem !important;
                 max-width: 100% !important; 
             }
 
-            /* תפריטים נפתחים (Dropdowns) - תיקון רקע שחור */
-            div[data-baseweb="popover"], div[data-baseweb="menu"], ul[data-baseweb="menu"] {
-                background-color: #ffffff !important;
-                border: 1px solid #d1d5db !important;
-            }
-            li[role="option"] {
-                background-color: #ffffff !important;
+            /* --- טיפול במצב לילה (הופך הכל לבהיר) --- */
+            h1, h2, h3, h4, h5, h6, p, label, span, div {
                 color: #000000 !important;
-            }
-            li[role="option"]:hover {
-                background-color: #eef2ff !important;
-            }
-            
-            /* טקסט נבחר */
-            div[data-baseweb="select"] span {
-                color: #000000 !important;
-                -webkit-text-fill-color: #000000 !important;
             }
 
-            /* שדות קלט */
+            /* תיקון שדות קלט */
             .stTextInput input, .stTextArea textarea, .stSelectbox > div > div {
                 background-color: #ffffff !important;
                 color: #000000 !important;
-                border-color: #ced4da !important;
-                border-radius: 8px;
+                border: 1px solid #cccccc !important;
+                direction: rtl;
             }
 
-            /* כפתורים */
-            .stButton > button {
+            /* --- תיקון כפתורים (החזרת כפתורי CSV/Excel) --- */
+            .stButton > button, .stDownloadButton > button {
                 background-color: #f0f2f6 !important;
                 color: #000000 !important;
                 border: 1px solid #b0b0b0 !important;
-                border-radius: 10px;
-                -webkit-text-fill-color: #000000 !important;
+                border-radius: 8px;
+                width: 100%;
             }
             
-            /* כפתור שמירה ראשי */
+            /* כפתור שמירה ראשי (מובדל בצבע) */
             [data-testid="stFormSubmitButton"] > button {
-                background: linear-gradient(90deg, #4361ee 0%, #3a0ca3 100%) !important;
+                background-color: #4361ee !important;
                 color: white !important;
-                -webkit-text-fill-color: white !important;
                 border: none;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             }
 
-            /* עיצוב כרטיס לטופס */
-            [data-testid="stForm"] {
-                background-color: #ffffff;
-                padding: 15px;
-                border-radius: 15px;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-                border: 1px solid #e0e0e0;
+            /* תיקון תפריטים נפתחים */
+            div[data-baseweb="popover"], ul[data-baseweb="menu"] {
+                background-color: #ffffff !important;
+                border: 1px solid #cccccc !important;
+            }
+            li[role="option"] {
+                background-color: #ffffff !important;
+                color: black !important;
+                text-align: right !important;
+                direction: rtl !important;
             }
 
+            /* סליידרים - חייבים להישאר משמאל לימין */
+            [data-testid="stSlider"] { direction: ltr !important; }
+            
             /* בועות צ'אט */
             .stChatMessage {
-                background-color: #f8f9fa !important;
-                border: 1px solid #e0e0e0;
-                color: black !important;
+                background-color: #f9f9f9 !important;
+                border: 1px solid #ddd;
                 direction: rtl;
+                text-align: right;
             }
-            [data-testid="stChatMessageContent"] p { color: black !important; text-align: right; }
-            .stChatMessage .stAvatar { display: none; }
-
-            /* כותרות */
-            h1, h2, h3 { color: #2c3e50 !important; font-weight: 700; text-align: center; }
-            h4, h5 { color: #34495e !important; text-align: right; }
-            
-            /* סליידרים */
-            [data-testid="stSlider"] { direction: ltr !important; }
-
-            /* הסתרת תפריט עליון (אופציונלי - מחק את השורות האלו אם אתה רוצה את ה-3 נקודות) */
-            /* #MainMenu {visibility: hidden;} */
-            /* header {visibility: hidden;} */
         </style>
     """, unsafe_allow_html=True)
 
@@ -203,7 +176,7 @@ def load_last_week():
             except: continue
     return out
 
-# --- 4. פונקציות דרייב (העלאה ושחזור) ---
+# --- 4. פונקציות דרייב ---
 
 def upload_file_to_drive(file_obj, filename, mime_type, drive_service):
     media = MediaIoBaseUpload(file_obj, mimetype=mime_type)
@@ -249,7 +222,7 @@ def restore_from_drive():
 # --- 5. פונקציות AI ---
 
 def generate_summary(entries: list) -> str:
-    if not entries: return "אין נתונים מהשבוע האחרון."
+    if not entries: return "אין נתונים."
     readable = []
     for e in entries:
         readable.append(f"תלמיד: {e.get('student_name')} | תיאור: {e.get('done')} | פרשנות: {e.get('interpretation')} | ציונים: היטלים={e.get('cat_proj_trans')}")
@@ -304,7 +277,6 @@ st.markdown("### מעקב אחר מיומנויות תפיסה מרחבית")
 
 tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 התקדמות", "🤖 עוזר מחקרי"])
 
-# --- טאב 1: הזנה ---
 with tab1:
     with st.form("reflection_form"):
         st.markdown("#### 1. פרטי התצפית") 
@@ -366,7 +338,6 @@ with tab1:
             st.balloons()
             st.success("נשמר בהצלחה!")
 
-# --- טאב 2: דאשבורד ---
 with tab2:
     st.markdown("### 📊 לוח בקרה")
     if st.button("🔄 סנכרן מהדרייב"):
@@ -399,9 +370,8 @@ with tab2:
             st_df = df[df['student_name'] == student].sort_values("date")
             st.line_chart(st_df.set_index("date")[['cat_proj_trans', 'cat_3d_support', 'cat_self_efficacy']])
     else:
-        st.info("אין נתונים.")
+        st.info("אין נתונים להצגה.")
 
-# --- טאב 3: AI ---
 with tab3:
     st.markdown("### 🤖 עוזר מחקרי")
     
