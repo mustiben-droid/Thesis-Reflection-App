@@ -69,7 +69,7 @@ def setup_design():
                 max-width: 100% !important; 
             }
 
-            /* --- כותרות וטקסטים מיושרים לימין --- */
+            /* --- כותרות וטקסטים --- */
             h1, h2, h3, h4, h5, h6 { 
                 color: #2c3e50 !important; 
                 font-family: 'Heebo', sans-serif !important;
@@ -150,15 +150,34 @@ def setup_design():
             [data-testid="stChatMessageContent"] p { color: black !important; text-align: right !important; }
             .stChatMessage .stAvatar { display: none; }
 
-            /* --- סליידרים (תיקון כיוון ל-LTR) --- */
-            /* זה מכריח את הסרגל עצמו להיות 1 משמאל ו-5 מימין */
-            [data-testid="stSlider"] { 
-                direction: ltr !important; 
+            /* === תיקון סליידרים (כיוון + תצוגת מספר) === */
+            
+            /* 1. כיוון הסליידר משמאל לימין (כדי ש-1 יהיה משמאל) */
+            [data-testid="stSlider"] {
+                direction: ltr !important;
+                text-align: left !important;
+                padding-top: 15px !important;
             }
-            /* המילים מעל הסליידר עדיין יהיו לימין */
-            [data-testid="stSlider"] label {
+
+            /* 2. הכותרת מעל הסליידר - חזרה לימין */
+            [data-testid="stSlider"] label p {
                 direction: rtl !important;
                 text-align: right !important;
+                width: 100%;
+                display: block;
+            }
+
+            /* 3. הבועה שמראה את המספר (התיקון החדש!) */
+            div[data-testid="stThumbValue"] {
+                background-color: #4361ee !important; /* רקע כחול בולט */
+                color: #ffffff !important;           /* טקסט לבן */
+                font-weight: bold !important;
+                font-size: 16px !important;
+                border-radius: 6px !important;
+                padding: 2px 8px !important;
+                opacity: 1 !important; /* תמיד גלוי בגרירה */
+                z-index: 999 !important;
+                direction: ltr !important;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -305,13 +324,12 @@ def render_slider_metric(label, key):
     # הכותרת נשארת מימין
     st.markdown(f"**{label}**")
     
-    # הסליידר עצמו - הערכים 1-5
+    # הסליידר עצמו
     val = st.slider(label, 1, 5, 3, key=key, label_visibility="collapsed")
     
-    # טקסט ההסבר למטה: אנחנו מכריחים LTR (שמאל לימין)
-    # 1 בצד שמאל, 5 בצד ימין
+    # טקסט עזר למטה - מיושר בצורה שמתאימה לסליידר (1 משמאל, 5 מימין)
     st.markdown(
-        """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555;">
+        """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555; margin-top: -10px;">
         <span>1 (קושי רב)</span>
         <span>5 (שליטה מלאה)</span>
         </div>""", unsafe_allow_html=True
