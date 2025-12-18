@@ -56,7 +56,7 @@ def setup_design():
                 background-color: #ffffff !important;
                 color: #000000 !important;
                 font-family: 'Heebo', sans-serif !important;
-                direction: rtl;
+                direction: rtl; /* ברירת מחדל: ימין לשמאל */
                 text-align: right;
             }
 
@@ -66,7 +66,6 @@ def setup_design():
             h1, h2, h3, h4, h5, h6, p, label, span, div, small { 
                 color: #000000 !important; 
                 text-align: right; 
-                direction: rtl; 
             }
             h1 { text-align: center !important; }
 
@@ -106,24 +105,27 @@ def setup_design():
                 justify-content: flex-end !important;
             }
 
-            /* === תיקון סליידרים אגרסיבי === */
+            /* === תיקון הסליידרים (Select Slider) === */
             
-            /* הסליידר עצמו: תמיד משמאל לימין כדי שהמספרים יהיו נכונים */
+            /* 1. מכריחים את אזור הסליידר לעבוד משמאל לימין (LTR) */
             [data-testid="stSlider"] {
                 direction: ltr !important;
-                padding-top: 0px !important;
-                padding-bottom: 20px !important;
+                text-align: left !important;
             }
             
-            /* הבועה עם המספר */
-            div[data-testid="stThumbValue"] {
-                background-color: #4361ee !important;
-                color: white !important;
-                font-weight: bold !important;
+            /* 2. מכריחים את הטקסטים בתוך הסליידר (המספרים 1-5) להיות ישרים */
+            [data-testid="stSlider"] p {
                 direction: ltr !important; 
-                border-radius: 50% !important;
+                text-align: center !important;
+                font-weight: bold;
+                font-size: 16px;
             }
             
+            /* 3. הבועה שמראה את המספר הנבחר */
+            div[data-testid="stThumbValue"] {
+                direction: ltr !important;
+            }
+
             /* כרטיס */
             [data-testid="stForm"] {
                 background-color: #ffffff;
@@ -278,16 +280,22 @@ def chat_with_data(user_query, context_data):
     except: return "שגיאה."
 
 def render_slider_metric(label, key):
-    # 1. כותרת ידנית מעל הסליידר - מיושרת לימין
-    st.markdown(f"<div style='text-align: right; direction: rtl; font-weight: bold;'>{label}</div>", unsafe_allow_html=True)
+    # כותרת נפרדת מימין (RTL)
+    st.markdown(f"<div style='text-align: right; direction: rtl; font-weight: bold; margin-bottom: 5px;'>{label}</div>", unsafe_allow_html=True)
     
-    # 2. סליידר ריק מכותרת, שמוגדר ב-CSS כ-LTR (שמאל לימין)
-    val = st.slider("", 1, 5, 3, key=key, label_visibility="collapsed")
+    # שימוש ב-select_slider במקום slider רגיל
+    # זה מאפשר לנו לכפות כיוון LTR על כל הבלוק ולקבל את המספרים 1-5 בסדר הנכון
+    val = st.select_slider(
+        "", 
+        options=[1, 2, 3, 4, 5], 
+        value=3, 
+        key=key,
+        label_visibility="collapsed"
+    )
     
-    # 3. טקסט עזר למטה - מותאם ויזואלית לסליידר LTR (אנגלית)
-    # צד שמאל = 1, צד ימין = 5
+    # טקסט עזר (1 משמאל, 5 מימין)
     st.markdown(
-        """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555; margin-top: -15px;">
+        """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555; margin-top: -10px;">
         <span>1 (קושי רב)</span>
         <span>5 (שליטה מלאה)</span>
         </div>""", unsafe_allow_html=True
