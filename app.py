@@ -56,7 +56,7 @@ def setup_design():
                 background-color: #ffffff !important;
                 color: #000000 !important;
                 font-family: 'Heebo', sans-serif !important;
-                direction: rtl; /* ברירת מחדל: ימין לשמאל */
+                direction: rtl; 
                 text-align: right;
             }
 
@@ -106,22 +106,16 @@ def setup_design():
             }
 
             /* === תיקון הסליידרים (Select Slider) === */
-            
-            /* 1. מכריחים את אזור הסליידר לעבוד משמאל לימין (LTR) */
             [data-testid="stSlider"] {
                 direction: ltr !important;
                 text-align: left !important;
             }
-            
-            /* 2. מכריחים את הטקסטים בתוך הסליידר (המספרים 1-5) להיות ישרים */
             [data-testid="stSlider"] p {
                 direction: ltr !important; 
                 text-align: center !important;
                 font-weight: bold;
                 font-size: 16px;
             }
-            
-            /* 3. הבועה שמראה את המספר הנבחר */
             div[data-testid="stThumbValue"] {
                 direction: ltr !important;
             }
@@ -194,12 +188,57 @@ def load_last_week():
             except: continue
     return out
 
-# --- 4. פונקציות דרייב ---
+# --- 4. פונקציות דרייב (כולל עדכון תיק אישי) ---
 
 def upload_file_to_drive(file_obj, filename, mime_type, drive_service):
+    """מעלה קובץ רגיל (תמונה/דוח)"""
     media = MediaIoBaseUpload(file_obj, mimetype=mime_type)
     file_metadata = {'name': filename, 'parents': [GDRIVE_FOLDER_ID], 'mimeType': mime_type}
     drive_service.files().create(body=file_metadata, media_body=media, supportsAllDrives=True).execute()
+
+def update_student_excel_in_drive(student_name, drive_service):
+    """
+    יוצר או מעדכן קובץ אקסל ספציפי עבור תלמיד בודד.
+    הקובץ יכיל את כל ההיסטוריה של התלמיד עד לרגע זה.
+    """
+    try:
+        # 1. שליפת כל הנתונים
+        df = load_data_as_dataframe()
+        if df.empty: return False
+        
+        # 2. סינון רק לתלמיד הזה
+        student_df = df[df['student_name'] == student_name]
+        if student_df.empty: return False
+        
+        # 3. הכנת שם הקובץ האישי
+        filename = f"Master_{student_name}.xlsx"
+        
+        # 4. יצירת האקסל בזיכרון
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            student_df.to_excel(writer, index=False, sheet_name='History')
+        
+        # 5. בדיקה אם הקובץ קיים בדרייב
+        query = f"name = '{filename}' and '{GDRIVE_FOLDER_ID}' in parents and trashed = false"
+        results = drive_service.files().list(q=query, fields="files(id, name)").execute()
+        files = results.get('files', [])
+        
+        media = MediaIoBaseUpload(io.BytesIO(output.getvalue()), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", resumable=True)
+
+        if not files:
+            # יצירת קובץ חדש
+            file_metadata = {'name': filename, 'parents': [GDRIVE_FOLDER_ID]}
+            drive_service.files().create(body=file_metadata, media_body=media).execute()
+            return "created"
+        else:
+            # עדכון קובץ קיים
+            file_id = files[0]['id']
+            drive_service.files().update(fileId=file_id, media_body=media).execute()
+            return "updated"
+            
+    except Exception as e:
+        print(f"Error updating excel for {student_name}: {e}")
+        return "error"
 
 def restore_from_drive():
     svc = get_drive_service()
@@ -280,19 +319,8 @@ def chat_with_data(user_query, context_data):
     except: return "שגיאה."
 
 def render_slider_metric(label, key):
-    # כותרת נפרדת מימין (RTL)
     st.markdown(f"<div style='text-align: right; direction: rtl; font-weight: bold; margin-bottom: 5px;'>{label}</div>", unsafe_allow_html=True)
-    
-    # שימוש ב-select_slider במקום slider רגיל
-    val = st.select_slider(
-        "", 
-        options=[1, 2, 3, 4, 5], 
-        value=3, 
-        key=key,
-        label_visibility="collapsed"
-    )
-    
-    # טקסט עזר (1 משמאל, 5 מימין) - כפוי LTR
+    val = st.select_slider("", options=[1, 2, 3, 4, 5], value=3, key=key, label_visibility="collapsed")
     st.markdown(
         """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555; margin-top: -10px;">
         <span>1 (קושי רב)</span>
@@ -364,12 +392,19 @@ with tab1:
             svc = get_drive_service()
             if svc:
                 try:
+                    # 1. גיבוי קובץ בודד (חשוב לשחזור)
                     json_bytes = io.BytesIO(json.dumps(entry, ensure_ascii=False, indent=4).encode('utf-8'))
                     upload_file_to_drive(json_bytes, f"ref-{student_name}-{entry['date']}.json", 'application/json', svc)
+                    
                     if uploaded_image:
                         image_bytes = io.BytesIO(uploaded_image.getvalue())
                         upload_file_to_drive(image_bytes, f"img-{student_name}-{entry['date']}.jpg", 'image/jpeg', svc)
-                except: pass
+                    
+                    # 2. עדכון התיק האישי של התלמיד (Master File)
+                    update_res = update_student_excel_in_drive(student_name, svc)
+                    if update_res: st.toast(f"תיק אישי עודכן: Master_{student_name}.xlsx")
+                    
+                except Exception as e: st.error(f"שגיאה בענן: {e}")
             
             st.balloons()
             st.success("נשמר בהצלחה!")
@@ -388,39 +423,30 @@ with tab2:
     export_df = df.copy()
     if "tags" in export_df.columns: export_df["tags"] = export_df["tags"].apply(lambda x: ", ".join(x) if isinstance(x, list) else x)
     
-    st.markdown("#### 📥 ייצוא נתונים")
+    st.markdown("#### 📥 ייצוא נתונים (כללי)")
     d1, d2 = st.columns(2)
     with d1:
-        st.download_button("📄 הורד CSV", export_df.to_csv(index=False).encode('utf-8'), "data.csv", "text/csv")
-        # --- כפתור חדש לשמירת CSV בדרייב ---
-        if st.button("☁️ שמור CSV בדרייב"):
-            try:
-                csv_bytes = io.BytesIO(export_df.to_csv(index=False).encode('utf-8'))
-                svc = get_drive_service()
-                if svc:
-                    upload_file_to_drive(csv_bytes, f"Master-Data-{date.today()}.csv", "text/csv", svc)
-                    st.success("קובץ CSV נשמר בדרייב!")
-                else: st.error("אין חיבור לדרייב.")
-            except Exception as e: st.error(f"שגיאה: {e}")
-
+        st.download_button("📄 הורד CSV (הכל)", export_df.to_csv(index=False).encode('utf-8'), "data.csv", "text/csv")
     with d2:
         try:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer: export_df.to_excel(writer, index=False)
-            st.download_button("📊 הורד Excel", output.getvalue(), "data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        except: st.error("חסרה ספריית openpyxl")
-        
-        # --- כפתור שמירת אקסל בדרייב ---
-        if st.button("☁️ שמור אקסל בדרייב"):
-            try:
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer: export_df.to_excel(writer, index=False)
-                svc = get_drive_service()
-                if svc:
-                    upload_file_to_drive(io.BytesIO(output.getvalue()), f"Master-Data-{date.today()}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", svc)
-                    st.success("קובץ Excel נשמר בדרייב!")
-                else: st.error("אין חיבור לדרייב.")
-            except Exception as e: st.error(f"שגיאה: {e}")
+            st.download_button("📊 הורד Excel (הכל)", output.getvalue(), "data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        except: pass
+
+    # --- כפתור מיוחד ליצירת כל התיקים האישיים (בדיעבד) ---
+    st.markdown("#### 📂 ניהול תיקי תלמידים")
+    if st.button("🔄 עדכן את כל תיקי התלמידים בדרייב"):
+        svc = get_drive_service()
+        if svc and not df.empty:
+            all_students = df['student_name'].unique()
+            progress_bar = st.progress(0)
+            for i, name in enumerate(all_students):
+                update_student_excel_in_drive(name, svc)
+                progress_bar.progress((i + 1) / len(all_students))
+            st.success(f"עודכנו {len(all_students)} תיקים אישיים בדרייב!")
+        else:
+            st.error("אין נתונים או אין חיבור לדרייב.")
 
     st.divider()
 
