@@ -16,11 +16,18 @@ from googleapiclient.http import MediaIoBaseUpload
 DATA_FILE = "reflections.jsonl"
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 
+# --- רשימת התלמידים המעודכנת ---
 CLASS_ROSTER = [
     "נתנאל",
     "רועי",
     "אסף",
     "עילאי",
+    "טדי",
+    "גאל",
+    "אופק",
+    "דניאל.ר",
+    "אלי",
+    "טיגרן",
     "תלמיד אחר..." 
 ]
 
