@@ -206,7 +206,6 @@ def upload_file_to_drive(file_obj, filename, mime_type, drive_service):
 def update_student_excel_in_drive(student_name, drive_service):
     """
     יוצר או מעדכן קובץ אקסל ספציפי עבור תלמיד בודד.
-    הקובץ יכיל את כל ההיסטוריה של התלמיד עד לרגע זה.
     """
     try:
         # 1. שליפת כל הנתונים
@@ -348,7 +347,8 @@ tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 התקדמות", "🤖 
 
 # --- טאב 1: הזנה ---
 with tab1:
-    with st.form("reflection_form"):
+    # התיקון כאן: clear_on_submit=True מנקה את הטופס אוטומטית אחרי שליחה
+    with st.form("reflection_form", clear_on_submit=True):
         st.markdown("#### 1. פרטי התצפית") 
         col1, col2 = st.columns(2)
         with col1:
@@ -399,7 +399,7 @@ with tab1:
             svc = get_drive_service()
             if svc:
                 try:
-                    # 1. גיבוי קובץ בודד (חשוב לשחזור)
+                    # 1. גיבוי קובץ בודד
                     json_bytes = io.BytesIO(json.dumps(entry, ensure_ascii=False, indent=4).encode('utf-8'))
                     upload_file_to_drive(json_bytes, f"ref-{student_name}-{entry['date']}.json", 'application/json', svc)
                     
@@ -407,14 +407,14 @@ with tab1:
                         image_bytes = io.BytesIO(uploaded_image.getvalue())
                         upload_file_to_drive(image_bytes, f"img-{student_name}-{entry['date']}.jpg", 'image/jpeg', svc)
                     
-                    # 2. עדכון התיק האישי של התלמיד (Master File)
+                    # 2. עדכון התיק האישי של התלמיד
                     update_res = update_student_excel_in_drive(student_name, svc)
                     if update_res: st.toast(f"תיק אישי עודכן: Master_{student_name}.xlsx")
                     
                 except Exception as e: st.error(f"שגיאה בענן: {e}")
             
             st.balloons()
-            st.success("נשמר בהצלחה!")
+            st.success("נשמר בהצלחה! הטופס נוקה לתצפית הבאה.")
 
 # --- טאב 2: דאשבורד ---
 with tab2:
