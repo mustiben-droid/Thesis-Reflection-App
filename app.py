@@ -347,7 +347,7 @@ tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 התקדמות", "🤖 
 
 # --- טאב 1: הזנה ---
 with tab1:
-    # התיקון כאן: clear_on_submit=True מנקה את הטופס אוטומטית אחרי שליחה
+    # הטופס מתנקה אוטומטית אחרי שליחה
     with st.form("reflection_form", clear_on_submit=True):
         st.markdown("#### 1. פרטי התצפית") 
         col1, col2 = st.columns(2)
@@ -373,7 +373,8 @@ with tab1:
             interpretation = st.text_area("💡 פרשנות אישית", height=100)
 
         st.markdown("#### 📷 תיעוד")
-        uploaded_image = st.file_uploader("העלאת תמונה", type=['jpg', 'jpeg', 'png'])
+        # שינוי כאן: תמיכה בריבוי קבצים
+        uploaded_images = st.file_uploader("העלאת תמונות (ניתן לבחור כמה)", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
 
         st.markdown("#### 4. מדדים")
         mc1, mc2 = st.columns(2)
@@ -393,21 +394,25 @@ with tab1:
                 "cat_convert_rep": cat_convert, "cat_dims_props": cat_dims, "cat_proj_trans": cat_proj, 
                 "cat_3d_support": cat_3d_support, "cat_self_efficacy": cat_self_efficacy,
                 "date": date.today().isoformat(), "timestamp": datetime.now().isoformat(),
-                "has_image": uploaded_image is not None
+                "has_image": bool(uploaded_images)
             }
             save_reflection(entry)
             svc = get_drive_service()
             if svc:
                 try:
-                    # 1. גיבוי קובץ בודד
+                    # 1. גיבוי קובץ הנתונים (JSON)
                     json_bytes = io.BytesIO(json.dumps(entry, ensure_ascii=False, indent=4).encode('utf-8'))
                     upload_file_to_drive(json_bytes, f"ref-{student_name}-{entry['date']}.json", 'application/json', svc)
                     
-                    if uploaded_image:
-                        image_bytes = io.BytesIO(uploaded_image.getvalue())
-                        upload_file_to_drive(image_bytes, f"img-{student_name}-{entry['date']}.jpg", 'image/jpeg', svc)
+                    # 2. שמירת כל התמונות (לולאה)
+                    if uploaded_images:
+                        for i, img_file in enumerate(uploaded_images):
+                            image_bytes = io.BytesIO(img_file.getvalue())
+                            # שם קובץ ייחודי לכל תמונה כדי לא לדרוס
+                            file_name = f"img-{student_name}-{entry['date']}_{i+1}.jpg"
+                            upload_file_to_drive(image_bytes, file_name, img_file.type, svc)
                     
-                    # 2. עדכון התיק האישי של התלמיד
+                    # 3. עדכון התיק האישי של התלמיד (Master File)
                     update_res = update_student_excel_in_drive(student_name, svc)
                     if update_res: st.toast(f"תיק אישי עודכן: Master_{student_name}.xlsx")
                     
