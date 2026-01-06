@@ -18,34 +18,14 @@ GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 
 # --- רשימת התלמידים המעודכנת ---
 CLASS_ROSTER = [
-    "נתנאל",
-    "רועי",
-    "אסף",
-    "עילאי",
-    "טדי",
-    "גאל",
-    "אופק",
-    "דניאל.ר",
-    "אלי",
-    "טיגרן",
-    "תלמיד אחר..." 
+    "נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "תלמיד אחר..." 
 ]
 
 OBSERVATION_TAGS = [
-    "התעלמות מקווים נסתרים",
-    "בלבול בין היטלים (צד/פנים/על)",
-    "קושי ברוטציה מנטלית",
-    "טעות בפרופורציות/מידות",
-    "קושי במעבר בין היטלים",
-    "שימוש בכלי מדידה",
-    "סיבוב פיזי של המודל",
-    "שימוש בתנועות ידיים (Embodiment)",
-    "ספירת משבצות",
-    "תיקון עצמי",
-    "בקשת אישור תכופה",
-    "ויתור/תסכול",
-    "עבודה עצמאית שוטפת",
-    "הבנה אינטואיטיבית מהירה"
+    "התעלמות מקווים נסתרים", "בלבול בין היטלים (צד/פנים/על)", "קושי ברוטציה מנטלית",
+    "טעות בפרופורציות/מידות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה",
+    "סיבוב פיזי של המודל", "שימוש בתנועות ידיים (Embodiment)", "ספירת משבצות",
+    "תיקון עצמי", "בקשת אישור תכופה", "ויתור/תסכול", "עבודה עצמאית שוטפת", "הבנה אינטואיטיבית מהירה"
 ]
 
 # --- 2. עיצוב (CSS) ---
@@ -56,7 +36,6 @@ def setup_design():
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
 
-            /* הגדרות בסיס */
             :root { --background-color: #ffffff; --text-color: #000000; }
             
             html, body, .stApp {
@@ -69,14 +48,12 @@ def setup_design():
 
             .block-container { padding-top: 1rem; padding-bottom: 5rem; max-width: 100%; }
 
-            /* כותרות וטקסטים */
             h1, h2, h3, h4, h5, h6, p, label, span, div, small { 
                 color: #000000 !important; 
                 text-align: right; 
             }
             h1 { text-align: center !important; }
 
-            /* שדות קלט */
             .stTextInput input, .stTextArea textarea, .stSelectbox > div > div {
                 background-color: #ffffff !important;
                 color: black !important;
@@ -86,7 +63,6 @@ def setup_design():
                 text-align: right;
             }
 
-            /* כפתורים */
             .stButton > button, .stDownloadButton > button {
                 background-color: #f0f2f6 !important;
                 color: black !important;
@@ -100,34 +76,11 @@ def setup_design():
                 border: none;
             }
 
-            /* תפריטים נפתחים */
-            div[data-baseweb="popover"], ul[data-baseweb="menu"] {
-                background-color: white !important;
-                text-align: right !important;
-            }
-            li[role="option"] {
-                color: black !important;
-                text-align: right !important;
-                direction: rtl !important;
-                justify-content: flex-end !important;
-            }
-
-            /* === תיקון הסליידרים (Select Slider) === */
             [data-testid="stSlider"] {
                 direction: ltr !important;
                 text-align: left !important;
             }
-            [data-testid="stSlider"] p {
-                direction: ltr !important; 
-                text-align: center !important;
-                font-weight: bold;
-                font-size: 16px;
-            }
-            div[data-testid="stThumbValue"] {
-                direction: ltr !important;
-            }
 
-            /* כרטיס */
             [data-testid="stForm"] {
                 background-color: #ffffff;
                 padding: 15px;
@@ -136,7 +89,6 @@ def setup_design():
                 border: 1px solid #e0e0e0;
             }
             
-            /* צ'אט */
             .stChatMessage { direction: rtl; text-align: right; background-color: #f9f9f9; }
             [data-testid="stChatMessageContent"] p { color: black !important; }
         </style>
@@ -164,7 +116,8 @@ def save_reflection(entry: dict) -> dict:
     return {"status": "saved", "date": entry["date"]}
 
 def load_data_as_dataframe():
-    columns = ["student_name", "lesson_id", "task_difficulty", "work_method", "tags", "planned", "done", "interpretation", "challenge", "cat_convert_rep", "cat_dims_props", "cat_proj_trans", "cat_3d_support", "cat_self_efficacy", "date", "timestamp", "has_image"]
+    """טוען את כל הנתונים המצטברים מהקובץ המקומי."""
+    columns = ["date", "student_name", "lesson_id", "task_difficulty", "work_method", "tags", "planned", "done", "interpretation", "challenge", "cat_convert_rep", "cat_dims_props", "cat_proj_trans", "cat_3d_support", "cat_self_efficacy"]
     if not os.path.exists(DATA_FILE): return pd.DataFrame(columns=columns)
     data = []
     with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -176,7 +129,13 @@ def load_data_as_dataframe():
             except: continue
     df = pd.DataFrame(data)
     if df.empty: return pd.DataFrame(columns=columns)
-    if "date" in df.columns: df["date"] = pd.to_datetime(df["date"])
+    
+    # ניקוי וסידור הנתונים
+    if "date" in df.columns: df["date"] = pd.to_datetime(df["date"]).dt.date
+    # המרת דירוגים למספרים לטובת חישובים באקסל
+    score_cols = [c for c in df.columns if "cat_" in c]
+    for col in score_cols: df[col] = pd.to_numeric(df[col], errors='coerce')
+    
     return df
 
 def load_last_week():
@@ -195,56 +154,34 @@ def load_last_week():
             except: continue
     return out
 
-# --- 4. פונקציות דרייב (כולל עדכון תיק אישי) ---
+# --- 4. פונקציות דרייב ---
 
 def upload_file_to_drive(file_obj, filename, mime_type, drive_service):
-    """מעלה קובץ רגיל (תמונה/דוח)"""
     media = MediaIoBaseUpload(file_obj, mimetype=mime_type)
     file_metadata = {'name': filename, 'parents': [GDRIVE_FOLDER_ID], 'mimeType': mime_type}
     drive_service.files().create(body=file_metadata, media_body=media, supportsAllDrives=True).execute()
 
 def update_student_excel_in_drive(student_name, drive_service):
-    """
-    יוצר או מעדכן קובץ אקסל ספציפי עבור תלמיד בודד.
-    """
     try:
-        # 1. שליפת כל הנתונים
         df = load_data_as_dataframe()
         if df.empty: return False
-        
-        # 2. סינון רק לתלמיד הזה
         student_df = df[df['student_name'] == student_name]
         if student_df.empty: return False
-        
-        # 3. הכנת שם הקובץ האישי
         filename = f"Master_{student_name}.xlsx"
-        
-        # 4. יצירת האקסל בזיכרון
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             student_df.to_excel(writer, index=False, sheet_name='History')
-        
-        # 5. בדיקה אם הקובץ קיים בדרייב
         query = f"name = '{filename}' and '{GDRIVE_FOLDER_ID}' in parents and trashed = false"
         results = drive_service.files().list(q=query, fields="files(id, name)").execute()
         files = results.get('files', [])
-        
         media = MediaIoBaseUpload(io.BytesIO(output.getvalue()), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", resumable=True)
-
         if not files:
-            # יצירת קובץ חדש
             file_metadata = {'name': filename, 'parents': [GDRIVE_FOLDER_ID]}
             drive_service.files().create(body=file_metadata, media_body=media).execute()
-            return "created"
         else:
-            # עדכון קובץ קיים
-            file_id = files[0]['id']
-            drive_service.files().update(fileId=file_id, media_body=media).execute()
-            return "updated"
-            
-    except Exception as e:
-        print(f"Error updating excel for {student_name}: {e}")
-        return "error"
+            drive_service.files().update(fileId=files[0]['id'], media_body=media).execute()
+        return True
+    except: return False
 
 def restore_from_drive():
     svc = get_drive_service()
@@ -253,13 +190,11 @@ def restore_from_drive():
         query = f"'{GDRIVE_FOLDER_ID}' in parents and mimeType='application/json' and trashed=false"
         results = svc.files().list(q=query, orderBy="createdTime desc").execute()
         files = results.get('files', [])
-        if not files:
-            st.toast("לא נמצאו קבצים.")
-            return False
+        if not files: return False
         existing_data = set()
         if os.path.exists(DATA_FILE):
-             with open(DATA_FILE, "r", encoding="utf-8") as f:
-                 for line in f: existing_data.add(line.strip())
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                for line in f: existing_data.add(line.strip())
         restored_count = 0
         for file in files:
             file_content = svc.files().get_media(fileId=file['id']).execute().decode('utf-8')
@@ -267,34 +202,20 @@ def restore_from_drive():
                 json_obj = json.loads(file_content)
                 json_line = json.dumps(json_obj, ensure_ascii=False)
                 if json_line not in existing_data:
-                    with open(DATA_FILE, "a", encoding="utf-8") as f:
-                        f.write(json_line + "\n")
+                    with open(DATA_FILE, "a", encoding="utf-8") as f: f.write(json_line + "\n")
                     existing_data.add(json_line)
                     restored_count += 1
             except: pass
-        if restored_count > 0:
-            st.toast(f"שוחזרו {restored_count} תצפיות!")
-            return True
-        else:
-            st.toast("הנתונים מעודכנים.")
-            return False
-    except Exception as e:
-        st.error(f"שגיאה: {e}")
-        return False
+        return restored_count > 0
+    except: return False
 
 # --- 5. פונקציות AI ---
 
 def generate_summary(entries: list) -> str:
     if not entries: return "אין נתונים."
-    readable = []
-    for e in entries:
-        readable.append(f"תלמיד: {e.get('student_name')} | תיאור: {e.get('done')} | פרשנות: {e.get('interpretation')} | ציונים: היטלים={e.get('cat_proj_trans')}")
+    readable = [f"תלמיד: {e.get('student_name')} | תיאור: {e.get('done')} | פרשנות: {e.get('interpretation')}" for e in entries]
     full_text = "\n".join(readable)
-    prompt = f"""
-    אתה עוזר מחקר אקדמי. כתוב דוח סיכום שבועי בעברית לתזה.
-    נושאים: מגמות כלליות, ניתוח פרטני, המלצות. דגש על פרשנות המורה ושימוש במודלים.
-    נתונים: {full_text}
-    """
+    prompt = f"כתוב דוח סיכום שבועי בעברית לתזה על סמך הנתונים הבאים:\n{full_text}"
     api_key = get_google_api_key()
     if not api_key: return "חסר מפתח API."
     try:
@@ -302,52 +223,29 @@ def generate_summary(entries: list) -> str:
         return client.models.generate_content(model="gemini-2.0-flash", contents=prompt).text
     except Exception as e: return f"שגיאה: {e}"
 
-def get_all_data_as_text():
-    df = load_data_as_dataframe()
-    if df.empty: return "אין נתונים."
-    text_data = ""
-    for _, row in df.iterrows():
-        text_data += f"[תצפית] {row['date']} | {row['student_name']} | קושי: {row.get('task_difficulty')} | שיטה: {row.get('work_method')} | תיאור: {row.get('done')} | פרשנות: {row.get('interpretation')} | ציונים: {row.get('cat_proj_trans')}\n"
-    return text_data
-
 def chat_with_data(user_query, context_data):
     api_key = get_google_api_key()
-    if not api_key: return "חסר מפתח."
-    prompt = f"""
-    אתה עוזר מחקר אקדמי. ענה על סמך הנתונים בלבד.
-    נתונים: {context_data}
-    שאלה: {user_query}
-    ענה בעברית מקצועית.
-    """
+    prompt = f"ענה על סמך הנתונים בלבד: {context_data}\nשאלה: {user_query}"
     try:
         client = genai.Client(api_key=api_key)
         return client.models.generate_content(model="gemini-2.0-flash", contents=prompt).text
     except: return "שגיאה."
 
 def render_slider_metric(label, key):
-    st.markdown(f"<div style='text-align: right; direction: rtl; font-weight: bold; margin-bottom: 5px;'>{label}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align: right; font-weight: bold;'>{label}</div>", unsafe_allow_html=True)
     val = st.select_slider("", options=[1, 2, 3, 4, 5], value=3, key=key, label_visibility="collapsed")
-    st.markdown(
-        """<div style="display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: #555; margin-top: -10px;">
-        <span>1 (קושי רב)</span>
-        <span>5 (שליטה מלאה)</span>
-        </div>""", unsafe_allow_html=True
-    )
     return val
 
 # -----------------------------
 # 6. ממשק ראשי
 # -----------------------------
 setup_design()
-
 st.title("🎓 יומן תצפית")
-st.markdown("### מעקב אחר מיומנויות תפיסה מרחבית")
 
 tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 התקדמות", "🤖 עוזר מחקרי"])
 
-# --- טאב 1: הזנה ---
+# --- טאב 1: רפלקציה ---
 with tab1:
-    # הטופס מתנקה אוטומטית אחרי שליחה
     with st.form("reflection_form", clear_on_submit=True):
         st.markdown("#### 1. פרטי התצפית") 
         col1, col2 = st.columns(2)
@@ -355,160 +253,107 @@ with tab1:
             selected_student = st.selectbox("👤 שם תלמיד", CLASS_ROSTER)
             student_name = st.text_input("✍️ הזן שם:") if selected_student == "תלמיד אחר..." else selected_student
         with col2:
-            lesson_id = st.text_input("📚 שיעור", placeholder="לדוגמה: היטלים 1")
+            lesson_id = st.text_input("📚 שיעור")
             task_difficulty = st.selectbox("⚖️ קושי", ["בסיסי", "בינוני", "מתקדם"])
-
-        st.markdown("#### 2. אופן העבודה")
-        work_method = st.radio("🛠️", ["🎨 ללא גוף (דמיון)", "🧊 בעזרת גוף מודפס"], horizontal=True, label_visibility="collapsed")
-
-        st.markdown("#### 3. תיאור ופרשנות")
+        
+        work_method = st.radio("🛠️ אופן עבודה", ["🎨 ללא גוף (דמיון)", "🧊 בעזרת גוף מודפס"], horizontal=True)
         selected_tags = st.multiselect("🏷️ תגיות:", OBSERVATION_TAGS)
         
         c1, c2 = st.columns(2)
         with c1:
-            planned = st.text_area("📋 המטלה", height=100)
-            challenge = st.text_area("🗣️ ציטוטים", height=100)
+            planned = st.text_area("📋 המטלה")
+            challenge = st.text_area("🗣️ ציטוטים")
         with c2:
-            done = st.text_area("👀 פעולות", height=100)
-            interpretation = st.text_area("💡 פרשנות אישית", height=100)
-
-        st.markdown("#### 📷 תיעוד")
-        # שינוי כאן: תמיכה בריבוי קבצים
-        uploaded_images = st.file_uploader("העלאת תמונות (ניתן לבחור כמה)", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
-
+            done = st.text_area("👀 פעולות")
+            interpretation = st.text_area("💡 פרשנות")
+            
+        uploaded_images = st.file_uploader("📷 תמונות", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
+        
         st.markdown("#### 4. מדדים")
-        mc1, mc2 = st.columns(2)
-        with mc1:
-            cat_convert = render_slider_metric("🔄 המרת ייצוגים", "m1")
-            cat_dims = render_slider_metric("📏 מידות", "m2")
-        with mc2:
-            cat_proj = render_slider_metric("📐 מעבר היטלים", "m3")
-            cat_3d_support = render_slider_metric("🧊 שימוש בגוף", "m4")
+        cat_convert = render_slider_metric("🔄 המרת ייצוגים", "m1")
+        cat_dims = render_slider_metric("📏 מידות", "m2")
+        cat_proj = render_slider_metric("📐 מעבר היטלים", "m3")
+        cat_3d_support = render_slider_metric("🧊 שימוש בגוף", "m4")
         cat_self_efficacy = render_slider_metric("💪 מסוגלות עצמית", "m5")
 
         if st.form_submit_button("💾 שמור תצפית"):
             entry = {
-                "type": "reflection", "student_name": student_name, "lesson_id": lesson_id,
-                "task_difficulty": task_difficulty, "work_method": work_method, "tags": selected_tags, 
-                "planned": planned, "done": done, "challenge": challenge, "interpretation": interpretation, 
-                "cat_convert_rep": cat_convert, "cat_dims_props": cat_dims, "cat_proj_trans": cat_proj, 
-                "cat_3d_support": cat_3d_support, "cat_self_efficacy": cat_self_efficacy,
-                "date": date.today().isoformat(), "timestamp": datetime.now().isoformat(),
-                "has_image": bool(uploaded_images)
+                "type": "reflection", "student_name": student_name, "lesson_id": lesson_id, "task_difficulty": task_difficulty, 
+                "work_method": work_method, "tags": selected_tags, "planned": planned, "done": done, "challenge": challenge, 
+                "interpretation": interpretation, "cat_convert_rep": cat_convert, "cat_dims_props": cat_dims, 
+                "cat_proj_trans": cat_proj, "cat_3d_support": cat_3d_support, "cat_self_efficacy": cat_self_efficacy,
+                "date": date.today().isoformat(), "timestamp": datetime.now().isoformat(), "has_image": bool(uploaded_images)
             }
             save_reflection(entry)
             svc = get_drive_service()
             if svc:
-                try:
-                    # 1. גיבוי קובץ הנתונים (JSON)
-                    json_bytes = io.BytesIO(json.dumps(entry, ensure_ascii=False, indent=4).encode('utf-8'))
-                    upload_file_to_drive(json_bytes, f"ref-{student_name}-{entry['date']}.json", 'application/json', svc)
-                    
-                    # 2. שמירת כל התמונות (לולאה)
-                    if uploaded_images:
-                        for i, img_file in enumerate(uploaded_images):
-                            image_bytes = io.BytesIO(img_file.getvalue())
-                            # שם קובץ ייחודי לכל תמונה כדי לא לדרוס
-                            file_name = f"img-{student_name}-{entry['date']}_{i+1}.jpg"
-                            upload_file_to_drive(image_bytes, file_name, img_file.type, svc)
-                    
-                    # 3. עדכון התיק האישי של התלמיד (Master File)
-                    update_res = update_student_excel_in_drive(student_name, svc)
-                    if update_res: st.toast(f"תיק אישי עודכן: Master_{student_name}.xlsx")
-                    
-                except Exception as e: st.error(f"שגיאה בענן: {e}")
-            
-            st.balloons()
-            st.success("נשמר בהצלחה! הטופס נוקה לתצפית הבאה.")
+                json_bytes = io.BytesIO(json.dumps(entry, ensure_ascii=False, indent=4).encode('utf-8'))
+                upload_file_to_drive(json_bytes, f"ref-{student_name}-{entry['date']}.json", 'application/json', svc)
+                if uploaded_images:
+                    for i, img in enumerate(uploaded_images):
+                        upload_file_to_drive(io.BytesIO(img.getvalue()), f"img-{student_name}-{entry['date']}_{i+1}.jpg", img.type, svc)
+                update_student_excel_in_drive(student_name, svc)
+            st.success("נשמר בהצלחה!")
 
-# --- טאב 2: דאשבורד ---
+# --- טאב 2: התקדמות (כאן נמצא החידוש) ---
 with tab2:
-    st.markdown("### 📊 לוח בקרה")
-    if st.button("🔄 סנכרן מהדרייב"):
-         with st.spinner("מסנכרן..."):
-            if restore_from_drive(): st.rerun()
-            else: st.info("הנתונים מעודכנים.")
-    
-    st.divider()
-    
+    st.markdown("### 📊 לוח בקרה וניהול נתונים")
     df = load_data_as_dataframe()
-    export_df = df.copy()
-    if "tags" in export_df.columns: export_df["tags"] = export_df["tags"].apply(lambda x: ", ".join(x) if isinstance(x, list) else x)
     
-    st.markdown("#### 📥 ייצוא נתונים (כללי)")
-    d1, d2 = st.columns(2)
-    with d1:
-        st.download_button("📄 הורד CSV (הכל)", export_df.to_csv(index=False).encode('utf-8'), "data.csv", "text/csv")
-    with d2:
-        try:
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer: export_df.to_excel(writer, index=False)
-            st.download_button("📊 הורד Excel (הכל)", output.getvalue(), "data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        except: pass
-
-    # --- כפתור מיוחד ליצירת כל התיקים האישיים (בדיעבד) ---
-    st.markdown("#### 📂 ניהול תיקי תלמידים")
-    if st.button("🔄 עדכן את כל תיקי התלמידים בדרייב"):
-        svc = get_drive_service()
-        if svc and not df.empty:
-            all_students = df['student_name'].unique()
-            progress_bar = st.progress(0)
-            for i, name in enumerate(all_students):
-                update_student_excel_in_drive(name, svc)
-                progress_bar.progress((i + 1) / len(all_students))
-            st.success(f"עודכנו {len(all_students)} תיקים אישיים בדרייב!")
-        else:
-            st.error("אין נתונים או אין חיבור לדרייב.")
-
-    st.divider()
-
+    # --- כפתור הורדה מרוכז לכל ההיסטוריה ---
     if not df.empty:
-        k1, k2, k3 = st.columns(3)
-        k1.metric("סה'כ תצפיות", len(df))
-        k2.metric("תלמידים", df['student_name'].nunique())
-        try: k3.metric("ממוצע היטלים", f"{df['cat_proj_trans'].mean():.1f}")
-        except: pass
+        st.markdown("#### 📥 ייצוא כל התצפיות לאקסל")
+        st.info(f"במערכת קיימות {len(df)} תצפיות מצטברות.")
         
-        st.markdown("#### 📈 גרף התקדמות")
-        student = st.selectbox("בחר תלמיד לגרף:", df['student_name'].unique())
+        # הכנת קובץ אקסל בזיכרון
+        excel_all = io.BytesIO()
+        with pd.ExcelWriter(excel_all, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='All_Observations')
+        
+        st.download_button(
+            label="📥 הורד את כל היסטוריית התצפיות (Excel)",
+            data=excel_all.getvalue(),
+            file_name=f"Full_Observations_Export_{date.today()}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+        st.divider()
+        st.markdown("#### 🔄 סנכרון וניהול תיקים")
+        if st.button("🔄 סנכרן נתונים מהדרייב (שחזור)"):
+            if restore_from_drive(): st.rerun()
+        
+        if st.button("📂 עדכן את כל התיקים האישיים בדרייב"):
+            svc = get_drive_service()
+            if svc:
+                all_students = df['student_name'].unique()
+                for name in all_students: update_student_excel_in_drive(name, svc)
+                st.success("כל התיקים האישיים עודכנו בדרייב!")
+
+        st.divider()
+        st.markdown("#### 📈 גרף התקדמות אישי")
+        student = st.selectbox("בחר תלמיד לצפייה:", df['student_name'].unique())
         st_df = df[df['student_name'] == student].sort_values("date")
-        st.line_chart(st_df.set_index("date")[['cat_proj_trans', 'cat_3d_support', 'cat_self_efficacy']])
+        st.line_chart(st_df.set_index("date")[['cat_proj_trans', 'cat_self_efficacy']])
     else:
-        st.info("אין נתונים להצגה בגרפים.")
+        st.info("אין עדיין נתונים במערכת.")
 
 # --- טאב 3: AI ---
 with tab3:
-    st.markdown("### 🤖 עוזר מחקרי")
-    
-    st.markdown("#### 📄 דוח שבועי")
-    if st.button("✨ צור סיכום שבועי ושמור"):
+    st.markdown("### 🤖 עוזר מחקרי (AI)")
+    if st.button("✨ צור סיכום שבועי"):
         entries = load_last_week()
-        if not entries: st.warning("אין נתונים מהשבוע האחרון.")
-        else:
-            with st.spinner("מכין דוח..."):
-                res = generate_summary(entries)
-                st.markdown(res)
-                svc = get_drive_service()
-                if svc:
-                    try:
-                        upload_file_to_drive(io.BytesIO(res.encode('utf-8')), f"Summary-{date.today()}.txt", 'text/plain', svc)
-                        st.success("נשמר בדרייב!")
-                    except: pass
-
-    st.divider()
-    st.markdown("#### 💬 צ'אט עם הנתונים")
+        if entries: st.markdown(generate_summary(entries))
+        else: st.warning("אין נתונים מהשבוע האחרון.")
     
+    st.divider()
     if "messages" not in st.session_state: st.session_state.messages = []
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]): st.markdown(msg["content"])
-        
-    if prompt := st.chat_input("שאל משהו על הנתונים..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"): st.markdown(prompt)
-        with st.chat_message("assistant"):
-            with st.spinner("חושב..."):
-                ans = chat_with_data(prompt, get_all_data_as_text())
-                st.markdown(ans)
+    if p := st.chat_input("שאל על הנתונים:"):
+        st.session_state.messages.append({"role": "user", "content": p})
+        with st.chat_message("user"): st.markdown(p)
+        ans = chat_with_data(p, df.to_string())
+        with st.chat_message("assistant"): st.markdown(ans)
         st.session_state.messages.append({"role": "assistant", "content": ans})
 
-# --- סוף הקוד ---
+# סוף הקוד
