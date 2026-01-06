@@ -16,11 +16,12 @@ GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 MASTER_FILENAME = "All_Observations_Master.xlsx"
 
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "תלמיד אחר..."]
+
+# שמות המדדים המדויקים כפי שהיו במקור
 OBSERVATION_TAGS = [
-    "התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית",
-    "טעות בפרופורציות/מידות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה",
-    "סיבוב פיזי של המודל", "שימוש בתנועות ידיים (Embodiment)", "ספירת משבצות",
-    "תיקון עצמי", "בקשת אישור תכופה", "ויתור/תסכול", "עבודה עצמאית שוטפת"
+    "התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", 
+    "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", 
+    "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"
 ]
 
 # --- 2. עיצוב (CSS) ---
@@ -108,11 +109,11 @@ with tab1:
         uploaded_files = st.file_uploader("📸 העלאת תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
         
         st.subheader("📊 מדדי הערכה (1-5)")
-        m1 = st.select_slider("🔄 המרת ייצוגים (דו-מימד לתלת-מימד)", options=[1,2,3,4,5], value=3)
-        m2 = st.select_slider("📐 שליטה במעבר בין היטלים", options=[1,2,3,4,5], value=3)
-        m3 = st.select_slider("🧠 תפיסה מרחבית כללית", options=[1,2,3,4,5], value=3)
+        m1 = st.select_slider("📐 רמת שליטה בהיטלים", options=[1,2,3,4,5], value=3)
+        m2 = st.select_slider("🧠 תפיסה מרחבית כללית", options=[1,2,3,4,5], value=3)
+        m3 = st.select_slider("🔄 המרת ייצוגים", options=[1,2,3,4,5], value=3)
         m4 = st.select_slider("💪 מסוגלות עצמית נצפית", options=[1,2,3,4,5], value=3)
-        m5 = st.select_slider("🧊 איכות השימוש במודל פיזי", options=[1,2,3,4,5], value=3)
+        m5 = st.select_slider("🧊 איכות השימוש במודל", options=[1,2,3,4,5], value=3)
 
         if st.form_submit_button("💾 שמור תצפית ועדכן דרייב"):
             svc = get_drive_service()
@@ -125,7 +126,7 @@ with tab1:
                 "type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
                 "lesson_id": lesson_id, "tags": ", ".join(tags), "planned": planned, 
                 "done": done, "challenge": challenge, "interpretation": interpretation,
-                "score_conv": m1, "score_proj": m2, "score_spatial": m3, "score_efficacy": m4, "score_model": m5,
+                "score_proj": m1, "score_spatial": m2, "score_conv": m3, "score_efficacy": m4, "score_model": m5,
                 "images": ", ".join(img_links), "timestamp": datetime.now().strftime("%H:%M:%S")
             }
             save_local(entry)
