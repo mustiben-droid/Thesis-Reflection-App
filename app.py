@@ -23,8 +23,6 @@ OBSERVATION_TAGS = [
     "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"
 ]
 
-TASK_TYPES = ["מעבר דו-מימד לתלת-מימד", "בניית מודל משרטוט", "שרטוט היטל שלישי", "רוטציה מנטלית", "אחר..."]
-
 # --- 2. עיצוב (CSS) ---
 def setup_design():
     st.set_page_config(page_title="יומן תצפית מחקרי", page_icon="🎓", layout="centered")
@@ -38,7 +36,7 @@ def setup_design():
         </style>
     """, unsafe_allow_html=True)
 
-# --- 3. פונקציות שירות ועיבוד נתונים ---
+# --- 3. פונקציות שירות ---
 def get_drive_service():
     try:
         json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
@@ -46,8 +44,13 @@ def get_drive_service():
         return build("drive", "v3", credentials=creds)
     except: return None
 
+def upload_image_to_drive(uploaded_file, svc):
+    file_metadata = {'name': uploaded_file.name, 'parents': [GDRIVE_FOLDER_ID]}
+    media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
+    file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
+    return file.get('webViewLink')
+
 def process_tags_to_columns(df):
-    """הופך את רשימת התגיות לעמודות נפרדות של 0 ו-1 (ניתוח כמותני)"""
     for tag in OBSERVATION_TAGS:
         df[f"tag_{tag}"] = df['tags'].apply(lambda x: 1 if isinstance(x, str) and tag in x else 0)
     return df
@@ -56,9 +59,7 @@ def update_master_excel(data_to_add, svc, overwrite=False):
     try:
         query = f"name = '{MASTER_FILENAME}' and '{GDRIVE_FOLDER_ID}' in parents and trashed = false"
         res = svc.files().list(q=query).execute().get('files', [])
-        
         new_df = pd.DataFrame(data_to_add)
-        
         if res and not overwrite:
             file_id = res[0]['id']
             request = svc.files().get_media(fileId=file_id)
@@ -72,54 +73,58 @@ def update_master_excel(data_to_add, svc, overwrite=False):
         else:
             df = new_df
             file_id = res[0]['id'] if res else None
-
-        # עיבוד תגיות לעמודות סטטיסטיות לפני השמירה
         df = process_tags_to_columns(df)
-        
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False)
+        with pd.ExcelWriter(output, engine='openpyxl') as writer: df.to_excel(writer, index=False)
         output.seek(0)
-        
         media = MediaIoBaseUpload(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         if file_id: svc.files().update(fileId=file_id, media_body=media).execute()
         else: svc.files().create(body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID]}, media_body=media).execute()
         return True
-    except Exception as e:
-        st.error(f"שגיאה בעדכון האקסל: {e}")
-        return False
+    except: return False
+
+def save_local(entry):
+    with open(DATA_FILE, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+def generate_weekly_summary(entries):
+    if not entries: return "אין מספיק נתונים לסיכום."
+    full_text = "נתוני תצפיות מהשבוע האחרון:\n"
+    for e in entries:
+        full_text += f"- תלמיד: {e.get('student_name')}, פעולות: {e.get('done')}, קושי: {e.get('challenge')}\n"
+    prompt = f"נתח את הרפלקציות הבאות עבור מחקר תזה. סכם מגמות והמלצות:\n{full_text}"
+    try:
+        client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+        return response.text
+    except Exception as e: return f"שגיאה: {e}"
 
 # --- 4. ממשק המשתמש ---
 setup_design()
-st.title("🎓 יומן תצפית - מהדורת מחקר תזה")
+st.title("🎓 יומן תצפית - מהדורת מחקר מלאה")
 
-tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 ניהול נתונים", "💬 צ'אט AI"])
+tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 ניהול נתונים", "🤖 עוזר AI"])
 
 with tab1:
     with st.form("main_form", clear_on_submit=True):
-        st.subheader("1. פרטי המטלה")
-        c1, c2, c3 = st.columns([2, 2, 1])
+        st.subheader("1. פרטי התצפית")
+        c1, c2 = st.columns([3, 2])
         with c1:
             sel = st.selectbox("👤 שם תלמיד", CLASS_ROSTER)
             student_name = st.text_input("שם חופשי:") if sel == "תלמיד אחר..." else sel
         with c2:
-            task_type = st.selectbox("🎯 סוג מטלה", TASK_TYPES)
-        with c3:
-            difficulty = st.select_slider("⚖️ קושי", options=[1, 2, 3], value=2, help="1=קל, 2=בינוני, 3=קשה")
+            difficulty = st.select_slider("⚖️ רמת קושי המטלה", options=[1, 2, 3], value=2)
 
         st.subheader("2. כמות וזמן")
-        col_time, col_draw = st.columns(2)
-        with col_time:
-            work_duration = st.number_input("⏱️ זמן עבודה (דקות)", min_value=0, step=5)
-        with col_draw:
-            drawings_count = st.number_input("✏️ מספר שרטוטים שבוצעו", min_value=0, step=1)
+        col_t, col_d = st.columns(2)
+        with col_t: work_duration = st.number_input("⏱️ זמן עבודה (דקות)", min_value=0, step=5)
+        with col_d: drawings_count = st.number_input("✏️ מספר שרטוטים", min_value=0, step=1)
 
         tags = st.multiselect("🏷️ תגיות נצפות", OBSERVATION_TAGS)
         
-        st.subheader("3. תיאור איכותני")
         ca, cb = st.columns(2)
         with ca:
-            planned = st.text_area("📋 תיאור המטלה")
+            planned = st.text_area("📋 תיאור המטלה / נושא")
             challenge = st.text_area("🗣️ ציטוטים וקשיים")
         with cb:
             done = st.text_area("👀 פעולות שבוצעו")
@@ -135,39 +140,76 @@ with tab1:
         m4 = m_cols[3].select_slider("מסוגלות", options=[1,2,3,4,5], value=3)
         m5 = m_cols[4].select_slider("מודל", options=[1,2,3,4,5], value=3)
 
-        if st.form_submit_button("💾 שמור תצפית למחקר"):
-            # העלאת תמונות וקבלת לינקים (פונקציה קיימת מהגרסאות הקודמות)
+        if st.form_submit_button("💾 שמור תצפית"):
             svc = get_drive_service()
             img_links = []
-            # ... (לוגיקת העלאת תמונות)
+            if svc and uploaded_files:
+                for f in uploaded_files: img_links.append(upload_image_to_drive(f, svc))
             
             entry = {
                 "type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
-                "task_type": task_type, "difficulty": difficulty, "duration_min": work_duration, 
-                "drawings_count": drawings_count, "tags": ", ".join(tags), 
-                "planned": planned, "done": done, "challenge": challenge, "interpretation": interpretation,
-                "score_proj": m1, "score_spatial": m2, "score_conv": m3, "score_efficacy": m4, "score_model": m5,
+                "difficulty": difficulty, "duration_min": work_duration, "drawings_count": drawings_count,
+                "tags": ", ".join(tags), "planned": planned, "done": done, "challenge": challenge, 
+                "interpretation": interpretation, "score_proj": m1, "score_spatial": m2, 
+                "score_conv": m3, "score_efficacy": m4, "score_model": m5, "images": ", ".join(img_links),
                 "timestamp": datetime.now().strftime("%H:%M:%S")
             }
-            
-            with open(DATA_FILE, "a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-            
+            save_local(entry)
             if svc: update_master_excel([entry], svc)
-            st.success("הנתונים עובדו ונשמרו באקסל המרכזי! ✅")
+            st.success("נשמר בהצלחה! ✅")
 
 with tab2:
-    st.header("📊 סנכרון ועיבוד")
-    if st.button("🔄 רענן וסנכרן את כל ההיסטוריה לאקסל חכם"):
+    st.header("📊 ניהול וסנכרון")
+    if st.button("🔄 סנכרן את כל ההיסטוריה לאקסל בדרייב"):
         if os.path.exists(DATA_FILE):
-            all_data = [json.loads(line) for line in open(DATA_FILE, "r", encoding="utf-8") if json.loads(line).get("type")=="reflection"]
+            all_data = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
             svc = get_drive_service()
             if svc:
                 update_master_excel(all_data, svc, overwrite=True)
-                st.success("כל הנתונים עובדו מחדש עם עמודות סטטיסטיות! ✅")
+                st.success("הסנכרון הושלם! ✅")
 
 with tab3:
-    st.header("💬 צ'אט מחקרי")
-    # ... (ממשק הצ'אט מהגרסה הקודמת)
+    st.header("🤖 כלי AI למחקר")
+    
+    # חלק 1: סיכום שבועי
+    if st.button("✨ צור סיכום Gemini לשבוע האחרון"):
+        today = date.today()
+        week_ago = (today - timedelta(days=7)).isoformat()
+        if os.path.exists(DATA_FILE):
+            entries = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") 
+                       if json.loads(l).get("type")=="reflection" and json.loads(l).get("date") >= week_ago]
+            with st.spinner("מנתח נתונים..."):
+                summary = generate_weekly_summary(entries)
+                save_local({"type": "weekly_summary", "date": today.isoformat(), "content": summary})
+                st.markdown(summary)
+
+    st.divider()
+    
+    # חלק 2: צ'אט חופשי
+    if "messages" not in st.session_state: st.session_state.messages = []
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]): st.markdown(msg["content"])
+
+    if pr := st.chat_input("שאל על הנתונים..."):
+        st.session_state.messages.append({"role": "user", "content": pr})
+        with st.chat_message("user"): st.markdown(pr)
+        context = ""
+        if os.path.exists(DATA_FILE):
+            ents = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
+            context = "נתונים:\n" + "\n".join([str(e) for e in ents[-10:]])
+        with st.chat_message("assistant"):
+            try:
+                client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+                res = client.models.generate_content(model="gemini-2.0-flash", contents=f"{context}\nשאלה: {pr}")
+                st.markdown(res.text)
+                st.session_state.messages.append({"role": "assistant", "content": res.text})
+            except Exception as e: st.error(str(e))
+
+    st.divider()
+    st.subheader("📚 ארכיון סיכומים שבועיים")
+    if os.path.exists(DATA_FILE):
+        sums = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="weekly_summary"]
+        for s in reversed(sums):
+            with st.expander(f"סיכום מתאריך {s['date']}"): st.markdown(s['content'])
 
 # --- סוף הקוד ---
