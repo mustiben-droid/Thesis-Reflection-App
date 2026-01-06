@@ -2,7 +2,6 @@ import json
 import base64
 import os
 import io
-from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 from google.oauth2.service_account import Credentials
@@ -16,59 +15,68 @@ MASTER_FILENAME = "All_Observations_Master.xlsx"
 def get_drive_service():
     try:
         json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
-        creds = Credentials.from_service_account_info(json.loads(json_str), scopes=["https://www.googleapis.com/auth/drive.file"])
+        creds = Credentials.from_service_account_info(json.loads(json_str), scopes=["https://www.googleapis.com/auth/drive"])
         return build("drive", "v3", credentials=creds)
-    except: return None
+    except Exception as e:
+        st.error(f"שגיאת חיבור: {e}")
+        return None
 
-def sync_all_from_drive():
-    """סורק את כל קבצי ה-JSON בדרייב ומאחד אותם לאקסל אחד."""
+def debug_and_sync():
     svc = get_drive_service()
-    if not svc: return "שגיאת חיבור לדרייב"
+    if not svc: return
     
-    # חיפוש כל קבצי ה-JSON בתיקייה
-    query = f"'{GDRIVE_FOLDER_ID}' in parents and mimeType = 'application/json' and trashed = false"
-    results = svc.files().list(q=query, fields="files(id, name)").execute()
+    st.write(f"🔍 בודק את תיקייה: `{GDRIVE_FOLDER_ID}`")
+    
+    # חיפוש כל הקבצים בתיקייה ללא הגבלת סוג (כדי לראות מה יש שם)
+    query = f"'{GDRIVE_FOLDER_ID}' in parents and trashed = false"
+    results = svc.files().list(q=query, fields="files(id, name, mimeType)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
     files = results.get('files', [])
     
-    if not files: return "לא נמצאו קבצי נתונים (JSON) בדרייב"
+    if not files:
+        st.warning("⚠️ לא נמצאו קבצים כלל בתיקייה הזו בדרייב.")
+        return
+
+    st.write(f"מצאתי {len(files)} קבצים בתיקייה. מנתח נתונים...")
     
     all_data = []
     for f in files:
-        content = svc.files().get_media(fileId=f['id']).execute()
-        try:
-            data = json.loads(content)
-            all_data.append(data)
-        except: continue
-    
+        # אנחנו מחפשים קבצי JSON שהם התצפיות ששמרת בעבר
+        if "json" in f['mimeType'] or f['name'].endswith(".json"):
+            try:
+                content = svc.files().get_media(fileId=f['id']).execute()
+                data = json.loads(content)
+                # אם זה קובץ תצפית תקין, נוסיף אותו
+                if isinstance(data, dict):
+                    all_data.append(data)
+            except:
+                continue
+
     if all_data:
+        st.success(f"✅ הצלחתי לאסוף {len(all_data)} תצפיות!")
         df = pd.DataFrame(all_data)
+        
+        # יצירת האקסל
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False)
         output.seek(0)
         
-        # שמירת האקסל המאוחד לדרייב
+        # העלאה לדרייב
         media = MediaIoBaseUpload(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         meta = {'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID]}
         
-        # בדיקה אם האקסל כבר קיים כדי לעדכן אותו במקום ליצור חדש
-        exist_query = f"name = '{MASTER_FILENAME}' and '{GDRIVE_FOLDER_ID}' in parents and trashed = false"
-        exist_res = svc.files().list(q=exist_query).execute().get('files', [])
-        
-        if exist_res:
-            svc.files().update(fileId=exist_res[0]['id'], media_body=media, supportsAllDrives=True).execute()
-        else:
+        try:
             svc.files().create(body=meta, media_body=media, supportsAllDrives=True).execute()
-            
-        return f"הצלחה! אוחדו {len(all_data)} תצפיות לקובץ אקסל אחד בדרייב."
-    return "לא נמצאו נתונים תקינים."
+            st.balloons()
+            st.success(f"🌟 הקובץ `{MASTER_FILENAME}` נוצר בהצלחה בדרייב!")
+        except Exception as e:
+            st.error(f"שגיאה ביצירת האקסל: {e}")
+    else:
+        st.error("❌ לא נמצאו קבצי תצפיות (JSON) בתיקייה, למרות שיש בה קבצים אחרים.")
 
-# --- ממשק פשוט לבדיקה ---
-st.title("🔄 שחזור ואיחוד נתונים מהדרייב")
-
-if st.button("🚀 סרוק דרייב ואחד את כל התצפיות לאקסל"):
-    with st.spinner("סורק קבצים..."):
-        message = sync_all_from_drive()
-        st.success(message)
+# --- ממשק ---
+st.title("🛠️ אבחון וסינכרון נתונים")
+if st.button("התחל אבחון וחיבור נתונים"):
+    debug_and_sync()
 
 # סוף הקוד
