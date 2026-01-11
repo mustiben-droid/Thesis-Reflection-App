@@ -15,7 +15,6 @@ DATA_FILE = "reflections.jsonl"
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 MASTER_FILENAME = "All_Observations_Master.xlsx"
 
-# רשימת התלמידים המעודכנת
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 
 OBSERVATION_TAGS = [
@@ -42,16 +41,28 @@ def setup_design():
 # --- 3. פונקציות שירות ---
 def get_drive_service():
     try:
+        # כאן אנחנו מפענחים את ה-B64 כדי שהקוד יבין את המפתח
         json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
-        creds = Credentials.from_service_account_info(json.loads(json_str), scopes=["https://www.googleapis.com/auth/drive.file"])
+        info = json.loads(json_str)
+        
+        # השורה הזו תדפיס לנו את המייל בתוך האפליקציה כדי שתוכל להעתיק אותו
+        st.info(f"📧 כתובת המייל לשיתוף בדרייב: {info.get('client_email')}")
+        
+        creds = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive.file"])
         return build("drive", "v3", credentials=creds)
-    except: return None
+    except Exception as e:
+        st.error(f"שגיאה בחיבור לשירות: {e}")
+        return None
 
 def upload_image_to_drive(uploaded_file, svc):
-    file_metadata = {'name': uploaded_file.name, 'parents': [GDRIVE_FOLDER_ID]}
-    media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
-    file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
-    return file.get('webViewLink')
+    try:
+        file_metadata = {'name': uploaded_file.name, 'parents': [GDRIVE_FOLDER_ID]}
+        media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
+        file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
+        return file.get('webViewLink')
+    except Exception as e:
+        st.error(f"לא הצלחתי להעלות תמונה. וודא שהתיקייה משותפת עם המייל הכחול למעלה. שגיאה: {e}")
+        return None
 
 def process_tags_to_columns(df):
     for tag in OBSERVATION_TAGS:
@@ -65,7 +76,7 @@ def update_master_excel(data_to_add, svc, overwrite=False):
         new_df = pd.DataFrame(data_to_add)
         if res and not overwrite:
             file_id = res[0]['id']
-            request = svc.files().get_media(file_id=file_id)
+            request = svc.files().get_media(fileId=file_id)
             fh = io.BytesIO()
             downloader = MediaIoBaseDownload(fh, request)
             done = False
@@ -109,6 +120,8 @@ st.title("🎓 יומן תצפית - מהדורת מחקר מלאה")
 tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 ניהול נתונים", "🤖 עוזר AI"])
 
 with tab1:
+    svc = get_drive_service() # זה ידפיס את המייל למעלה
+    
     with st.form("main_form", clear_on_submit=True):
         st.subheader("1. פרטי התצפית")
         c1, c2 = st.columns([3, 2])
@@ -152,10 +165,11 @@ with tab1:
         m5 = m_cols[4].select_slider("מודל", options=[1,2,3,4,5], value=3)
 
         if st.form_submit_button("💾 שמור תצפית"):
-            svc = get_drive_service()
             img_links = []
             if svc and uploaded_files:
-                for f in uploaded_files: img_links.append(upload_image_to_drive(f, svc))
+                for f in uploaded_files: 
+                    link = upload_image_to_drive(f, svc)
+                    if link: img_links.append(link)
             
             entry = {
                 "type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
@@ -174,7 +188,6 @@ with tab2:
     if st.button("🔄 סנכרן את כל ההיסטוריה לאקסל בדרייב"):
         if os.path.exists(DATA_FILE):
             all_data = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
-            svc = get_drive_service()
             if svc:
                 update_master_excel(all_data, svc, overwrite=True)
                 st.success("הסנכרון הושלם! ✅")
