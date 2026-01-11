@@ -15,7 +15,8 @@ DATA_FILE = "reflections.jsonl"
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 MASTER_FILENAME = "All_Observations_Master.xlsx"
 
-CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "תלמיד אחר..."]
+# רשימת התלמידים המעודכנת
+CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 
 OBSERVATION_TAGS = [
     "התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", 
@@ -33,6 +34,8 @@ def setup_design():
             .stTextInput input, .stTextArea textarea, .stSelectbox > div > div { direction: rtl; text-align: right; }
             .stButton > button { width: 100%; font-weight: bold; border-radius: 10px; }
             [data-testid="stSlider"] { direction: ltr !important; }
+            .stRadio > div { flex-direction: row-reverse !important; gap: 20px; }
+            div[data-baseweb="select"] > div { direction: rtl; text-align: right; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -62,7 +65,7 @@ def update_master_excel(data_to_add, svc, overwrite=False):
         new_df = pd.DataFrame(data_to_add)
         if res and not overwrite:
             file_id = res[0]['id']
-            request = svc.files().get_media(fileId=file_id)
+            request = svc.files().get_media(file_id=file_id)
             fh = io.BytesIO()
             downloader = MediaIoBaseDownload(fh, request)
             done = False
@@ -91,7 +94,7 @@ def generate_weekly_summary(entries):
     if not entries: return "אין מספיק נתונים לסיכום."
     full_text = "נתוני תצפיות מהשבוע האחרון:\n"
     for e in entries:
-        full_text += f"- תלמיד: {e.get('student_name')}, פעולות: {e.get('done')}, קושי: {e.get('challenge')}\n"
+        full_text += f"- תלמיד: {e.get('student_name')}, מודל פיזי: {e.get('physical_model')}, פעולות: {e.get('done')}, קושי: {e.get('challenge')}\n"
     prompt = f"נתח את הרפלקציות הבאות עבור מחקר תזה. סכם מגמות והמלצות:\n{full_text}"
     try:
         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -114,6 +117,14 @@ with tab1:
             student_name = st.text_input("שם חופשי:") if sel == "תלמיד אחר..." else sel
         with c2:
             difficulty = st.select_slider("⚖️ רמת קושי המטלה", options=[1, 2, 3], value=2)
+
+        st.write("**שימוש במודל תלת-ממדי (גוף מודפס):**")
+        physical_model = st.radio(
+            "בחר את אופן השימוש במודל במטלה זו:",
+            ["ללא מודל (עבודה מנטלית בלבד)", "שימוש במודל מודפס כעזר", "שימוש אינטנסיבי במודל"],
+            index=0,
+            horizontal=True
+        )
 
         st.subheader("2. כמות וזמן")
         col_t, col_d = st.columns(2)
@@ -148,9 +159,9 @@ with tab1:
             
             entry = {
                 "type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
-                "difficulty": difficulty, "duration_min": work_duration, "drawings_count": drawings_count,
-                "tags": ", ".join(tags), "planned": planned, "done": done, "challenge": challenge, 
-                "interpretation": interpretation, "score_proj": m1, "score_spatial": m2, 
+                "physical_model": physical_model, "difficulty": difficulty, "duration_min": work_duration, 
+                "drawings_count": drawings_count, "tags": ", ".join(tags), "planned": planned, "done": done, 
+                "challenge": challenge, "interpretation": interpretation, "score_proj": m1, "score_spatial": m2, 
                 "score_conv": m3, "score_efficacy": m4, "score_model": m5, "images": ", ".join(img_links),
                 "timestamp": datetime.now().strftime("%H:%M:%S")
             }
@@ -170,8 +181,6 @@ with tab2:
 
 with tab3:
     st.header("🤖 כלי AI למחקר")
-    
-    # חלק 1: סיכום שבועי
     if st.button("✨ צור סיכום Gemini לשבוע האחרון"):
         today = date.today()
         week_ago = (today - timedelta(days=7)).isoformat()
@@ -184,8 +193,6 @@ with tab3:
                 st.markdown(summary)
 
     st.divider()
-    
-    # חלק 2: צ'אט חופשי
     if "messages" not in st.session_state: st.session_state.messages = []
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]): st.markdown(msg["content"])
@@ -212,4 +219,4 @@ with tab3:
         for s in reversed(sums):
             with st.expander(f"סיכום מתאריך {s['date']}"): st.markdown(s['content'])
 
-# --- סוף הקוד ---
+# --- סוף הקוד המלא - מיועד לשימוש במחקר תזה ---
