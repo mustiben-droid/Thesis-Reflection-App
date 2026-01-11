@@ -15,6 +15,7 @@ DATA_FILE = "reflections.jsonl"
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 MASTER_FILENAME = "All_Observations_Master.xlsx"
 
+# רשימת התלמידים כולל פולינה.ק
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 
 OBSERVATION_TAGS = [
@@ -51,22 +52,17 @@ def get_drive_service():
         st.error(f"שגיאה בחיבור לשירות: {e}")
         return None
 
-def test_drive_connection(svc):
-    try:
-        folder = svc.files().get(fileId=GDRIVE_FOLDER_ID, fields='name, capabilities').execute()
-        st.success(f"✅ נמצאה תיקייה בדרייב: {folder.get('name')}")
-        if folder.get('capabilities', {}).get('canAddChildren'):
-            st.success("✅ למייל יש הרשאות כתיבה (Editor) - הכל תקין!")
-        else:
-            st.error("❌ למייל יש גישה אבל הוא לא מוגדר כ-Editor (עורך)!")
-    except Exception as e:
-        st.error(f"❌ שגיאה בגישה לתיקייה: {e}")
-
 def upload_image_to_drive(uploaded_file, svc):
     try:
         file_metadata = {'name': uploaded_file.name, 'parents': [GDRIVE_FOLDER_ID]}
         media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
-        file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
+        # תיקון: תמיכה ב-Shared Drives
+        file = svc.files().create(
+            body=file_metadata, 
+            media_body=media, 
+            fields='id, webViewLink',
+            supportsAllDrives=True
+        ).execute()
         return file.get('webViewLink')
     except Exception as e:
         st.error(f"לא הצלחתי להעלות תמונה: {e}")
@@ -79,8 +75,14 @@ def process_tags_to_columns(df):
 
 def update_master_excel(data_to_add, svc, overwrite=False):
     try:
+        # תיקון: חיפוש קובץ עם תמיכה ב-Shared Drive
         query = f"name = '{MASTER_FILENAME}' and '{GDRIVE_FOLDER_ID}' in parents and trashed = false"
-        res = svc.files().list(q=query).execute().get('files', [])
+        res = svc.files().list(
+            q=query, 
+            supportsAllDrives=True, 
+            includeItemsFromAllDrives=True
+        ).execute().get('files', [])
+        
         new_df = pd.DataFrame(data_to_add)
         if res and not overwrite:
             file_id = res[0]['id']
@@ -95,15 +97,25 @@ def update_master_excel(data_to_add, svc, overwrite=False):
         else:
             df = new_df
             file_id = res[0]['id'] if res else None
+            
         df = process_tags_to_columns(df)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer: df.to_excel(writer, index=False)
         output.seek(0)
         media = MediaIoBaseUpload(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        if file_id: svc.files().update(fileId=file_id, media_body=media).execute()
-        else: svc.files().create(body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID]}, media_body=media).execute()
+        
+        if file_id:
+            svc.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
+        else:
+            svc.files().create(
+                body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID]}, 
+                media_body=media, 
+                supportsAllDrives=True
+            ).execute()
         return True
-    except: return False
+    except Exception as e:
+        st.error(f"שגיאה בעדכון אקסל: {e}")
+        return False
 
 def save_local(entry):
     with open(DATA_FILE, "a", encoding="utf-8") as f:
@@ -123,11 +135,10 @@ def generate_weekly_summary(entries):
 
 # --- 4. ממשק המשתמש ---
 setup_design()
-st.title("🎓 יומן תצפית - מהדורת מחקר מלאה")
+st.title("🎓 יומן תצפית - מהדורת מחקר")
 
 tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 ניהול נתונים", "🤖 עוזר AI"])
 
-# יצירת החיבור פעם אחת לכל הטאבים
 svc = get_drive_service()
 
 with tab1:
@@ -193,17 +204,11 @@ with tab1:
 
 with tab2:
     st.header("📊 ניהול וסנכרון")
-    if st.button("🔍 בדיקת חיבור לדרייב"):
-        if svc: test_drive_connection(svc)
-        else: st.error("אין חיבור לשירות של גוגל")
-    
-    st.divider()
     if st.button("🔄 סנכרן את כל ההיסטוריה לאקסל בדרייב"):
-        if os.path.exists(DATA_FILE):
+        if os.path.exists(DATA_FILE) and svc:
             all_data = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
-            if svc:
-                update_master_excel(all_data, svc, overwrite=True)
-                st.success("הסנכרון הושלם! ✅")
+            update_master_excel(all_data, svc, overwrite=True)
+            st.success("הסנכרון הושלם! ✅")
 
 with tab3:
     st.header("🤖 כלי AI למחקר")
