@@ -41,18 +41,26 @@ def setup_design():
 # --- 3. פונקציות שירות ---
 def get_drive_service():
     try:
-        # כאן אנחנו מפענחים את ה-B64 כדי שהקוד יבין את המפתח
         json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
         info = json.loads(json_str)
-        
-        # השורה הזו תדפיס לנו את המייל בתוך האפליקציה כדי שתוכל להעתיק אותו
+        # מדפיס את המייל לצורך שיתוף התיקייה
         st.info(f"📧 כתובת המייל לשיתוף בדרייב: {info.get('client_email')}")
-        
         creds = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive.file"])
         return build("drive", "v3", credentials=creds)
     except Exception as e:
         st.error(f"שגיאה בחיבור לשירות: {e}")
         return None
+
+def test_drive_connection(svc):
+    try:
+        folder = svc.files().get(fileId=GDRIVE_FOLDER_ID, fields='name, capabilities').execute()
+        st.success(f"✅ נמצאה תיקייה בדרייב: {folder.get('name')}")
+        if folder.get('capabilities', {}).get('canAddChildren'):
+            st.success("✅ למייל יש הרשאות כתיבה (Editor) - הכל תקין!")
+        else:
+            st.error("❌ למייל יש גישה אבל הוא לא מוגדר כ-Editor (עורך)!")
+    except Exception as e:
+        st.error(f"❌ שגיאה בגישה לתיקייה: {e}")
 
 def upload_image_to_drive(uploaded_file, svc):
     try:
@@ -61,7 +69,7 @@ def upload_image_to_drive(uploaded_file, svc):
         file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
         return file.get('webViewLink')
     except Exception as e:
-        st.error(f"לא הצלחתי להעלות תמונה. וודא שהתיקייה משותפת עם המייל הכחול למעלה. שגיאה: {e}")
+        st.error(f"לא הצלחתי להעלות תמונה: {e}")
         return None
 
 def process_tags_to_columns(df):
@@ -119,9 +127,10 @@ st.title("🎓 יומן תצפית - מהדורת מחקר מלאה")
 
 tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 ניהול נתונים", "🤖 עוזר AI"])
 
+# יצירת החיבור פעם אחת לכל הטאבים
+svc = get_drive_service()
+
 with tab1:
-    svc = get_drive_service() # זה ידפיס את המייל למעלה
-    
     with st.form("main_form", clear_on_submit=True):
         st.subheader("1. פרטי התצפית")
         c1, c2 = st.columns([3, 2])
@@ -135,8 +144,7 @@ with tab1:
         physical_model = st.radio(
             "בחר את אופן השימוש במודל במטלה זו:",
             ["ללא מודל (עבודה מנטלית בלבד)", "שימוש במודל מודפס כעזר", "שימוש אינטנסיבי במודל"],
-            index=0,
-            horizontal=True
+            index=0, horizontal=True
         )
 
         st.subheader("2. כמות וזמן")
@@ -185,6 +193,11 @@ with tab1:
 
 with tab2:
     st.header("📊 ניהול וסנכרון")
+    if st.button("🔍 בדיקת חיבור לדרייב"):
+        if svc: test_drive_connection(svc)
+        else: st.error("אין חיבור לשירות של גוגל")
+    
+    st.divider()
     if st.button("🔄 סנכרן את כל ההיסטוריה לאקסל בדרייב"):
         if os.path.exists(DATA_FILE):
             all_data = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
