@@ -44,17 +44,16 @@ def get_drive_service():
         info = json.loads(json_str)
         creds = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive.file"])
         return build("drive", "v3", credentials=creds)
-    except:
-        return None
+    except: return None
 
-def upload_image_to_drive(uploaded_file, svc):
+def save_summary_to_drive(summary_text, svc):
     try:
-        file_metadata = {'name': uploaded_file.name, 'parents': [GDRIVE_FOLDER_ID]}
-        media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
-        file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink', supportsAllDrives=True).execute()
-        return file.get('webViewLink')
-    except:
-        return None
+        filename = f"AI_Analysis_{date.today().isoformat()}_{datetime.now().strftime('%H%M')}.txt"
+        file_metadata = {'name': filename, 'parents': [GDRIVE_FOLDER_ID]}
+        media = MediaIoBaseUpload(io.BytesIO(summary_text.encode("utf-8")), mimetype='text/plain')
+        svc.files().create(body=file_metadata, media_body=media, supportsAllDrives=True).execute()
+        return True
+    except: return False
 
 def load_data_from_drive(svc):
     try:
@@ -69,14 +68,13 @@ def load_data_from_drive(svc):
             while not done: _, done = downloader.next_chunk()
             fh.seek(0)
             df = pd.read_excel(fh)
-            # שמירה מקומית כדי שה-AI יוכל לקרוא
             if os.path.exists(DATA_FILE): os.remove(DATA_FILE)
             for _, row in df.iterrows():
-                save_local(row.to_dict())
+                with open(DATA_FILE, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(row.to_dict(), ensure_ascii=False) + "\n")
             return True
         return False
-    except:
-        return False
+    except: return False
 
 def update_master_excel(data_to_add, svc):
     try:
@@ -106,12 +104,7 @@ def update_master_excel(data_to_add, svc):
         else:
             svc.files().create(body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID]}, media_body=media, supportsAllDrives=True).execute()
         return True
-    except:
-        return False
-
-def save_local(entry):
-    with open(DATA_FILE, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except: return False
 
 def generate_ai_report(entries):
     if not entries: return None
@@ -123,8 +116,7 @@ def generate_ai_report(entries):
         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
         response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
         return response.text
-    except:
-        return "שגיאה בייצור הסיכום."
+    except: return None
 
 # --- 4. ממשק משתמש ---
 setup_design()
@@ -139,8 +131,7 @@ with tab1:
         with c1:
             sel = st.selectbox("👤 שם תלמיד", CLASS_ROSTER)
             student_name = st.text_input("שם חופשי:") if sel == "תלמיד אחר..." else sel
-        with c2:
-            difficulty = st.select_slider("רמה", options=[1, 2, 3], value=2)
+        with c2: difficulty = st.select_slider("רמה", options=[1, 2, 3], value=2)
         
         physical_model = st.radio("שימוש במודל:", ["ללא", "חלקי", "מלא"], horizontal=True)
         tags = st.multiselect("🏷️ תגיות", OBSERVATION_TAGS)
@@ -149,51 +140,31 @@ with tab1:
         uploaded_files = st.file_uploader("📸 תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
 
         if st.form_submit_button("💾 שמור תצפית"):
-            with st.spinner("שומר..."):
-                img_links = []
-                if svc and uploaded_files:
-                    for f in uploaded_files:
-                        link = upload_image_to_drive(f, svc)
-                        if link: img_links.append(link)
-                
-                entry = {
-                    "type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
-                    "physical_model": physical_model, "challenge": challenge, "done": done,
-                    "tags": ", ".join(tags), "images": ", ".join(img_links),
-                    "timestamp": datetime.now().strftime("%H:%M:%S")
-                }
-                save_local(entry)
-                if svc: update_master_excel([entry], svc)
-                st.balloons()
-                st.success(f"התצפית על {student_name} נשמרה!")
+            entry = {"type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
+                     "physical_model": physical_model, "challenge": challenge, "done": done,
+                     "tags": ", ".join(tags), "timestamp": datetime.now().strftime("%H:%M:%S")}
+            with open(DATA_FILE, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            if svc: update_master_excel([entry], svc)
+            st.balloons()
+            st.success("נשמר בהצלחה!")
 
 with tab2:
-    st.header("ניהול נתונים")
-    if st.button("🔄 סנכרן נתונים לאקסל"):
-        if os.path.exists(DATA_FILE) and svc:
-            all_data = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
-            update_master_excel(all_data, svc)
-            st.success("סנכרון הושלם!")
-    
-    st.divider()
-    if st.button("📥 טען נתונים מהדרייב ל-AI (חובה לפני סיכום)"):
-        if svc:
-            with st.spinner("מושך נתונים מהאקסל..."):
-                if load_data_from_drive(svc):
-                    st.success("הנתונים נטענו! עכשיו אפשר לעבור לטאב AI ולסכם.")
-                else:
-                    st.error("לא נמצא קובץ אקסל לסנכרון.")
+    if st.button("📥 טען נתונים מהדרייב לזיכרון ה-AI"):
+        if svc and load_data_from_drive(svc): st.success("הנתונים נטענו!")
 
 with tab3:
-    st.header("🤖 AI")
-    if st.button("✨ סכם 10 תצפיות אחרונות"):
+    st.header("🤖 סיכומי AI")
+    if st.button("✨ בצע סיכום ושמור אוטומטית לדרייב"):
         if os.path.exists(DATA_FILE):
             all_ents = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")]
             summary = generate_ai_report(all_ents[-10:])
             if summary:
                 st.markdown(summary)
-                st.download_button("📥 הורד קובץ סיכום", data=summary, file_name=f"Summary_{date.today()}.txt")
-        else:
-            st.warning("הזיכרון ריק. עבור לטאב 'ניהול' ולחץ על 'טען נתונים מהדרייב'.")
+                if svc:
+                    if save_summary_to_drive(summary, svc):
+                        st.success("✅ הסיכום נשמר כקובץ TXT בתיקייה שלך בדרייב!")
+                st.download_button("📥 הורד עותק למחשב", data=summary, file_name=f"Summary_{date.today()}.txt")
+        else: st.warning("טען נתונים בטאב ניהול תחילה.")
 
 # --- סוף הקוד המלא - מיועד לשימוש במחקר תזה ---
