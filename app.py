@@ -37,7 +37,7 @@ def setup_design():
         </style>
     """, unsafe_allow_html=True)
 
-# --- 3. פונקציות שירות ---
+# --- 3. פונקציות שירות ודרייב ---
 def get_drive_service():
     try:
         json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
@@ -55,6 +55,28 @@ def upload_image_to_drive(uploaded_file, svc):
         return file.get('webViewLink')
     except:
         return None
+
+def load_data_from_drive(svc):
+    try:
+        query = f"name = '{MASTER_FILENAME}' and '{GDRIVE_FOLDER_ID}' in parents and trashed = false"
+        res = svc.files().list(q=query, supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
+        if res:
+            file_id = res[0]['id']
+            request = svc.files().get_media(fileId=file_id)
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while not done: _, done = downloader.next_chunk()
+            fh.seek(0)
+            df = pd.read_excel(fh)
+            # שמירה מקומית כדי שה-AI יוכל לקרוא
+            if os.path.exists(DATA_FILE): os.remove(DATA_FILE)
+            for _, row in df.iterrows():
+                save_local(row.to_dict())
+            return True
+        return False
+    except:
+        return False
 
 def update_master_excel(data_to_add, svc):
     try:
@@ -118,7 +140,7 @@ with tab1:
             sel = st.selectbox("👤 שם תלמיד", CLASS_ROSTER)
             student_name = st.text_input("שם חופשי:") if sel == "תלמיד אחר..." else sel
         with c2:
-            difficulty = st.select_slider("⚖️ רמה", options=[1, 2, 3], value=2)
+            difficulty = st.select_slider("רמה", options=[1, 2, 3], value=2)
         
         physical_model = st.radio("שימוש במודל:", ["ללא", "חלקי", "מלא"], horizontal=True)
         tags = st.multiselect("🏷️ תגיות", OBSERVATION_TAGS)
@@ -143,25 +165,35 @@ with tab1:
                 save_local(entry)
                 if svc: update_master_excel([entry], svc)
                 st.balloons()
-                st.success(f"התצפית על {student_name} נשמרה בהצלחה!")
+                st.success(f"התצפית על {student_name} נשמרה!")
 
 with tab2:
-    if st.button("🔄 סנכרן הכל לאקסל"):
+    st.header("ניהול נתונים")
+    if st.button("🔄 סנכרן נתונים לאקסל"):
         if os.path.exists(DATA_FILE) and svc:
             all_data = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
             update_master_excel(all_data, svc)
             st.success("סנכרון הושלם!")
+    
+    st.divider()
+    if st.button("📥 טען נתונים מהדרייב ל-AI (חובה לפני סיכום)"):
+        if svc:
+            with st.spinner("מושך נתונים מהאקסל..."):
+                if load_data_from_drive(svc):
+                    st.success("הנתונים נטענו! עכשיו אפשר לעבור לטאב AI ולסכם.")
+                else:
+                    st.error("לא נמצא קובץ אקסל לסנכרון.")
 
 with tab3:
     st.header("🤖 AI")
-    if st.button("✨ סכם 10 תצפיות אחרונות וצור קובץ"):
+    if st.button("✨ סכם 10 תצפיות אחרונות"):
         if os.path.exists(DATA_FILE):
-            all_ents = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
+            all_ents = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")]
             summary = generate_ai_report(all_ents[-10:])
             if summary:
                 st.markdown(summary)
                 st.download_button("📥 הורד קובץ סיכום", data=summary, file_name=f"Summary_{date.today()}.txt")
         else:
-            st.error("אין נתונים לסיכום")
+            st.warning("הזיכרון ריק. עבור לטאב 'ניהול' ולחץ על 'טען נתונים מהדרייב'.")
 
 # --- סוף הקוד המלא - מיועד לשימוש במחקר תזה ---
