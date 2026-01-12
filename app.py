@@ -37,22 +37,23 @@ def setup_design():
         </style>
     """, unsafe_allow_html=True)
 
-# --- 3. פונקציות שירות ---
+# --- 3. פונקציות שירות ו-AI ---
 def get_drive_service():
     try:
         json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
         info = json.loads(json_str)
-        st.info(f"📧 המייל לשיתוף: {info.get('client_email')}")
+        st.info(f"📧 המייל לשיתוף בדרייב: {info.get('client_email')}")
         creds = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive.file"])
         return build("drive", "v3", credentials=creds)
     except Exception as e:
-        st.error(f"שגיאה בחיבור: {e}")
+        st.error(f"שגיאה בחיבור לשירות: {e}")
         return None
 
 def upload_image_to_drive(uploaded_file, svc):
     try:
         file_metadata = {'name': uploaded_file.name, 'parents': [GDRIVE_FOLDER_ID]}
         media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
+        # תמיכה בכוננים משותפים
         file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink', supportsAllDrives=True).execute()
         return file.get('webViewLink')
     except Exception as e:
@@ -75,14 +76,13 @@ def update_master_excel(data_to_add, svc, overwrite=False):
             while not done: _, done = downloader.next_chunk()
             fh.seek(0)
             existing_df = pd.read_excel(fh)
-            
-            # מיזוג בטוח למניעת כפילויות
+            # מיזוג למניעת כפילויות
             df = pd.concat([existing_df, new_df]).drop_duplicates(subset=['timestamp', 'student_name'], keep='last')
         else:
             df = new_df
             file_id = None
 
-        # עיבוד תגיות בטוח - בודק אם העמודה קיימת
+        # עיבוד תגיות בטוח
         if 'tags' in df.columns:
             for tag in OBSERVATION_TAGS:
                 df[f"tag_{tag}"] = df['tags'].apply(lambda x: 1 if isinstance(x, str) and tag in x else 0)
@@ -93,7 +93,6 @@ def update_master_excel(data_to_add, svc, overwrite=False):
         output.seek(0)
         
         media = MediaIoBaseUpload(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        
         if file_id:
             svc.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
         else:
@@ -107,9 +106,22 @@ def save_local(entry):
     with open(DATA_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
-# --- 4. ממשק משתמש ---
+def generate_weekly_summary(entries):
+    if not entries: return "אין מספיק נתונים לסיכום."
+    full_text = "נתוני תצפיות מהשבוע האחרון:\n"
+    for e in entries:
+        full_text += f"- תלמיד: {e.get('student_name')}, מודל: {e.get('physical_model')}, פעולות: {e.get('done')}, קושי: {e.get('challenge')}\n"
+    prompt = f"נתח את הרפלקציות הבאות עבור מחקר תזה. סכם מגמות והמלצות:\n{full_text}"
+    try:
+        client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+        return response.text
+    except Exception as e: return f"שגיאה בהפעלת AI: {e}"
+
+# --- 4. ממשק המשתמש ---
 setup_design()
 st.title("🎓 יומן תצפית - מהדורת מחקר")
+
 tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 ניהול", "🤖 AI"])
 svc = get_drive_service()
 
@@ -130,13 +142,13 @@ with tab1:
         with col_t: work_duration = st.number_input("⏱️ זמן עבודה (דקות)", min_value=0, step=5)
         with col_d: drawings_count = st.number_input("✏️ מספר שרטוטים", min_value=0, step=1)
 
-        tags = st.multiselect("🏷️ תגיות", OBSERVATION_TAGS)
-        planned = st.text_area("📋 תיאור המטלה")
+        tags = st.multiselect("🏷️ תגיות נצפות", OBSERVATION_TAGS)
+        planned = st.text_area("📋 תיאור המטלה / נושא")
         challenge = st.text_area("🗣️ ציטוטים וקשיים")
         done = st.text_area("👀 פעולות שבוצעו")
-        interpretation = st.text_area("💡 פרשנות")
-        uploaded_files = st.file_uploader("📸 תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
-
+        interpretation = st.text_area("💡 פרשנות/קוד איכותני")
+        uploaded_files = st.file_uploader("📸 העלאת תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+        
         st.subheader("מדדי הערכה (1-5)")
         m_cols = st.columns(5)
         m1 = m_cols[0].select_slider("היטלים", options=[1,2,3,4,5], value=3)
@@ -165,10 +177,51 @@ with tab1:
             st.success("נשמר בהצלחה! ✅")
 
 with tab2:
-    if st.button("🔄 סנכרן נתונים (מיזוג בטוח)"):
+    st.header("📊 ניהול נתונים")
+    if st.button("🔄 סנכרן את כל ההיסטוריה (מיזוג בטוח)"):
         if os.path.exists(DATA_FILE) and svc:
             all_data = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
             update_master_excel(all_data, svc, overwrite=True)
             st.success("הסנכרון הושלם בהצלחה!")
 
-# --- סוף הקוד המלא ---
+with tab3:
+    st.header("🤖 עוזר AI למחקר")
+    if st.button("✨ צור סיכום Gemini לשבוע האחרון"):
+        today = date.today()
+        week_ago = (today - timedelta(days=7)).isoformat()
+        if os.path.exists(DATA_FILE):
+            entries = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") 
+                       if json.loads(l).get("type")=="reflection" and json.loads(l).get("date") >= week_ago]
+            with st.spinner("מנתח נתונים..."):
+                summary = generate_weekly_summary(entries)
+                save_local({"type": "weekly_summary", "date": today.isoformat(), "content": summary})
+                st.markdown(summary)
+
+    st.divider()
+    if "messages" not in st.session_state: st.session_state.messages = []
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]): st.markdown(msg["content"])
+
+    if pr := st.chat_input("שאל את Gemini על התצפיות..."):
+        st.session_state.messages.append({"role": "user", "content": pr})
+        with st.chat_message("user"): st.markdown(pr)
+        context = ""
+        if os.path.exists(DATA_FILE):
+            ents = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
+            context = "נתונים אחרונים מהמחקר:\n" + "\n".join([str(e) for e in ents[-10:]])
+        with st.chat_message("assistant"):
+            try:
+                client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+                res = client.models.generate_content(model="gemini-2.0-flash", contents=f"{context}\nשאלה מהחוקר: {pr}")
+                st.markdown(res.text)
+                st.session_state.messages.append({"role": "assistant", "content": res.text})
+            except Exception as e: st.error(str(e))
+
+    st.divider()
+    st.subheader("📚 ארכיון סיכומים")
+    if os.path.exists(DATA_FILE):
+        sums = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="weekly_summary"]
+        for s in reversed(sums):
+            with st.expander(f"סיכום מתאריך {s['date']}"): st.markdown(s['content'])
+
+# --- סוף הקוד המלא - מיועד לשימוש במחקר תזה ---
