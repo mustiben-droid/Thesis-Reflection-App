@@ -15,7 +15,6 @@ DATA_FILE = "reflections.jsonl"
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 MASTER_FILENAME = "All_Observations_Master.xlsx"
 
-# רשימת התלמידים כולל פולינה.ק
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 
 OBSERVATION_TAGS = [
@@ -24,7 +23,7 @@ OBSERVATION_TAGS = [
     "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"
 ]
 
-# --- 2. עיצוב (CSS) ---
+# --- 2. עיצוב ---
 def setup_design():
     st.set_page_config(page_title="יומן תצפית מחקרי", page_icon="🎓", layout="centered")
     st.markdown("""
@@ -35,7 +34,6 @@ def setup_design():
             .stButton > button { width: 100%; font-weight: bold; border-radius: 10px; }
             [data-testid="stSlider"] { direction: ltr !important; }
             .stRadio > div { flex-direction: row-reverse !important; gap: 20px; }
-            div[data-baseweb="select"] > div { direction: rtl; text-align: right; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -44,47 +42,31 @@ def get_drive_service():
     try:
         json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
         info = json.loads(json_str)
-        # מדפיס את המייל לצורך שיתוף התיקייה
-        st.info(f"📧 כתובת המייל לשיתוף בדרייב: {info.get('client_email')}")
+        st.info(f"📧 המייל לשיתוף: {info.get('client_email')}")
         creds = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive.file"])
         return build("drive", "v3", credentials=creds)
     except Exception as e:
-        st.error(f"שגיאה בחיבור לשירות: {e}")
+        st.error(f"שגיאה בחיבור: {e}")
         return None
 
 def upload_image_to_drive(uploaded_file, svc):
     try:
         file_metadata = {'name': uploaded_file.name, 'parents': [GDRIVE_FOLDER_ID]}
         media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
-        # תיקון: תמיכה ב-Shared Drives
-        file = svc.files().create(
-            body=file_metadata, 
-            media_body=media, 
-            fields='id, webViewLink',
-            supportsAllDrives=True
-        ).execute()
+        file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink', supportsAllDrives=True).execute()
         return file.get('webViewLink')
     except Exception as e:
-        st.error(f"לא הצלחתי להעלות תמונה: {e}")
+        st.error(f"נכשל בהעלאת תמונה: {e}")
         return None
-
-def process_tags_to_columns(df):
-    for tag in OBSERVATION_TAGS:
-        df[f"tag_{tag}"] = df['tags'].apply(lambda x: 1 if isinstance(x, str) and tag in x else 0)
-    return df
 
 def update_master_excel(data_to_add, svc, overwrite=False):
     try:
-        # תיקון: חיפוש קובץ עם תמיכה ב-Shared Drive
         query = f"name = '{MASTER_FILENAME}' and '{GDRIVE_FOLDER_ID}' in parents and trashed = false"
-        res = svc.files().list(
-            q=query, 
-            supportsAllDrives=True, 
-            includeItemsFromAllDrives=True
-        ).execute().get('files', [])
+        res = svc.files().list(q=query, supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
         
         new_df = pd.DataFrame(data_to_add)
-        if res and not overwrite:
+        
+        if res:
             file_id = res[0]['id']
             request = svc.files().get_media(fileId=file_id)
             fh = io.BytesIO()
@@ -93,25 +75,29 @@ def update_master_excel(data_to_add, svc, overwrite=False):
             while not done: _, done = downloader.next_chunk()
             fh.seek(0)
             existing_df = pd.read_excel(fh)
-            df = pd.concat([existing_df, new_df], ignore_index=True)
+            
+            # מיזוג בטוח למניעת כפילויות
+            df = pd.concat([existing_df, new_df]).drop_duplicates(subset=['timestamp', 'student_name'], keep='last')
         else:
             df = new_df
-            file_id = res[0]['id'] if res else None
-            
-        df = process_tags_to_columns(df)
+            file_id = None
+
+        # עיבוד תגיות בטוח - בודק אם העמודה קיימת
+        if 'tags' in df.columns:
+            for tag in OBSERVATION_TAGS:
+                df[f"tag_{tag}"] = df['tags'].apply(lambda x: 1 if isinstance(x, str) and tag in x else 0)
+
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer: df.to_excel(writer, index=False)
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False)
         output.seek(0)
+        
         media = MediaIoBaseUpload(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         
         if file_id:
             svc.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
         else:
-            svc.files().create(
-                body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID]}, 
-                media_body=media, 
-                supportsAllDrives=True
-            ).execute()
+            svc.files().create(body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID]}, media_body=media, supportsAllDrives=True).execute()
         return True
     except Exception as e:
         st.error(f"שגיאה בעדכון אקסל: {e}")
@@ -121,24 +107,10 @@ def save_local(entry):
     with open(DATA_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
-def generate_weekly_summary(entries):
-    if not entries: return "אין מספיק נתונים לסיכום."
-    full_text = "נתוני תצפיות מהשבוע האחרון:\n"
-    for e in entries:
-        full_text += f"- תלמיד: {e.get('student_name')}, מודל פיזי: {e.get('physical_model')}, פעולות: {e.get('done')}, קושי: {e.get('challenge')}\n"
-    prompt = f"נתח את הרפלקציות הבאות עבור מחקר תזה. סכם מגמות והמלצות:\n{full_text}"
-    try:
-        client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-        return response.text
-    except Exception as e: return f"שגיאה: {e}"
-
-# --- 4. ממשק המשתמש ---
+# --- 4. ממשק משתמש ---
 setup_design()
 st.title("🎓 יומן תצפית - מהדורת מחקר")
-
-tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 ניהול נתונים", "🤖 עוזר AI"])
-
+tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 ניהול", "🤖 AI"])
 svc = get_drive_service()
 
 with tab1:
@@ -151,31 +123,21 @@ with tab1:
         with c2:
             difficulty = st.select_slider("⚖️ רמת קושי המטלה", options=[1, 2, 3], value=2)
 
-        st.write("**שימוש במודל תלת-ממדי (גוף מודפס):**")
-        physical_model = st.radio(
-            "בחר את אופן השימוש במודל במטלה זו:",
-            ["ללא מודל (עבודה מנטלית בלבד)", "שימוש במודל מודפס כעזר", "שימוש אינטנסיבי במודל"],
-            index=0, horizontal=True
-        )
+        physical_model = st.radio("שימוש במודל מודפס:", ["ללא מודל", "שימוש חלקי", "שימוש אינטנסיבי"], horizontal=True)
 
         st.subheader("2. כמות וזמן")
         col_t, col_d = st.columns(2)
         with col_t: work_duration = st.number_input("⏱️ זמן עבודה (דקות)", min_value=0, step=5)
         with col_d: drawings_count = st.number_input("✏️ מספר שרטוטים", min_value=0, step=1)
 
-        tags = st.multiselect("🏷️ תגיות נצפות", OBSERVATION_TAGS)
-        
-        ca, cb = st.columns(2)
-        with ca:
-            planned = st.text_area("📋 תיאור המטלה / נושא")
-            challenge = st.text_area("🗣️ ציטוטים וקשיים")
-        with cb:
-            done = st.text_area("👀 פעולות שבוצעו")
-            interpretation = st.text_area("💡 פרשנות/קוד איכותני")
-        
-        uploaded_files = st.file_uploader("📸 העלאת תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
-        
-        st.subheader("4. מדדי הערכה (1-5)")
+        tags = st.multiselect("🏷️ תגיות", OBSERVATION_TAGS)
+        planned = st.text_area("📋 תיאור המטלה")
+        challenge = st.text_area("🗣️ ציטוטים וקשיים")
+        done = st.text_area("👀 פעולות שבוצעו")
+        interpretation = st.text_area("💡 פרשנות")
+        uploaded_files = st.file_uploader("📸 תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+
+        st.subheader("מדדי הערכה (1-5)")
         m_cols = st.columns(5)
         m1 = m_cols[0].select_slider("היטלים", options=[1,2,3,4,5], value=3)
         m2 = m_cols[1].select_slider("מרחבית", options=[1,2,3,4,5], value=3)
@@ -186,15 +148,15 @@ with tab1:
         if st.form_submit_button("💾 שמור תצפית"):
             img_links = []
             if svc and uploaded_files:
-                for f in uploaded_files: 
+                for f in uploaded_files:
                     link = upload_image_to_drive(f, svc)
                     if link: img_links.append(link)
             
             entry = {
                 "type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
-                "physical_model": physical_model, "difficulty": difficulty, "duration_min": work_duration, 
-                "drawings_count": drawings_count, "tags": ", ".join(tags), "planned": planned, "done": done, 
-                "challenge": challenge, "interpretation": interpretation, "score_proj": m1, "score_spatial": m2, 
+                "physical_model": physical_model, "difficulty": difficulty, "duration_min": work_duration,
+                "drawings_count": drawings_count, "tags": ", ".join(tags), "planned": planned, "done": done,
+                "challenge": challenge, "interpretation": interpretation, "score_proj": m1, "score_spatial": m2,
                 "score_conv": m3, "score_efficacy": m4, "score_model": m5, "images": ", ".join(img_links),
                 "timestamp": datetime.now().strftime("%H:%M:%S")
             }
@@ -203,51 +165,10 @@ with tab1:
             st.success("נשמר בהצלחה! ✅")
 
 with tab2:
-    st.header("📊 ניהול וסנכרון")
-    if st.button("🔄 סנכרן את כל ההיסטוריה לאקסל בדרייב"):
+    if st.button("🔄 סנכרן נתונים (מיזוג בטוח)"):
         if os.path.exists(DATA_FILE) and svc:
             all_data = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
             update_master_excel(all_data, svc, overwrite=True)
-            st.success("הסנכרון הושלם! ✅")
+            st.success("הסנכרון הושלם בהצלחה!")
 
-with tab3:
-    st.header("🤖 כלי AI למחקר")
-    if st.button("✨ צור סיכום Gemini לשבוע האחרון"):
-        today = date.today()
-        week_ago = (today - timedelta(days=7)).isoformat()
-        if os.path.exists(DATA_FILE):
-            entries = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") 
-                       if json.loads(l).get("type")=="reflection" and json.loads(l).get("date") >= week_ago]
-            with st.spinner("מנתח נתונים..."):
-                summary = generate_weekly_summary(entries)
-                save_local({"type": "weekly_summary", "date": today.isoformat(), "content": summary})
-                st.markdown(summary)
-
-    st.divider()
-    if "messages" not in st.session_state: st.session_state.messages = []
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]): st.markdown(msg["content"])
-
-    if pr := st.chat_input("שאל על הנתונים..."):
-        st.session_state.messages.append({"role": "user", "content": pr})
-        with st.chat_message("user"): st.markdown(pr)
-        context = ""
-        if os.path.exists(DATA_FILE):
-            ents = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
-            context = "נתונים:\n" + "\n".join([str(e) for e in ents[-10:]])
-        with st.chat_message("assistant"):
-            try:
-                client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-                res = client.models.generate_content(model="gemini-2.0-flash", contents=f"{context}\nשאלה: {pr}")
-                st.markdown(res.text)
-                st.session_state.messages.append({"role": "assistant", "content": res.text})
-            except Exception as e: st.error(str(e))
-
-    st.divider()
-    st.subheader("📚 ארכיון סיכומים שבועיים")
-    if os.path.exists(DATA_FILE):
-        sums = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="weekly_summary"]
-        for s in reversed(sums):
-            with st.expander(f"סיכום מתאריך {s['date']}"): st.markdown(s['content'])
-
-# --- סוף הקוד המלא - מיועד לשימוש במחקר תזה ---
+# --- סוף הקוד המלא ---
