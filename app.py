@@ -23,7 +23,7 @@ OBSERVATION_TAGS = [
     "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"
 ]
 
-# --- 2. עיצוב הממשק ---
+# --- 2. עיצוב ---
 def setup_design():
     st.set_page_config(page_title="יומן תצפית מחקרי", page_icon="🎓", layout="centered")
     st.markdown("""
@@ -37,16 +37,14 @@ def setup_design():
         </style>
     """, unsafe_allow_html=True)
 
-# --- 3. פונקציות שירות וחיבור לדרייב ---
+# --- 3. פונקציות שירות ---
 def get_drive_service():
     try:
         json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
         info = json.loads(json_str)
-        st.info(f"📧 המייל לשיתוף בדרייב: {info.get('client_email')}")
         creds = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive.file"])
         return build("drive", "v3", credentials=creds)
-    except Exception as e:
-        st.error(f"שגיאה בחיבור לשירות: {e}")
+    except:
         return None
 
 def upload_image_to_drive(uploaded_file, svc):
@@ -55,11 +53,10 @@ def upload_image_to_drive(uploaded_file, svc):
         media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
         file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink', supportsAllDrives=True).execute()
         return file.get('webViewLink')
-    except Exception as e:
-        st.error(f"נכשל בהעלאת תמונה: {e}")
+    except:
         return None
 
-def update_master_excel(data_to_add, svc, overwrite=False):
+def update_master_excel(data_to_add, svc):
     try:
         query = f"name = '{MASTER_FILENAME}' and '{GDRIVE_FOLDER_ID}' in parents and trashed = false"
         res = svc.files().list(q=query, supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
@@ -77,9 +74,6 @@ def update_master_excel(data_to_add, svc, overwrite=False):
         else:
             df = new_df
             file_id = None
-        if 'tags' in df.columns:
-            for tag in OBSERVATION_TAGS:
-                df[f"tag_{tag}"] = df['tags'].apply(lambda x: 1 if isinstance(x, str) and tag in x else 0)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False)
@@ -90,36 +84,27 @@ def update_master_excel(data_to_add, svc, overwrite=False):
         else:
             svc.files().create(body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID]}, media_body=media, supportsAllDrives=True).execute()
         return True
-    except Exception as e:
-        st.error(f"שגיאה בעדכון אקסל: {e}")
+    except:
         return False
 
 def save_local(entry):
     with open(DATA_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
-# --- 4. פונקציית AI משופרת לייצור דוח ---
 def generate_ai_report(entries):
     if not entries: return None
-    full_text = "נתוני תצפיות לניתוח:\n"
+    full_text = ""
     for e in entries:
-        full_text += f"- תלמיד: {e.get('student_name')}, מודל: {e.get('physical_model')}, פעולות: {e.get('done')}, קשיים: {e.get('challenge')}\n"
-    
-    prompt = f"""
-    אתה עוזר מחקר אקדמי המנתח נתוני תצפיות בחינוך טכנולוגי (שרטוט טכני). 
-    ייצר דוח סיכום שבועי הכולל: מבוא, מגמות כלליות בכיתה, ניתוח פרטני של תלמידים בולטים והמלצות פדגוגיות.
-    הנתונים לניתוח:
-    {full_text}
-    """
+        full_text += f"תלמיד: {e.get('student_name')}, קשיים: {e.get('challenge')}, פעולות: {e.get('done')}\n"
+    prompt = f"נתח את התצפיות הבאות עבור מחקר תזה בשרטוט טכני. סכם מגמות והמלצות:\n{full_text}"
     try:
         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
         response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
         return response.text
-    except Exception as e:
-        st.error(f"שגיאה ב-AI: {e}")
-        return None
+    except:
+        return "שגיאה בייצור הסיכום."
 
-# --- 5. ממשק המשתמש (Streamlit) ---
+# --- 4. ממשק משתמש ---
 setup_design()
 st.title("🎓 יומן תצפית - מהדורת מחקר")
 tab1, tab2, tab3 = st.tabs(["📝 רפלקציה", "📊 ניהול", "🤖 AI"])
@@ -133,92 +118,50 @@ with tab1:
             sel = st.selectbox("👤 שם תלמיד", CLASS_ROSTER)
             student_name = st.text_input("שם חופשי:") if sel == "תלמיד אחר..." else sel
         with c2:
-            difficulty = st.select_slider("⚖️ רמת קושי המטלה", options=[1, 2, 3], value=2)
-
-        physical_model = st.radio("שימוש במודל מודפס:", ["ללא מודל", "שימוש חלקי", "שימוש אינטנסיבי"], horizontal=True)
-
-        st.subheader("2. כמות וזמן")
-        col_t, col_d = st.columns(2)
-        with col_t: work_duration = st.number_input("⏱️ זמן עבודה (דקות)", min_value=0, step=5)
-        with col_d: drawings_count = st.number_input("✏️ מספר שרטוטים", min_value=0, step=1)
-
-        tags = st.multiselect("🏷️ תגיות נצפות", OBSERVATION_TAGS)
-        planned = st.text_area("📋 תיאור המטלה")
-        challenge = st.text_area("🗣️ ציטוטים וקשיים")
-        done = st.text_area("👀 פעולות שבוצעו")
-        interpretation = st.text_area("💡 פרשנות")
-        uploaded_files = st.file_uploader("📸 העלאת תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+            difficulty = st.select_slider("⚖️ רמה", options=[1, 2, 3], value=2)
         
-        st.subheader("מדדי הערכה (1-5)")
-        m_cols = st.columns(5)
-        m1 = m_cols[0].select_slider("היטלים", options=[1,2,3,4,5], value=3)
-        m2 = m_cols[1].select_slider("מרחבית", options=[1,2,3,4,5], value=3)
-        m3 = m_cols[2].select_slider("המרת ייצוג", options=[1,2,3,4,5], value=3)
-        m4 = m_cols[3].select_slider("מסוגלות", options=[1,2,3,4,5], value=3)
-        m5 = m_cols[4].select_slider("מודל", options=[1,2,3,4,5], value=3)
+        physical_model = st.radio("שימוש במודל:", ["ללא", "חלקי", "מלא"], horizontal=True)
+        tags = st.multiselect("🏷️ תגיות", OBSERVATION_TAGS)
+        challenge = st.text_area("🗣️ קשיים")
+        done = st.text_area("👀 פעולות")
+        uploaded_files = st.file_uploader("📸 תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
 
         if st.form_submit_button("💾 שמור תצפית"):
-            img_links = []
-            if svc and uploaded_files:
-                for f in uploaded_files:
-                    link = upload_image_to_drive(f, svc)
-                    if link: img_links.append(link)
-            
-            entry = {
-                "type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
-                "physical_model": physical_model, "difficulty": difficulty, "duration_min": work_duration,
-                "drawings_count": drawings_count, "tags": ", ".join(tags), "planned": planned, "done": done,
-                "challenge": challenge, "interpretation": interpretation, "score_proj": m1, "score_spatial": m2,
-                "score_conv": m3, "score_efficacy": m4, "score_model": m5, "images": ", ".join(img_links),
-                "timestamp": datetime.now().strftime("%H:%M:%S")
-            }
-            save_local(entry)
-            if svc: update_master_excel([entry], svc)
-            st.success("נשמר בהצלחה! ✅")
+            with st.spinner("שומר..."):
+                img_links = []
+                if svc and uploaded_files:
+                    for f in uploaded_files:
+                        link = upload_image_to_drive(f, svc)
+                        if link: img_links.append(link)
+                
+                entry = {
+                    "type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
+                    "physical_model": physical_model, "challenge": challenge, "done": done,
+                    "tags": ", ".join(tags), "images": ", ".join(img_links),
+                    "timestamp": datetime.now().strftime("%H:%M:%S")
+                }
+                save_local(entry)
+                if svc: update_master_excel([entry], svc)
+                st.balloons()
+                st.success(f"התצפית על {student_name} נשמרה בהצלחה!")
 
 with tab2:
-    st.header("📊 ניהול נתונים")
-    if st.button("🔄 סנכרן את כל ההיסטוריה לאקסל"):
+    if st.button("🔄 סנכרן הכל לאקסל"):
         if os.path.exists(DATA_FILE) and svc:
             all_data = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
-            update_master_excel(all_data, svc, overwrite=True)
-            st.success("הסנכרון הושלם בהצלחה!")
+            update_master_excel(all_data, svc)
+            st.success("סנכרון הושלם!")
 
 with tab3:
-    st.header("🤖 עוזר AI למחקר")
-    c_ai1, c_ai2 = st.columns(2)
-    report_text = ""
-    
-    with c_ai1:
-        if st.button("✨ סיכום שבועי (7 ימים)"):
-            if os.path.exists(DATA_FILE):
-                week_ago = (date.today() - timedelta(days=7)).isoformat()
-                entries = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") 
-                           if json.loads(l).get("type")=="reflection" and json.loads(l).get("date") >= week_ago]
-                with st.spinner("מנתח שבוע אחרון..."):
-                    report_text = generate_ai_report(entries)
-            else: st.error("אין נתונים זמינים.")
-
-    with c_ai2:
-        if st.button("📚 סיכום 10 תצפיות אחרונות"):
-            if os.path.exists(DATA_FILE):
-                all_ents = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
-                with st.spinner("מנתח תצפיות אחרונות..."):
-                    report_text = generate_ai_report(all_ents[-10:])
-            else: st.error("אין נתונים זמינים.")
-
-    if report_text:
-        st.markdown("### 📝 דוח סיכום (AI):")
-        st.write(report_text)
-        
-        # יצירת קובץ להורדה כפי שביקשת
-        buf = io.BytesIO()
-        buf.write(report_text.encode("utf-8"))
-        st.download_button(
-            label="📥 הורד סיכום זה כקובץ TXT",
-            data=buf.getvalue(),
-            file_name=f"Weekly-Summary-{date.today().isoformat()}.txt",
-            mime="text/plain"
-        )
+    st.header("🤖 AI")
+    if st.button("✨ סכם 10 תצפיות אחרונות וצור קובץ"):
+        if os.path.exists(DATA_FILE):
+            all_ents = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
+            summary = generate_ai_report(all_ents[-10:])
+            if summary:
+                st.markdown(summary)
+                st.download_button("📥 הורד קובץ סיכום", data=summary, file_name=f"Summary_{date.today()}.txt")
+        else:
+            st.error("אין נתונים לסיכום")
 
 # --- סוף הקוד המלא - מיועד לשימוש במחקר תזה ---
