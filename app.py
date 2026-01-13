@@ -10,7 +10,7 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 
-# --- 1. הגדרות קבועות ---
+# --- 1. הגדרות קבועות ועיצוב ---
 DATA_FILE = "reflections.jsonl"
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 MASTER_FILENAME = "All_Observations_Master.xlsx"
@@ -19,7 +19,18 @@ CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "ג�
 OBSERVATION_TAGS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
 st.set_page_config(page_title="עוזר מחקר לתזה", layout="wide")
-st.markdown("<style>body { direction: rtl; text-align: right; }</style>", unsafe_allow_html=True)
+
+# עיצוב CSS: עברית מלאה, אך סליידרים משמאל לימין (1 ל-5)
+st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
+        html, body, .stApp { direction: rtl; text-align: right; font-family: 'Heebo', sans-serif !important; }
+        .stTextInput input, .stTextArea textarea, .stSelectbox > div > div { direction: rtl; text-align: right; }
+        [data-testid="stSlider"] { direction: ltr !important; }
+        .stButton > button { width: 100%; font-weight: bold; border-radius: 10px; }
+        .stInfo { border-right: 5px solid #007bff; border-left: none; }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- 2. פונקציות שירות ודרייב ---
 def get_drive_service():
@@ -28,16 +39,6 @@ def get_drive_service():
         creds = Credentials.from_service_account_info(json.loads(json_str), scopes=["https://www.googleapis.com/auth/drive.file"])
         return build("drive", "v3", credentials=creds)
     except: return None
-
-def save_txt_to_drive(text, svc, prefix="Research_Analysis"):
-    try:
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
-        filename = f"{prefix}_{timestamp}.txt"
-        file_metadata = {'name': filename, 'parents': [GDRIVE_FOLDER_ID]}
-        media = MediaIoBaseUpload(io.BytesIO(text.encode("utf-8")), mimetype='text/plain')
-        svc.files().create(body=file_metadata, media_body=media, supportsAllDrives=True).execute()
-        return True
-    except: return False
 
 def update_master_excel(data_to_add, svc):
     try:
@@ -67,18 +68,22 @@ def update_master_excel(data_to_add, svc):
         return True
     except: return False
 
-# --- 3. פונקציית צ'אט אקדמית (2014+) ---
+# --- 3. עוזר מחקר אקדמי (2014-2026) ---
 def chat_with_academic_ai(user_q, entry_data, history):
     try:
         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
         instruction = f"""
-        אתה עוזר מחקר אקדמי מעודכן. החוקר צופה בתלמיד {entry_data['name']}.
-        נתונים: {entry_data['challenge']}, פעולות: {entry_data['done']}, פרשנות: {entry_data['interpretation']}.
+        אתה עוזר מחקר אקדמי מומחה לחינוך הנדסי. החוקר צופה בסטודנט: {entry_data['name']}.
         
-        חוקים בל יעברו:
-        1. השתמש במקורות אקדמיים שפורסמו משנת 2014 ועד היום בלבד (2014-2026).
-        2. שלב ציטוטים בגוף הטקסט (שם, שנה).
-        3. בסוף כל תשובה הצג רשימה ביבליוגרפית של המקורות שהוזכרו.
+        נתונים נוכחיים:
+        - מדדים (1-5): תפיסה מרחבית: {entry_data['score_spatial']}, מעבר בין היטלים: {entry_data['score_views']}, שימוש במודל: {entry_data['score_model']}, מסוגלות: {entry_data['score_efficacy']}.
+        - איכותני: קשיים: {entry_data['challenge']}, פעולות: {entry_data['done']}, פרשנות: {entry_data['interpretation']}.
+        
+        חוקים קשיחים:
+        1. השתמש אך ורק במקורות אקדמיים משנת 2014 ועד היום (2014-2026).
+        2. שלב ציטוטים בתוך הטקסט (שם, שנה).
+        3. התייחס לקשר בין המדדים הכמותיים להתנהגות האיכותנית.
+        4. רשום רשימה ביבליוגרפית בסוף התשובה.
         """
         full_context = instruction + "\n\n"
         for q, a in history:
@@ -87,10 +92,10 @@ def chat_with_academic_ai(user_q, entry_data, history):
         
         response = client.models.generate_content(model="gemini-2.0-flash", contents=full_context)
         return response.text
-    except Exception as e: return f"שגיאה: {str(e)}"
+    except Exception as e: return f"שגיאה ב-AI: {str(e)}"
 
 # --- 4. ממשק המשתמש ---
-st.title("🎓 עוזר מחקר - מערכת תצפית מלאה")
+st.title("🎓 יומן תצפית מחקרי חכם")
 
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 
@@ -98,67 +103,74 @@ tab1, tab2, tab3 = st.tabs(["📝 תצפית ושיחה אקדמית", "📊 נ�
 svc = get_drive_service()
 
 with tab1:
-    col_in, col_chat = st.columns([1.2, 1])
+    col_in, col_chat = st.columns([1.3, 1])
     with col_in:
         with st.container(border=True):
-            st.subheader("תיעוד תצפית")
-            name_sel = st.selectbox("👤 תלמיד", CLASS_ROSTER)
+            st.subheader("1. פרטי התצפית")
+            name_sel = st.selectbox("👤 בחר תלמיד", CLASS_ROSTER)
             student_name = st.text_input("שם חופשי:") if name_sel == "תלמיד אחר..." else name_sel
             
             c1, c2 = st.columns(2)
-            with c1: difficulty = st.select_slider("רמת קושי", options=[1, 2, 3], value=2)
-            with c2: model_use = st.radio("שימוש במודל:", ["ללא", "חלקי", "מלא"], horizontal=True)
+            with c1: difficulty = st.select_slider("רמת קושי המטלה", options=[1, 2, 3], value=2)
+            with c2: model_status = st.radio("סטטוס מודל פיזי:", ["ללא", "חלקי", "מלא"], horizontal=True)
             
+            st.divider()
+            st.subheader("2. מדדי מחקר (1=נמוך, 5=גבוה)")
+            m1, m2 = st.columns(2)
+            with m1:
+                score_spatial = st.slider("יכולת תפיסה מרחבית", 1, 5, 3)
+                score_views = st.slider("מעבר בין היטלים", 1, 5, 3)
+            with m2:
+                score_model = st.slider("שימוש במודל מודפס", 1, 5, 3)
+                score_efficacy = st.slider("מסוגלות עצמית", 1, 5, 3)
+
+            st.divider()
+            st.subheader("3. תיעוד איכותני")
             tags = st.multiselect("🏷️ תגיות", OBSERVATION_TAGS)
             challenge = st.text_area("🗣️ ציטוטים וקשיים", key="challenge_box")
             done = st.text_area("👀 פעולות שבוצעו", key="done_box")
-            interpretation = st.text_area("💡 פרשנות/קוד איכותני", key="interp_box")
+            interpretation = st.text_area("💡 פרשנות וקוד איכותני", key="interp_box")
             
-            if st.button("💾 שמור תצפית סופית"):
-                entry = {"type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
-                         "difficulty": difficulty, "physical_model": model_use, "challenge": challenge,
-                         "done": done, "interpretation": interpretation, "tags": ", ".join(tags),
-                         "timestamp": datetime.now().strftime("%H:%M:%S")}
+            if st.button("💾 שמור תצפית וסנכרן לדרייב"):
+                entry = {
+                    "type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
+                    "difficulty": difficulty, "physical_model_status": model_status, 
+                    "score_spatial": score_spatial, "score_views": score_views,
+                    "score_model": score_model, "score_efficacy": score_efficacy,
+                    "challenge": challenge, "done": done, "interpretation": interpretation, 
+                    "tags": ", ".join(tags), "timestamp": datetime.now().strftime("%H:%M:%S")
+                }
                 with open(DATA_FILE, "a", encoding="utf-8") as f:
                     f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                if svc: update_master_excel([entry], svc)
+                if svc: 
+                    update_master_excel([entry], svc)
+                    st.success(f"התצפית על {student_name} נשמרה וסונכרנה!")
                 st.balloons()
-                st.success("נשמר בדרייב!")
 
     with col_chat:
-        st.subheader("🤖 צ'אט אקדמי (2014-2026)")
-        chat_cont = st.container(height=500)
+        st.subheader("🤖 עוזר מחקר אקדמי (2014+)")
+        chat_cont = st.container(height=550)
         with chat_cont:
             for q, a in st.session_state.chat_history:
                 st.markdown(f"**🧐 חוקר:** {q}")
                 st.info(f"**🤖 AI:** {a}")
         
-        u_input = st.chat_input("שאל על התיאוריות...")
+        u_input = st.chat_input("שאל את העוזר על הקשר בין המדדים לתיאוריות...")
         if u_input:
-            curr_data = {"name": student_name, "challenge": challenge, "done": done, "interpretation": interpretation}
+            curr_data = {
+                "name": student_name, "challenge": challenge, "done": done, 
+                "interpretation": interpretation, "score_spatial": score_spatial,
+                "score_views": score_views, "score_model": score_model, "score_efficacy": score_efficacy
+            }
             ans = chat_with_academic_ai(u_input, curr_data, st.session_state.chat_history)
             st.session_state.chat_history.append((u_input, ans))
             st.rerun()
 
 with tab2:
-    st.header("ניהול נתונים")
-    if st.button("🔄 סנכרן את כל התצפיות לאקסל בדרייב"):
+    if st.button("🔄 סנכרן הכל מחדש לאקסל"):
         if os.path.exists(DATA_FILE) and svc:
             all_d = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
-            if update_master_excel(all_d, svc): st.success("סונכרן בהצלחה!")
-
-with tab3:
-    st.header("סיכומי AI")
-    if st.button("✨ בצע סיכום ל-10 תצפיות אחרונות"):
-        if os.path.exists(DATA_FILE):
-            all_ents = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
-            if all_ents:
-                with st.spinner("מייצר סיכום..."):
-                    summary_text = "\n".join([f"תלמיד: {e['student_name']}, קושי: {e['challenge']}" for e in all_ents[-10:]])
-                    client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-                    res = client.models.generate_content(model="gemini-2.0-flash", contents="סכם מגמות אקדמיות (מקורות מ-2014 ואילך):\n" + summary_text)
-                    st.markdown(res.text)
-                    if svc: save_txt_to_drive(res.text, svc, "Final_Summary")
-                    st.success("הסיכום נשמר בדרייב!")
+            update_master_excel(all_d, svc)
+            st.success("האקסל מעודכן!")
 
 # --- סוף קוד ---
