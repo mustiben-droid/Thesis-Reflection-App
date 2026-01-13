@@ -10,47 +10,28 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 
-# --- 1. הגדרות קבועות ---
+# --- 1. הגדרות בסיסיות ---
 DATA_FILE = "reflections.jsonl"
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 MASTER_FILENAME = "All_Observations_Master.xlsx"
 
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
+OBSERVATION_TAGS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-OBSERVATION_TAGS = [
-    "התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", 
-    "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", 
-    "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"
-]
-
-# --- 2. עיצוב הממשק ---
-def setup_design():
-    st.set_page_config(page_title="עוזר מחקר לתזה", page_icon="🎓", layout="wide")
-    st.markdown("""
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
-            html, body, .stApp { direction: rtl; text-align: right; font-family: 'Heebo', sans-serif !important; }
-            .stTextInput input, .stTextArea textarea, .stSelectbox > div > div { direction: rtl; text-align: right; }
-            .stButton > button { width: 100%; font-weight: bold; border-radius: 10px; }
-            .chat-msg { background-color: #f8f9fa; border-radius: 10px; padding: 15px; margin-bottom: 10px; border-right: 5px solid #007bff; }
-        </style>
-    """, unsafe_allow_html=True)
-
-# --- 3. פונקציות שירות וגוגל דרייב ---
+# --- 2. פונקציות שירות וחיבור לדרייב ---
 def get_drive_service():
     try:
         json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
-        info = json.loads(json_str)
-        creds = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive.file"])
+        creds = Credentials.from_service_account_info(json.loads(json_str), scopes=["https://www.googleapis.com/auth/drive.file"])
         return build("drive", "v3", credentials=creds)
     except: return None
 
-def save_to_drive(summary_text, svc):
+def save_txt_to_drive(text, svc, prefix="AI_Analysis"):
     try:
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
-        filename = f"AI_Research_Analysis_{timestamp}.txt"
+        filename = f"{prefix}_{timestamp}.txt"
         file_metadata = {'name': filename, 'parents': [GDRIVE_FOLDER_ID]}
-        media = MediaIoBaseUpload(io.BytesIO(summary_text.encode("utf-8")), mimetype='text/plain')
+        media = MediaIoBaseUpload(io.BytesIO(text.encode("utf-8")), mimetype='text/plain')
         svc.files().create(body=file_metadata, media_body=media, supportsAllDrives=True).execute()
         return True
     except: return False
@@ -85,99 +66,112 @@ def update_master_excel(data_to_add, svc):
         return True
     except: return False
 
-# --- 4. פונקציות AI - עוזר מחקר וסיכום ---
-def chat_with_ai(user_query, current_entry):
+# --- 3. פונקציות AI (עוזר מחקר) ---
+def chat_with_ai(user_q, entry_data):
     try:
         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-        context = f"אתה עוזר מחקר לתזה בחינוך טכנולוגי. החוקר כותב כעת על {current_entry['student_name']}.\n"
-        context += f"מידע נוכחי: קשיים: {current_entry['challenge']}, פעולות: {current_entry['done']}, פרשנות: {current_entry['interpretation']}\n"
-        res = client.models.generate_content(model="gemini-2.0-flash", contents=context + user_query)
-        return res.text
-    except Exception as e: return f"שגיאה: {e}"
+        context = f"""
+        אתה עוזר מחקר לתזה בחינוך הנדסי. החוקר צופה כעת בסטודנט: {entry_data['name']}.
+        נתונים גולמיים מהתצפית (אם ריק, התייחס לזה כתחילת תהליך):
+        - קשיים: {entry_data['challenge']}
+        - פעולות: {entry_data['done']}
+        - פרשנות: {entry_data['interpretation']}
+        
+        ענה בצורה אקדמית ומקצועית. גם אם השדות חלקיים, הצע השערות מבוססות ספרות על ראייה מרחבית ושרטוט.
+        """
+        response = client.models.generate_content(model="gemini-2.0-flash", contents=context + user_q)
+        return response.text
+    except Exception as e: return f"שגיאה ב-AI: {e}"
 
-def generate_final_report(entries):
-    if not entries: return None
-    full_text = "נתונים לניתוח:\n"
-    for e in entries:
-        full_text += f"- תלמיד: {e.get('student_name')}, קשיים: {e.get('challenge')}, פרשנות: {e.get('interpretation')}\n"
-    try:
-        client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-        res = client.models.generate_content(model="gemini-2.0-flash", contents="נתח את המגמות המחקריות הבאות:\n" + full_text)
-        return res.text
-    except: return None
-
-# --- 5. ממשק המשתמש ---
-setup_design()
+# --- 4. ממשק המשתמש ---
+st.set_page_config(page_title="עוזר מחקר חכם", layout="wide")
+st.markdown("<style>body { direction: rtl; text-align: right; }</style>", unsafe_allow_html=True)
 st.title("🎓 עוזר מחקר חכם - יומן תצפית")
-tab1, tab2, tab3 = st.tabs(["📝 תצפית וצ'אט מחקרי", "📊 ניהול נתונים", "🤖 סיכומים"])
+
+tab1, tab2, tab3 = st.tabs(["📝 תצפית וצ'אט", "📊 ניהול", "🤖 סיכומים"])
 svc = get_drive_service()
 
 with tab1:
-    col_input, col_ai = st.columns([1.5, 1])
+    col_form, col_chat = st.columns([1.5, 1])
     
-    with col_input:
-        with st.form("main_form", clear_on_submit=True):
-            st.subheader("פרטי התצפית")
-            sel = st.selectbox("👤 שם תלמיד", CLASS_ROSTER)
-            student_name = st.text_input("שם חופשי:") if sel == "תלמיד אחר..." else sel
+    with col_form:
+        with st.form("observation_form", clear_on_submit=True):
+            st.subheader("תיעוד תצפית חיה")
+            name_sel = st.selectbox("👤 שם תלמיד", CLASS_ROSTER)
+            student_name = st.text_input("שם חופשי (אם בחרת 'אחר'):") if name_sel == "תלמיד אחר..." else name_sel
             
             c1, c2 = st.columns(2)
-            with c1: difficulty = st.select_slider("רמת קושי המטלה", options=[1, 2, 3], value=2)
-            with c2: physical_model = st.radio("שימוש במודל:", ["ללא", "חלקי", "מלא"], horizontal=True)
+            with c1: difficulty = st.select_slider("רמת קושי", options=[1, 2, 3], value=2)
+            with c2: model_use = st.radio("שימוש במודל:", ["ללא", "חלקי", "מלא"], horizontal=True)
             
-            tags = st.multiselect("🏷️ תגיות נצפות", OBSERVATION_TAGS)
+            tags = st.multiselect("🏷️ תגיות", OBSERVATION_TAGS)
             
-            planned = st.text_area("📋 תיאור המטלה")
-            challenge = st.text_area("🗣️ ציטוטים וקשיים")
-            done = st.text_area("👀 פעולות שבוצעו")
-            interpretation = st.text_area("💡 פרשנות איכותנית (השערות מחקריות)")
+            # שדות הטקסט המלאים
+            challenge = st.text_area("🗣️ ציטוטים וקשיים", key="challenge")
+            done = st.text_area("👀 פעולות שבוצעו", key="done")
+            interpretation = st.text_area("💡 פרשנות/קוד איכותני", key="interpretation")
             
-            if st.form_submit_button("💾 שמור תצפית"):
+            if st.form_submit_button("💾 שמור תצפית סופית"):
                 entry = {
                     "type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
-                    "physical_model": physical_model, "planned": planned, "challenge": challenge, 
-                    "done": done, "interpretation": interpretation, "tags": ", ".join(tags), 
+                    "difficulty": difficulty, "physical_model": model_use, "challenge": challenge,
+                    "done": done, "interpretation": interpretation, "tags": ", ".join(tags),
                     "timestamp": datetime.now().strftime("%H:%M:%S")
                 }
                 with open(DATA_FILE, "a", encoding="utf-8") as f:
                     f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                 if svc: update_master_excel([entry], svc)
                 st.balloons()
-                st.success(f"התצפית על {student_name} נשמרה בהצלחה!")
+                st.success("הנתונים נשמרו בהצלחה!")
 
-    with col_ai:
-        st.subheader("🤖 התייעצות עם עוזר המחקר")
+    with col_chat:
+        st.subheader("🤖 עוזר מחקר בזמן אמת")
+        st.info("ה-AI מנתח את מה שכתבת למעלה (לחץ מחוץ לתיבה לעדכון המידע)")
+        
         if "chat_history" not in st.session_state: st.session_state.chat_history = []
         
-        user_q = st.text_input("שאל על התצפית הנוכחית:", placeholder="למשל: האם הטעות כאן מעידה על קושי מרחבי?")
+        user_input = st.text_input("שאל את העוזר (למשל: 'מה דעתך על הפעולות שכתבתי?'):")
         if st.button("שלח שאלה"):
-            curr = {"student_name": student_name, "challenge": challenge, "done": done, "interpretation": interpretation}
-            with st.spinner("מנתח..."):
-                ans = chat_with_ai(user_q, curr)
-                st.session_state.chat_history.append((user_q, ans))
+            current_data = {
+                "name": student_name,
+                "challenge": challenge,
+                "done": done,
+                "interpretation": interpretation
+            }
+            with st.spinner("מנתח נתונים..."):
+                ans = chat_with_ai(user_input, current_data)
+                st.session_state.chat_history.append((user_input, ans))
         
         for q, a in reversed(st.session_state.chat_history):
-            st.markdown(f"**🧐 אתה:** {q}")
+            st.markdown(f"**🧐 חוקר:** {q}")
             st.info(f"**🤖 עוזר:** {a}")
             st.divider()
 
 with tab2:
     st.header("📊 ניהול נתונים")
-    if st.button("🔄 סנכרן הכל לאקסל"):
+    if st.button("🔄 סנכרן הכל לאקסל בדרייב"):
         if os.path.exists(DATA_FILE) and svc:
             all_data = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
             update_master_excel(all_data, svc)
             st.success("סנכרון הושלם!")
 
 with tab3:
-    st.header("🤖 סיכומים ושמירה לדרייב")
-    if st.button("✨ בצע סיכום 10 תצפיות אחרונות ושמור אוטומטית לדרייב"):
+    st.header("🤖 סיכומי AI")
+    if st.button("✨ בצע סיכום ל-10 תצפיות אחרונות ושמור לדרייב"):
         if os.path.exists(DATA_FILE):
             all_ents = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
-            with st.spinner("מייצר דוח..."):
-                summary = generate_final_report(all_ents[-10:])
-                if summary:
-                    st.markdown(summary)
-                    if svc and save_to_drive(summary, svc):
-                        st.success("✅ קובץ הסיכום נשמר בתיקיית הדרייב שלך!")
-        else: st.warning("אין נתונים בזיכרון.")
+            if all_ents:
+                with st.spinner("מייצר דוח סיכום ושומר לדרייב..."):
+                    summary_context = "\n".join([f"תלמיד: {e['student_name']}, קשיים: {e['challenge']}, פרשנות: {e['interpretation']}" for e in all_ents[-10:]])
+                    try:
+                        client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+                        res = client.models.generate_content(model="gemini-2.0-flash", contents="נתח את המגמות המחקריות הבאות:\n" + summary_context)
+                        report = res.text
+                        st.markdown(report)
+                        if svc and save_txt_to_drive(report, svc, "Weekly_Summary"):
+                            st.success("✅ קובץ הסיכום נשמר אוטומטית בדרייב!")
+                        st.download_button("📥 הורד למחשב", data=report, file_name="Summary.txt")
+                    except Exception as e: st.error(str(e))
+            else: st.warning("אין נתונים בזיכרון.")
+
+# --- סוף קוד ---
