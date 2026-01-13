@@ -66,79 +66,76 @@ def update_master_excel(data_to_add, svc):
         return True
     except: return False
 
-# --- 3. פונקציות AI (עוזר מחקר) ---
+# --- 3. פונקציות AI (עוזר מחקר אקדמי) ---
 def chat_with_ai(user_q, entry_data):
     try:
         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
         context = f"""
-        אתה עוזר מחקר לתזה בחינוך הנדסי. החוקר צופה כעת בסטודנט: {entry_data['name']}.
-        נתונים גולמיים מהתצפית (אם ריק, התייחס לזה כתחילת תהליך):
+        אתה עוזר מחקר אקדמי מומחה לחינוך טכנולוגי והנדסי. 
+        החוקר כותב כעת תצפית על התלמיד: {entry_data['name']}.
+        נתונים מהתצפית:
         - קשיים: {entry_data['challenge']}
         - פעולות: {entry_data['done']}
         - פרשנות: {entry_data['interpretation']}
         
-        ענה בצורה אקדמית ומקצועית. גם אם השדות חלקיים, הצע השערות מבוססות ספרות על ראייה מרחבית ושרטוט.
+        הנחיה חשובה: בכל תשובה, נסה לקשר את הממצאים למושגים או תיאוריות אקדמיות (כגון: Scaffolding, Cognitive Load, Mental Rotation, Constructivism). 
+        סייע לחוקר לנסח פרשנות מעמיקה שמתאימה לכתיבת תזה.
         """
         response = client.models.generate_content(model="gemini-2.0-flash", contents=context + user_q)
         return response.text
     except Exception as e: return f"שגיאה ב-AI: {e}"
 
 # --- 4. ממשק המשתמש ---
-st.set_page_config(page_title="עוזר מחקר חכם", layout="wide")
+setup_design = lambda: st.set_page_config(page_title="עוזר מחקר לתזה", layout="wide")
+setup_design()
 st.markdown("<style>body { direction: rtl; text-align: right; }</style>", unsafe_allow_html=True)
 st.title("🎓 עוזר מחקר חכם - יומן תצפית")
 
-tab1, tab2, tab3 = st.tabs(["📝 תצפית וצ'אט", "📊 ניהול", "🤖 סיכומים"])
+if "chat_history" not in st.session_state: st.session_state.chat_history = []
+
+tab1, tab2, tab3 = st.tabs(["📝 תצפית וצ'אט אקדמי", "📊 ניהול", "🤖 סיכומים"])
 svc = get_drive_service()
 
 with tab1:
     col_form, col_chat = st.columns([1.5, 1])
     
     with col_form:
-        with st.form("observation_form", clear_on_submit=True):
-            st.subheader("תיעוד תצפית חיה")
-            name_sel = st.selectbox("👤 שם תלמיד", CLASS_ROSTER)
-            student_name = st.text_input("שם חופשי (אם בחרת 'אחר'):") if name_sel == "תלמיד אחר..." else name_sel
-            
-            c1, c2 = st.columns(2)
-            with c1: difficulty = st.select_slider("רמת קושי", options=[1, 2, 3], value=2)
-            with c2: model_use = st.radio("שימוש במודל:", ["ללא", "חלקי", "מלא"], horizontal=True)
-            
-            tags = st.multiselect("🏷️ תגיות", OBSERVATION_TAGS)
-            
-            # שדות הטקסט המלאים
-            challenge = st.text_area("🗣️ ציטוטים וקשיים", key="challenge")
-            done = st.text_area("👀 פעולות שבוצעו", key="done")
-            interpretation = st.text_area("💡 פרשנות/קוד איכותני", key="interpretation")
-            
-            if st.form_submit_button("💾 שמור תצפית סופית"):
-                entry = {
-                    "type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
-                    "difficulty": difficulty, "physical_model": model_use, "challenge": challenge,
-                    "done": done, "interpretation": interpretation, "tags": ", ".join(tags),
-                    "timestamp": datetime.now().strftime("%H:%M:%S")
-                }
-                with open(DATA_FILE, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                if svc: update_master_excel([entry], svc)
-                st.balloons()
-                st.success("הנתונים נשמרו בהצלחה!")
+        st.subheader("תיעוד תצפית חיה")
+        name_sel = st.selectbox("👤 בחר תלמיד לתצפית", CLASS_ROSTER, key="student_sel")
+        student_name = st.text_input("שם חופשי:") if name_sel == "תלמיד אחר..." else name_sel
+        
+        c1, c2 = st.columns(2)
+        with c1: difficulty = st.select_slider("רמת קושי", options=[1, 2, 3], value=2)
+        with c2: model_use = st.radio("שימוש במודל:", ["ללא", "חלקי", "מלא"], horizontal=True)
+        
+        tags = st.multiselect("🏷️ תגיות", OBSERVATION_TAGS)
+        
+        # שדות טקסט חיים (מחוץ ל-Form כדי שה-AI יראה אותם)
+        challenge = st.text_area("🗣️ ציטוטים וקשיים", key="challenge_box")
+        done = st.text_area("👀 פעולות שבוצעו", key="done_box")
+        interpretation = st.text_area("💡 פרשנות/קוד איכותני", key="interp_box")
+        
+        if st.button("💾 שמור תצפית סופית"):
+            entry = {
+                "type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
+                "difficulty": difficulty, "physical_model": model_use, "challenge": challenge,
+                "done": done, "interpretation": interpretation, "tags": ", ".join(tags),
+                "timestamp": datetime.now().strftime("%H:%M:%S")
+            }
+            with open(DATA_FILE, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            if svc: update_master_excel([entry], svc)
+            st.balloons()
+            st.success(f"התצפית על {student_name} נשמרה בהצלחה!")
 
     with col_chat:
-        st.subheader("🤖 עוזר מחקר בזמן אמת")
-        st.info("ה-AI מנתח את מה שכתבת למעלה (לחץ מחוץ לתיבה לעדכון המידע)")
+        st.subheader("🤖 עוזר מחקר (תיאוריות ומקורות)")
+        st.write(f"מנתח כעת את: **{student_name}**")
         
-        if "chat_history" not in st.session_state: st.session_state.chat_history = []
-        
-        user_input = st.text_input("שאל את העוזר (למשל: 'מה דעתך על הפעולות שכתבתי?'):")
-        if st.button("שלח שאלה"):
-            current_data = {
-                "name": student_name,
-                "challenge": challenge,
-                "done": done,
-                "interpretation": interpretation
-            }
-            with st.spinner("מנתח נתונים..."):
+        user_input = st.text_input("שאל על התצפית (AI יחבר לתיאוריה):")
+        if st.button("שלח שאלה ל-AI"):
+            current_data = {"name": student_name, "challenge": challenge, "done": done, "interpretation": interpretation}
+            with st.spinner(f"מבצע הצלבה עם מקורות אקדמיים..."):
                 ans = chat_with_ai(user_input, current_data)
                 st.session_state.chat_history.append((user_input, ans))
         
@@ -157,19 +154,19 @@ with tab2:
 
 with tab3:
     st.header("🤖 סיכומי AI")
-    if st.button("✨ בצע סיכום ל-10 תצפיות אחרונות ושמור לדרייב"):
+    if st.button("✨ בצע סיכום שבועי ושמור לדרייב"):
         if os.path.exists(DATA_FILE):
             all_ents = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
             if all_ents:
-                with st.spinner("מייצר דוח סיכום ושומר לדרייב..."):
+                with st.spinner("מייצר דוח אקדמי מסכם..."):
                     summary_context = "\n".join([f"תלמיד: {e['student_name']}, קשיים: {e['challenge']}, פרשנות: {e['interpretation']}" for e in all_ents[-10:]])
                     try:
                         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-                        res = client.models.generate_content(model="gemini-2.0-flash", contents="נתח את המגמות המחקריות הבאות:\n" + summary_context)
+                        res = client.models.generate_content(model="gemini-2.0-flash", contents="נתח את המגמות המחקריות הבאות בהקשר של חינוך הנדסי:\n" + summary_context)
                         report = res.text
                         st.markdown(report)
-                        if svc and save_txt_to_drive(report, svc, "Weekly_Summary"):
-                            st.success("✅ קובץ הסיכום נשמר אוטומטית בדרייב!")
+                        if svc and save_txt_to_drive(report, svc, "Research_Weekly_Summary"):
+                            st.success("✅ הסיכום נשמר אוטומטית בדרייב!")
                         st.download_button("📥 הורד למחשב", data=report, file_name="Summary.txt")
                     except Exception as e: st.error(str(e))
             else: st.warning("אין נתונים בזיכרון.")
