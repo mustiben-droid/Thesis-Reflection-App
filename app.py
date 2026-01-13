@@ -57,7 +57,7 @@ def update_master_excel(data_to_add, svc):
         return True
     except: return False
 
-# --- 3. עוזר מחקר אקדמי עם ציטוטים בתוך הטקסט ---
+# --- 3. עוזר מחקר אקדמי עם הגבלת שנים (עד 2014) ---
 def chat_with_academic_ai(user_q, entry_data, history):
     try:
         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -66,11 +66,12 @@ def chat_with_academic_ai(user_q, entry_data, history):
         אתה עוזר מחקר אקדמי בכיר. החוקר צופה בתלמיד {entry_data['name']}.
         נתונים: {entry_data['challenge']}, פעולות: {entry_data['done']}, פרשנות: {entry_data['interpretation']}.
         
-        הנחיות קשיחות:
+        הנחיות קשיחות לציטוטים:
         1. חובה לשלב ציטוטים של מקורות אקדמיים בתוך הטקסט בסגנון (שם החוקר, שנה).
-        2. התמקד בחוקרים כגון: Sweller (עומס קוגניטיבי), Mayer (למידה מולטימדיאלית), Maier (תפיסה מרחבית), Paivio (קידוד כפול).
-        3. ענה בצורה המשכית לשיחה הקודמת.
-        4. בסוף התשובה, רשום רשימה ביבליוגרפית קצרה של המקורות שהוזכרו בתשובה.
+        2. הגבלת שנים: השתמש אך ורק במקורות שפורסמו עד שנת 2014 (כולל). אל תצטט מקורות משנת 2015 והלאה.
+        3. התמקד בחוקרים קלאסיים ומרכזיים בתחום (כגון: Sweller, Mayer, Maier, Paivio, Vygotsky).
+        4. ענה בצורה המשכית לשיחה הקודמת.
+        5. בסוף התשובה, רשום רשימה ביבליוגרפית קצרה של המקורות שהוזכרו בתשובה.
         """
         
         full_context = instruction + "\n\n"
@@ -83,7 +84,7 @@ def chat_with_academic_ai(user_q, entry_data, history):
     except Exception as e: return f"שגיאה: {str(e)}"
 
 # --- 4. ממשק המשתמש ---
-st.title("🎓 עוזר מחקר עם ציטוטים אקדמיים")
+st.title("🎓 עוזר מחקר (מקורות עד 2014)")
 
 if "chat_history" not in st.session_state: 
     st.session_state.chat_history = []
@@ -116,14 +117,14 @@ with tab1:
                 st.success("נשמר בהצלחה!")
 
     with col_ai:
-        st.subheader("🤖 ניתוח אקדמי משולב מקורות")
+        st.subheader("🤖 ניתוח אקדמי (עד 2014)")
         chat_container = st.container(height=500)
         with chat_container:
             for q, a in st.session_state.chat_history:
                 st.markdown(f"**🧐 חוקר:** {q}")
                 st.info(f"**🤖 AI:** {a}")
         
-        user_input = st.chat_input("שאל את העוזר על התיאוריות...")
+        user_input = st.chat_input("שאל את העוזר...")
         if user_input:
             current_data = {"name": student_name, "challenge": challenge, "done": done, "interpretation": interpretation}
             ans = chat_with_academic_ai(user_input, current_data, st.session_state.chat_history)
