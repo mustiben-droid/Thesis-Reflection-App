@@ -2,7 +2,7 @@ import json
 import base64
 import os
 import io
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 from google import genai
@@ -10,7 +10,7 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 
-# --- 1. הגדרות ועיצוב ---
+# --- 1. הגדרות קבועות ---
 DATA_FILE = "reflections.jsonl"
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 MASTER_FILENAME = "All_Observations_Master.xlsx"
@@ -28,6 +28,16 @@ def get_drive_service():
         creds = Credentials.from_service_account_info(json.loads(json_str), scopes=["https://www.googleapis.com/auth/drive.file"])
         return build("drive", "v3", credentials=creds)
     except: return None
+
+def save_txt_to_drive(text, svc, prefix="Research_Analysis"):
+    try:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+        filename = f"{prefix}_{timestamp}.txt"
+        file_metadata = {'name': filename, 'parents': [GDRIVE_FOLDER_ID]}
+        media = MediaIoBaseUpload(io.BytesIO(text.encode("utf-8")), mimetype='text/plain')
+        svc.files().create(body=file_metadata, media_body=media, supportsAllDrives=True).execute()
+        return True
+    except: return False
 
 def update_master_excel(data_to_add, svc):
     try:
@@ -57,23 +67,19 @@ def update_master_excel(data_to_add, svc):
         return True
     except: return False
 
-# --- 3. עוזר מחקר אקדמי עם הגבלת שנים (עד 2014) ---
+# --- 3. פונקציית צ'אט אקדמית (2014+) ---
 def chat_with_academic_ai(user_q, entry_data, history):
     try:
         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-        
         instruction = f"""
-        אתה עוזר מחקר אקדמי בכיר. החוקר צופה בתלמיד {entry_data['name']}.
+        אתה עוזר מחקר אקדמי מעודכן. החוקר צופה בתלמיד {entry_data['name']}.
         נתונים: {entry_data['challenge']}, פעולות: {entry_data['done']}, פרשנות: {entry_data['interpretation']}.
         
-        הנחיות קשיחות לציטוטים:
-        1. חובה לשלב ציטוטים של מקורות אקדמיים בתוך הטקסט בסגנון (שם החוקר, שנה).
-        2. הגבלת שנים: השתמש אך ורק במקורות שפורסמו עד שנת 2014 (כולל). אל תצטט מקורות משנת 2015 והלאה.
-        3. התמקד בחוקרים קלאסיים ומרכזיים בתחום (כגון: Sweller, Mayer, Maier, Paivio, Vygotsky).
-        4. ענה בצורה המשכית לשיחה הקודמת.
-        5. בסוף התשובה, רשום רשימה ביבליוגרפית קצרה של המקורות שהוזכרו בתשובה.
+        חוקים בל יעברו:
+        1. השתמש במקורות אקדמיים שפורסמו משנת 2014 ועד היום בלבד (2014-2026).
+        2. שלב ציטוטים בגוף הטקסט (שם, שנה).
+        3. בסוף כל תשובה הצג רשימה ביבליוגרפית של המקורות שהוזכרו.
         """
-        
         full_context = instruction + "\n\n"
         for q, a in history:
             full_context += f"חוקר: {q}\nעוזר: {a}\n\n"
@@ -84,22 +90,24 @@ def chat_with_academic_ai(user_q, entry_data, history):
     except Exception as e: return f"שגיאה: {str(e)}"
 
 # --- 4. ממשק המשתמש ---
-st.title("🎓 עוזר מחקר (מקורות עד 2014)")
+st.title("🎓 עוזר מחקר - מערכת תצפית מלאה")
 
-if "chat_history" not in st.session_state: 
-    st.session_state.chat_history = []
+if "chat_history" not in st.session_state: st.session_state.chat_history = []
 
-tab1, tab2, tab3 = st.tabs(["📝 תצפית ושיחה", "📊 ניהול", "🤖 סיכומים"])
+tab1, tab2, tab3 = st.tabs(["📝 תצפית ושיחה אקדמית", "📊 ניהול נתונים", "🤖 סיכומים"])
 svc = get_drive_service()
 
 with tab1:
-    col_input, col_ai = st.columns([1.2, 1])
-    
-    with col_input:
+    col_in, col_chat = st.columns([1.2, 1])
+    with col_in:
         with st.container(border=True):
             st.subheader("תיעוד תצפית")
             name_sel = st.selectbox("👤 תלמיד", CLASS_ROSTER)
             student_name = st.text_input("שם חופשי:") if name_sel == "תלמיד אחר..." else name_sel
+            
+            c1, c2 = st.columns(2)
+            with c1: difficulty = st.select_slider("רמת קושי", options=[1, 2, 3], value=2)
+            with c2: model_use = st.radio("שימוש במודל:", ["ללא", "חלקי", "מלא"], horizontal=True)
             
             tags = st.multiselect("🏷️ תגיות", OBSERVATION_TAGS)
             challenge = st.text_area("🗣️ ציטוטים וקשיים", key="challenge_box")
@@ -108,27 +116,49 @@ with tab1:
             
             if st.button("💾 שמור תצפית סופית"):
                 entry = {"type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
-                         "challenge": challenge, "done": done, "interpretation": interpretation, 
-                         "tags": ", ".join(tags), "timestamp": datetime.now().strftime("%H:%M:%S")}
+                         "difficulty": difficulty, "physical_model": model_use, "challenge": challenge,
+                         "done": done, "interpretation": interpretation, "tags": ", ".join(tags),
+                         "timestamp": datetime.now().strftime("%H:%M:%S")}
                 with open(DATA_FILE, "a", encoding="utf-8") as f:
                     f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                 if svc: update_master_excel([entry], svc)
                 st.balloons()
-                st.success("נשמר בהצלחה!")
+                st.success("נשמר בדרייב!")
 
-    with col_ai:
-        st.subheader("🤖 ניתוח אקדמי (עד 2014)")
-        chat_container = st.container(height=500)
-        with chat_container:
+    with col_chat:
+        st.subheader("🤖 צ'אט אקדמי (2014-2026)")
+        chat_cont = st.container(height=500)
+        with chat_cont:
             for q, a in st.session_state.chat_history:
                 st.markdown(f"**🧐 חוקר:** {q}")
                 st.info(f"**🤖 AI:** {a}")
         
-        user_input = st.chat_input("שאל את העוזר...")
-        if user_input:
-            current_data = {"name": student_name, "challenge": challenge, "done": done, "interpretation": interpretation}
-            ans = chat_with_academic_ai(user_input, current_data, st.session_state.chat_history)
-            st.session_state.chat_history.append((user_input, ans))
+        u_input = st.chat_input("שאל על התיאוריות...")
+        if u_input:
+            curr_data = {"name": student_name, "challenge": challenge, "done": done, "interpretation": interpretation}
+            ans = chat_with_academic_ai(u_input, curr_data, st.session_state.chat_history)
+            st.session_state.chat_history.append((u_input, ans))
             st.rerun()
+
+with tab2:
+    st.header("ניהול נתונים")
+    if st.button("🔄 סנכרן את כל התצפיות לאקסל בדרייב"):
+        if os.path.exists(DATA_FILE) and svc:
+            all_d = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
+            if update_master_excel(all_d, svc): st.success("סונכרן בהצלחה!")
+
+with tab3:
+    st.header("סיכומי AI")
+    if st.button("✨ בצע סיכום ל-10 תצפיות אחרונות"):
+        if os.path.exists(DATA_FILE):
+            all_ents = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
+            if all_ents:
+                with st.spinner("מייצר סיכום..."):
+                    summary_text = "\n".join([f"תלמיד: {e['student_name']}, קושי: {e['challenge']}" for e in all_ents[-10:]])
+                    client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+                    res = client.models.generate_content(model="gemini-2.0-flash", contents="סכם מגמות אקדמיות (מקורות מ-2014 ואילך):\n" + summary_text)
+                    st.markdown(res.text)
+                    if svc: save_txt_to_drive(res.text, svc, "Final_Summary")
+                    st.success("הסיכום נשמר בדרייב!")
 
 # --- סוף קוד ---
