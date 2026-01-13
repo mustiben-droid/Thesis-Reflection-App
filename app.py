@@ -57,36 +57,45 @@ def update_master_excel(data_to_add, svc):
         return True
     except: return False
 
-# --- 3. עוזר מחקר אקדמי עם זיכרון ---
+# --- 3. עוזר מחקר אקדמי עם תיקון שגיאת הפורמט ---
 def chat_with_academic_ai(user_q, entry_data, history):
     try:
         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+        
         # הנחיה קשיחה לשימוש ברפרנסים
         instruction = f"""
-        אתה עוזר מחקר אקדמי בכיר בתחום החינוך הטכנולוגי. 
+        אתה עוזר מחקר אקדמי מומחה לחינוך טכנולוגי. 
         החוקר כותב כעת תצפית על {entry_data['name']}.
-        נתוני תצפית נוכחיים: {entry_data['challenge']}, פעולות: {entry_data['done']}, פרשנות: {entry_data['interpretation']}.
+        נתוני תצפית נוכחיים: 
+        קשיים: {entry_data['challenge']}
+        פעולות: {entry_data['done']}
+        פרשנות: {entry_data['interpretation']}
         
-        דרישות מהתשובה:
-        1. בכל ניתוח, ציין שמות של חוקרים או מודלים רלוונטיים (למשל: Sweller ב-Cognitive Load, Mayer בלמידה מולטימדיאלית, או Maier בראייה מרחבית).
-        2. ספק הסברים המבוססים על ספרות מקצועית בשרטוט הנדסי ותפיסה מרחבית.
-        3. שמור על שיח המשכי - התייחס לשאלות הקודמות של החוקר.
+        דרישות:
+        1. ציין שמות חוקרים ומודלים (למשל: Sweller, Mayer, Maier).
+        2. שמור על שיח המשכי.
         """
-        # בניית היסטוריית השיחה
-        messages = [{"role": "user", "content": instruction}]
-        for q, a in history:
-            messages.append({"role": "user", "content": q})
-            messages.append({"role": "model", "content": a})
-        messages.append({"role": "user", "content": user_q})
         
-        response = client.models.generate_content(model="gemini-2.0-flash", contents=messages)
+        # תיקון הבאג: בניית רשימת הודעות פשוטה כטקסט
+        full_context = instruction + "\n\n"
+        for q, a in history:
+            full_context += f"חוקר: {q}\nעוזר: {a}\n\n"
+        
+        full_context += f"חוקר: {user_q}"
+        
+        response = client.models.generate_content(
+            model="gemini-2.0-flash", 
+            contents=full_context
+        )
         return response.text
-    except Exception as e: return f"שגיאה ב-AI: {e}"
+    except Exception as e: 
+        return f"שגיאה טכנית ב-AI: {str(e)}"
 
 # --- 4. ממשק המשתמש ---
-st.title("🎓 עוזר מחקר חכם (גרסה אקדמית)")
+st.title("🎓 עוזר מחקר חכם (מתוקן)")
 
-if "chat_history" not in st.session_state: st.session_state.chat_history = []
+if "chat_history" not in st.session_state: 
+    st.session_state.chat_history = []
 
 tab1, tab2, tab3 = st.tabs(["📝 תצפית ושיחה אקדמית", "📊 ניהול", "🤖 סיכומים"])
 svc = get_drive_service()
@@ -121,24 +130,22 @@ with tab1:
                 st.success("נשמר בדרייב!")
 
     with col_ai:
-        st.subheader("🤖 עוזר מחקר אקדמי (שיחה)")
+        st.subheader("🤖 עוזר מחקר אקדמי")
         st.write(f"מנתח כעת: **{student_name}**")
         
-        # אזור התצוגה של הצ'אט
-        chat_placeholder = st.container(height=400)
-        with chat_placeholder:
+        chat_container = st.container(height=400)
+        with chat_container:
             for q, a in st.session_state.chat_history:
                 st.markdown(f"**🧐 חוקר:** {q}")
-                st.markdown(f"**🤖 AI:** {a}")
-                st.divider()
-
-        # קלט לצ'אט
-        user_input = st.chat_input("שאל את העוזר על התיאוריות שמאחורי התצפית...")
+                st.info(f"**🤖 AI:** {a}")
+        
+        user_input = st.chat_input("שאל את העוזר...")
         if user_input:
             current_data = {"name": student_name, "challenge": challenge, "done": done, "interpretation": interpretation}
-            ans = chat_with_academic_ai(user_input, current_data, st.session_state.chat_history)
-            st.session_state.chat_history.append((user_input, ans))
-            st.rerun()
+            with st.spinner("מתחבר לספרייה האקדמית..."):
+                ans = chat_with_academic_ai(user_input, current_data, st.session_state.chat_history)
+                st.session_state.chat_history.append((user_input, ans))
+                st.rerun()
 
 with tab2:
     if st.button("🔄 סנכרן הכל לאקסל"):
@@ -148,9 +155,7 @@ with tab2:
             st.success("סונכרן!")
 
 with tab3:
-    if st.button("✨ סיכום שבועי אקדמי"):
-        if os.path.exists(DATA_FILE):
-            all_ents = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")]
-            st.write("מייצר דוח...") # פונקציית סיכום מגרסה קודמת
+    st.header("🤖 סיכומים")
+    st.write("כאן יופיעו דוחות הסיכום השבועיים.")
 
 # --- סוף קוד ---
