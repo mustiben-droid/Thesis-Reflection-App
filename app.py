@@ -57,47 +57,38 @@ def update_master_excel(data_to_add, svc):
         return True
     except: return False
 
-# --- 3. עוזר מחקר אקדמי עם תיקון שגיאת הפורמט ---
+# --- 3. עוזר מחקר אקדמי עם ציטוטים בתוך הטקסט ---
 def chat_with_academic_ai(user_q, entry_data, history):
     try:
         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
         
-        # הנחיה קשיחה לשימוש ברפרנסים
         instruction = f"""
-        אתה עוזר מחקר אקדמי מומחה לחינוך טכנולוגי. 
-        החוקר כותב כעת תצפית על {entry_data['name']}.
-        נתוני תצפית נוכחיים: 
-        קשיים: {entry_data['challenge']}
-        פעולות: {entry_data['done']}
-        פרשנות: {entry_data['interpretation']}
+        אתה עוזר מחקר אקדמי בכיר. החוקר צופה בתלמיד {entry_data['name']}.
+        נתונים: {entry_data['challenge']}, פעולות: {entry_data['done']}, פרשנות: {entry_data['interpretation']}.
         
-        דרישות:
-        1. ציין שמות חוקרים ומודלים (למשל: Sweller, Mayer, Maier).
-        2. שמור על שיח המשכי.
+        הנחיות קשיחות:
+        1. חובה לשלב ציטוטים של מקורות אקדמיים בתוך הטקסט בסגנון (שם החוקר, שנה).
+        2. התמקד בחוקרים כגון: Sweller (עומס קוגניטיבי), Mayer (למידה מולטימדיאלית), Maier (תפיסה מרחבית), Paivio (קידוד כפול).
+        3. ענה בצורה המשכית לשיחה הקודמת.
+        4. בסוף התשובה, רשום רשימה ביבליוגרפית קצרה של המקורות שהוזכרו בתשובה.
         """
         
-        # תיקון הבאג: בניית רשימת הודעות פשוטה כטקסט
         full_context = instruction + "\n\n"
         for q, a in history:
             full_context += f"חוקר: {q}\nעוזר: {a}\n\n"
-        
         full_context += f"חוקר: {user_q}"
         
-        response = client.models.generate_content(
-            model="gemini-2.0-flash", 
-            contents=full_context
-        )
+        response = client.models.generate_content(model="gemini-2.0-flash", contents=full_context)
         return response.text
-    except Exception as e: 
-        return f"שגיאה טכנית ב-AI: {str(e)}"
+    except Exception as e: return f"שגיאה: {str(e)}"
 
 # --- 4. ממשק המשתמש ---
-st.title("🎓 עוזר מחקר חכם (מתוקן)")
+st.title("🎓 עוזר מחקר עם ציטוטים אקדמיים")
 
 if "chat_history" not in st.session_state: 
     st.session_state.chat_history = []
 
-tab1, tab2, tab3 = st.tabs(["📝 תצפית ושיחה אקדמית", "📊 ניהול", "🤖 סיכומים"])
+tab1, tab2, tab3 = st.tabs(["📝 תצפית ושיחה", "📊 ניהול", "🤖 סיכומים"])
 svc = get_drive_service()
 
 with tab1:
@@ -109,10 +100,6 @@ with tab1:
             name_sel = st.selectbox("👤 תלמיד", CLASS_ROSTER)
             student_name = st.text_input("שם חופשי:") if name_sel == "תלמיד אחר..." else name_sel
             
-            c1, c2 = st.columns(2)
-            with c1: difficulty = st.select_slider("רמת קושי", options=[1, 2, 3], value=2)
-            with c2: model_use = st.radio("שימוש במודל:", ["ללא", "חלקי", "מלא"], horizontal=True)
-            
             tags = st.multiselect("🏷️ תגיות", OBSERVATION_TAGS)
             challenge = st.text_area("🗣️ ציטוטים וקשיים", key="challenge_box")
             done = st.text_area("👀 פעולות שבוצעו", key="done_box")
@@ -120,42 +107,27 @@ with tab1:
             
             if st.button("💾 שמור תצפית סופית"):
                 entry = {"type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
-                         "difficulty": difficulty, "physical_model": model_use, "challenge": challenge,
-                         "done": done, "interpretation": interpretation, "tags": ", ".join(tags),
-                         "timestamp": datetime.now().strftime("%H:%M:%S")}
+                         "challenge": challenge, "done": done, "interpretation": interpretation, 
+                         "tags": ", ".join(tags), "timestamp": datetime.now().strftime("%H:%M:%S")}
                 with open(DATA_FILE, "a", encoding="utf-8") as f:
                     f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                 if svc: update_master_excel([entry], svc)
                 st.balloons()
-                st.success("נשמר בדרייב!")
+                st.success("נשמר בהצלחה!")
 
     with col_ai:
-        st.subheader("🤖 עוזר מחקר אקדמי")
-        st.write(f"מנתח כעת: **{student_name}**")
-        
-        chat_container = st.container(height=400)
+        st.subheader("🤖 ניתוח אקדמי משולב מקורות")
+        chat_container = st.container(height=500)
         with chat_container:
             for q, a in st.session_state.chat_history:
                 st.markdown(f"**🧐 חוקר:** {q}")
                 st.info(f"**🤖 AI:** {a}")
         
-        user_input = st.chat_input("שאל את העוזר...")
+        user_input = st.chat_input("שאל את העוזר על התיאוריות...")
         if user_input:
             current_data = {"name": student_name, "challenge": challenge, "done": done, "interpretation": interpretation}
-            with st.spinner("מתחבר לספרייה האקדמית..."):
-                ans = chat_with_academic_ai(user_input, current_data, st.session_state.chat_history)
-                st.session_state.chat_history.append((user_input, ans))
-                st.rerun()
-
-with tab2:
-    if st.button("🔄 סנכרן הכל לאקסל"):
-        if os.path.exists(DATA_FILE) and svc:
-            all_data = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
-            update_master_excel(all_data, svc)
-            st.success("סונכרן!")
-
-with tab3:
-    st.header("🤖 סיכומים")
-    st.write("כאן יופיעו דוחות הסיכום השבועיים.")
+            ans = chat_with_academic_ai(user_input, current_data, st.session_state.chat_history)
+            st.session_state.chat_history.append((user_input, ans))
+            st.rerun()
 
 # --- סוף קוד ---
