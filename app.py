@@ -38,11 +38,11 @@ def get_drive_service():
         return build("drive", "v3", credentials=creds)
     except: return None
 
-def upload_file_to_drive(uploaded_file, svc):
+def upload_file_to_drive(uploaded_file, svc, folder_id=GDRIVE_FOLDER_ID):
     try:
         file_metadata = {'name': uploaded_file.name}
-        if GDRIVE_FOLDER_ID: file_metadata['parents'] = [GDRIVE_FOLDER_ID]
-        media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
+        if folder_id: file_metadata['parents'] = [folder_id]
+        media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue() if hasattr(uploaded_file, 'getvalue') else uploaded_file), mimetype='text/plain' if isinstance(uploaded_file, bytes) else 'auto')
         file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink', supportsAllDrives=True).execute()
         return file.get('webViewLink')
     except: return "Error"
@@ -82,7 +82,7 @@ def update_master_excel(data_to_add, svc):
 def chat_with_academic_ai(user_q, entry_data, history):
     try:
         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-        instruction = f"אתה עוזר מחקר אקדמי. סטודנט: {entry_data['name']}. מדדים: תפיסה {entry_data['score_spatial']}, מעבר היטלים {entry_data['score_views']}, מסוגלות {entry_data['score_efficacy']}. מודל: {entry_data['model_status']}. חוקים: מקורות 2014-2026 בלבד, ציטוטים בגוף הטקסט, ניתוח משולב."
+        instruction = f"אתה עוזר מחקר אקדמי. סטודנט: {entry_data['name']}. מדדים (1-5): תפיסה {entry_data['score_spatial']}, היטלים {entry_data['score_views']}, מודל {entry_data['score_model']}, מסוגלות {entry_data['score_efficacy']}. מודל: {entry_data['model_status']}. חוקים: מקורות 2014-2026 בלבד, ציטוטים בגוף הטקסט."
         full_context = instruction + "\n\n"
         for q, a in history: full_context += f"חוקר: {q}\nעוזר: {a}\n\n"
         full_context += f"חוקר: {user_q}"
@@ -91,24 +91,22 @@ def chat_with_academic_ai(user_q, entry_data, history):
     except Exception as e: return f"שגיאה: {str(e)}"
 
 # --- 3. ניהול מצב האפליקציה (Reset) ---
-if "form_iteration" not in st.session_state:
-    st.session_state.form_iteration = 0
+if "form_iteration" not in st.session_state: st.session_state.form_iteration = 0
+if "chat_history" not in st.session_state: st.session_state.chat_history = []
 
 def reset_form():
     st.session_state.form_iteration += 1
-    st.session_state.chat_history = [] # מאפס גם את הצ'אט לתלמיד החדש
+    st.session_state.chat_history = []
 
 # --- 4. ממשק המשתמש ---
 st.title("🎓 יומן תצפית מחקרי חכם")
 
-tab1, tab2 = st.tabs(["📝 תצפית ושיחה אקדמית", "📊 ניהול נתונים"])
+tab1, tab2, tab3 = st.tabs(["📝 תצפית ושיחה", "📊 ניהול נתונים", "🤖 סיכום מגמות"])
 svc = get_drive_service()
 
 with tab1:
     col_in, col_chat = st.columns([1.3, 1])
-    
     with col_in:
-        # שימוש ב-key דינמי כדי לאפס את כל השדות בלחיצה אחת
         with st.container(border=True):
             st.subheader("1. פרטי התצפית")
             name_sel = st.selectbox("👤 בחר תלמיד", CLASS_ROSTER, key=f"name_{st.session_state.form_iteration}")
@@ -152,26 +150,22 @@ with tab1:
                     "tags": ", ".join(tags), "timestamp": datetime.now().strftime("%H:%M:%S"),
                     "file_links": ", ".join(file_links)
                 }
-                
                 with open(DATA_FILE, "a", encoding="utf-8") as f:
                     f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                
                 if svc: update_master_excel([entry], svc)
-                
-                st.success(f"התצפית על {student_name} נשמרה. הטופס מתאפס...")
-                reset_form() # פונקציית האיפוס
-                st.rerun() # טעינה מחדש של הדף עם שדות ריקים
+                st.success(f"התצפית נשמרה. הטופס התאפס.")
+                reset_form()
+                st.rerun()
 
     with col_chat:
         st.subheader("🤖 עוזר מחקר אקדמי")
-        if "chat_history" not in st.session_state: st.session_state.chat_history = []
-        chat_cont = st.container(height=500)
+        chat_cont = st.container(height=550)
         with chat_cont:
             for q, a in st.session_state.chat_history:
                 st.markdown(f"**🧐 חוקר:** {q}")
                 st.info(f"**🤖 AI:** {a}")
         
-        u_input = st.chat_input("שאל על התצפית...")
+        u_input = st.chat_input("שאל על התצפית הנוכחית...")
         if u_input:
             curr_data = {"name": student_name, "model_status": model_status, "challenge": challenge, "score_spatial": score_spatial, "score_views": score_views, "score_efficacy": score_efficacy, "done": done, "interpretation": interpretation}
             ans = chat_with_academic_ai(u_input, curr_data, st.session_state.chat_history)
@@ -179,8 +173,42 @@ with tab1:
             st.rerun()
 
 with tab2:
+    st.header("📊 ניהול נתונים")
     if st.button("🔄 סנכרון מלא לדרייב"):
         if os.path.exists(DATA_FILE) and svc:
             all_d = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")]
             update_master_excel(all_d, svc)
             st.success("סונכרן!")
+
+with tab3:
+    st.header("🤖 סיכום מגמות אקדמי")
+    st.write("ה-AI ינתח את 10 התצפיות האחרונות ויזהה תובנות למחקר.")
+    
+    if st.button("✨ בצע ניתוח מגמות (מקורות 2014-2026)"):
+        if os.path.exists(DATA_FILE):
+            all_observations = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")]
+            last_10 = all_observations[-10:]
+            if last_10:
+                with st.spinner("מנתח נתונים ומצליב מקורות..."):
+                    context_text = "\n".join([f"תלמיד: {o['student_name']}, קושי: {o['challenge']}, מדד תפיסה: {o['score_spatial']}, מודל: {o['model_status']}" for o in last_10])
+                    client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+                    prompt = f"נתח את המגמות בתצפיות הבאות. השתמש במקורות אקדמיים משנת 2014-2026 בלבד. התייחס לקשר בין שימוש במודלים לתפיסה מרחבית ומסוגלות עצמית:\n{context_text}"
+                    res = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+                    st.session_state.current_summary = res.text
+            else: st.warning("אין מספיק תצפיות לסיכום.")
+
+    if "current_summary" in st.session_state:
+        st.markdown("---")
+        st.markdown(st.session_state.current_summary)
+        if st.button("💾 שמור סיכום זה כקובץ TXT בדרייב"):
+            if svc:
+                summary_bytes = st.session_state.current_summary.encode('utf-8')
+                # יצירת אובייקט דמוי קובץ להעלאה
+                class MockFile:
+                    def __init__(self, content): self.content = content; self.name = f"Summary_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.txt"; self.type = "text/plain"
+                    def getvalue(self): return self.content
+                
+                link = upload_file_to_drive(MockFile(summary_bytes), svc)
+                st.success(f"הסיכום נשמר בדרייב! קישור: {link}")
+
+# --- סוף קוד ---
