@@ -12,7 +12,6 @@ from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 
 # --- 1. הגדרות קבועות ועיצוב ---
 DATA_FILE = "reflections.jsonl"
-# אם אתה רוצה את התיקייה הראשית, וודא שה-Secret ב-Streamlit ריק או שנה כאן ל-None
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID") 
 MASTER_FILENAME = "All_Observations_Master.xlsx"
 
@@ -43,11 +42,9 @@ def get_drive_service():
 
 def upload_file_to_drive(uploaded_file, svc):
     try:
-        # אם GDRIVE_FOLDER_ID קיים, נעלה לתיקייה. אם לא - לתיקייה הראשית (Root)
         file_metadata = {'name': uploaded_file.name}
         if GDRIVE_FOLDER_ID:
             file_metadata['parents'] = [GDRIVE_FOLDER_ID]
-            
         media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
         file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink', supportsAllDrives=True).execute()
         return file.get('webViewLink')
@@ -57,14 +54,11 @@ def upload_file_to_drive(uploaded_file, svc):
 
 def update_master_excel(data_to_add, svc):
     try:
-        # חיפוש הקובץ בתיקייה המוגדרת או בתיקייה הראשית
         query = f"name = '{MASTER_FILENAME}' and trashed = false"
         if GDRIVE_FOLDER_ID:
             query += f" and '{GDRIVE_FOLDER_ID}' in parents"
-            
         res = svc.files().list(q=query, supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
         new_df = pd.DataFrame(data_to_add)
-        
         if res:
             file_id = res[0]['id']
             request = svc.files().get_media(fileId=file_id)
@@ -78,19 +72,16 @@ def update_master_excel(data_to_add, svc):
         else:
             df = new_df
             file_id = None
-            
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False)
         output.seek(0)
-        
         media = MediaIoBaseUpload(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         if file_id:
             svc.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
         else:
             file_metadata = {'name': MASTER_FILENAME}
-            if GDRIVE_FOLDER_ID:
-                file_metadata['parents'] = [GDRIVE_FOLDER_ID]
+            if GDRIVE_FOLDER_ID: file_metadata['parents'] = [GDRIVE_FOLDER_ID]
             svc.files().create(body=file_metadata, media_body=media, supportsAllDrives=True).execute()
         return True
     except Exception as e:
@@ -103,26 +94,26 @@ def chat_with_academic_ai(user_q, entry_data, history):
         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
         instruction = f"""
         אתה עוזר מחקר אקדמי מומחה. הסטודנט: {entry_data['name']}.
-        מדדים: תפיסה: {entry_data['score_spatial']}, מעבר בין היטלים: {entry_data['score_views']}, מסוגלות: {entry_data['score_efficacy']}.
-        תוכן: {entry_data['challenge']}, פרשנות: {entry_data['interpretation']}.
+        סטטוס שימוש במודל פיזי: {entry_data['model_status']}.
+        מדדים כמותיים: תפיסה מרחבית: {entry_data['score_spatial']}, מעבר בין היטלים: {entry_data['score_views']}, שימוש במודל: {entry_data['score_model']}, מסוגלות עצמית: {entry_data['score_efficacy']}.
+        נתונים איכותניים: קשיים: {entry_data['challenge']}, פעולות: {entry_data['done']}, פרשנות: {entry_data['interpretation']}.
         
         חוקים קשיחים: 
         1. השתמש אך ורק במקורות אקדמיים משנת 2014 ועד היום (2014-2026).
         2. שלב ציטוטים בתוך הטקסט (שם, שנה).
-        3. התייחס למדדים הכמותיים בתוך הניתוח.
+        3. התייחס לקשר בין השימוש במודל הפיזי לבין המדדים הכמותיים והתיאוריות המחקריות.
         4. הצג רשימה ביבליוגרפית בסוף.
         """
         full_context = instruction + "\n\n"
         for q, a in history:
             full_context += f"חוקר: {q}\nעוזר: {a}\n\n"
         full_context += f"חוקר: {user_q}"
-        
         response = client.models.generate_content(model="gemini-2.0-flash", contents=full_context)
         return response.text
     except Exception as e: return f"שגיאה ב-AI: {str(e)}"
 
 # --- 4. ממשק המשתמש ---
-st.title("🎓 יומן תצפית מחקרי (העלאה לתיקייה ראשית)")
+st.title("🎓 יומן תצפית מחקרי - גרסת המודל המשולב")
 
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 
@@ -137,14 +128,18 @@ with tab1:
             name_sel = st.selectbox("👤 בחר תלמיד", CLASS_ROSTER)
             student_name = st.text_input("שם חופשי:") if name_sel == "תלמיד אחר..." else name_sel
             
+            c1, c2 = st.columns(2)
+            with c1: difficulty = st.select_slider("רמת קושי המטלה", options=[1, 2, 3], value=2)
+            with c2: model_status = st.radio("האם התלמיד עבד עם גוף מודפס?", ["ללא מודל", "מודל חלקי", "מודל מלא"], horizontal=True)
+            
             st.divider()
-            st.subheader("2. מדדי מחקר (1=נמוך משמאל, 5=גבוה מימין)")
+            st.subheader("2. מדדי מחקר (1=נמוך, 5=גבוה)")
             m1, m2 = st.columns(2)
             with m1:
                 score_spatial = st.slider("יכולת תפיסה מרחבית", 1, 5, 3)
                 score_views = st.slider("מעבר בין היטלים", 1, 5, 3)
             with m2:
-                score_model = st.slider("שימוש במודל מודפס", 1, 5, 3)
+                score_model = st.slider("שימוש יעיל במודל המודפס", 1, 5, 3)
                 score_efficacy = st.slider("מסוגלות עצמית", 1, 5, 3)
 
             st.divider()
@@ -167,21 +162,18 @@ with tab1:
                 
                 entry = {
                     "type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
+                    "difficulty": difficulty, "model_status": model_status, 
                     "score_spatial": score_spatial, "score_views": score_views,
                     "score_model": score_model, "score_efficacy": score_efficacy,
                     "challenge": challenge, "done": done, "interpretation": interpretation, 
                     "tags": ", ".join(tags), "timestamp": datetime.now().strftime("%H:%M:%S"),
                     "file_links": ", ".join(file_links)
                 }
-                
-                # שמירה לקובץ מקומי כגיבוי
                 with open(DATA_FILE, "a", encoding="utf-8") as f:
                     f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                
-                # סנכרון לדרייב
                 if svc: 
                     if update_master_excel([entry], svc):
-                        st.success(f"התצפית על {student_name} נשמרה בתיקייה הראשית בדרייב!")
+                        st.success(f"התצפית על {student_name} נשמרה בהצלחה!")
                         st.balloons()
 
     with col_chat:
@@ -194,9 +186,9 @@ with tab1:
         u_input = st.chat_input("שאל את העוזר...")
         if u_input:
             curr_data = {
-                "name": student_name, "challenge": challenge, "done": done, 
+                "name": student_name, "model_status": model_status, "challenge": challenge, "done": done, 
                 "interpretation": interpretation, "score_spatial": score_spatial,
-                "score_views": score_views, "score_efficacy": score_efficacy
+                "score_views": score_views, "score_model": score_model, "score_efficacy": score_efficacy
             }
             ans = chat_with_academic_ai(u_input, curr_data, st.session_state.chat_history)
             st.session_state.chat_history.append((u_input, ans))
@@ -208,4 +200,5 @@ with tab2:
             all_d = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8") if json.loads(l).get("type")=="reflection"]
             if update_master_excel(all_d, svc):
                 st.success("האקסל בדרייב סונכרן בהצלחה!")
+
 # --- סוף קוד ---
