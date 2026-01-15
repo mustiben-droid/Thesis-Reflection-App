@@ -30,7 +30,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. פונקציות שירות ---
+# --- 2. פונקציות שירות (דרייב) ---
 def get_drive_service():
     try:
         json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
@@ -79,33 +79,55 @@ def update_master_excel(data_to_add, svc):
         return True
     except: return False
 
-# --- 3. לוגיקת זיכרון ו-AI ---
+# --- 3. לוגיקת שליפת מידע ו-AI ---
 def get_student_history(student_name):
+    # נרמול השם לחיפוש מדויק
+    target_name = student_name.strip().lower()
     if not os.path.exists(DATA_FILE): return ""
+    
     history_lines = []
     with open(DATA_FILE, "r", encoding="utf-8") as f:
         for line in f:
-            obs = json.loads(line)
-            if obs.get("student_name", "").strip() == student_name.strip():
-                history_lines.append(f"תאריך {obs.get('date')}: קושי: {obs.get('challenge')}. ציונים: תפיסה {obs.get('score_spatial')}.")
+            try:
+                obs = json.loads(line)
+                if obs.get("student_name", "").strip().lower() == target_name:
+                    history_lines.append(
+                        f"תאריך: {obs.get('date')} | קושי: {obs.get('challenge')} | פעולות: {obs.get('done')} | "
+                        f"מדדים: תפיסה={obs.get('score_spatial')}, מעבר היטלים={obs.get('score_views')}"
+                    )
+            except: continue
     return "\n".join(history_lines)
 
-def chat_with_academic_ai(user_q, entry_data, history, student_full_history):
+def chat_with_academic_ai(user_q, student_name, history, student_full_history):
     try:
         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-        instruction = f"אתה עוזר מחקר אקדמי. נתח התקדמות עבור {entry_data.get('name')}. היסטוריה: {student_full_history}. חוקים: מקורות 2014-2026 בלבד, אל תשאל שאלות כלליות."
+        
+        # בניית קונטקסט קשיח
+        instruction = f"""
+        אתה עוזר מחקר אקדמי. משימתך לנתח את ההתקדמות של הסטודנט: {student_name}.
+        
+        להלן ההיסטוריה המלאה שנמצאה במאגר עבורו:
+        {student_full_history if student_full_history else "לא נמצאו נתונים קודמים עבור שם זה."}
+        
+        חוקים מחייבים:
+        1. אל תענה תשובות כלליות. אם ההיסטוריה למעלה כוללת מידע, השתמש בו כדי לענות מה היה התרגיל האחרון או מה היו הקשיים.
+        2. השתמש במקורות אקדמיים (2014-2026) בלבד.
+        3. אם אתה לא רואה מידע בהיסטוריה, ציין שאין תיעוד במערכת לשם הזה.
+        """
+        
         full_context = instruction + "\n\n"
         for q, a in history: full_context += f"חוקר: {q}\nעוזר: {a}\n\n"
-        full_context += f"חוקר: {user_q}"
+        full_context += f"שאלה נוכחית מהחוקר: {user_q}"
+        
         response = client.models.generate_content(model="gemini-2.0-flash", contents=full_context)
         return response.text
-    except Exception as e: return f"Error: {str(e)}"
+    except Exception as e: return f"שגיאה: {str(e)}"
 
 # --- 4. ממשק המשתמש ---
 if "form_iteration" not in st.session_state: st.session_state.form_iteration = 0
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 
-st.title("🎓 יומן תצפית חכם (גרסה מוגנת)")
+st.title("🎓 יומן תצפית חכם (גרסת תיקון זיכרון)")
 tab1, tab2, tab3 = st.tabs(["📝 תצפית ושיחה", "📊 ניהול נתונים", "🤖 סיכום מגמות"])
 svc = get_drive_service()
 
@@ -117,13 +139,16 @@ with tab1:
             name_sel = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"n_{it}")
             student_name = st.text_input("שם חופשי:", key=f"fn_{it}") if name_sel == "תלמיד אחר..." else name_sel
             
-            history_sum = get_student_history(student_name)
-            if history_sum: st.success(f"✅ היסטוריה של {student_name} נטענה.")
-            
-            # שדות הקלט
+            # בדיקת היסטוריה בזמן אמת
+            full_history = get_student_history(student_name)
+            if full_history:
+                st.success(f"✅ נמצא תיעוד קודם עבור {student_name}. ה-AI מוכן.")
+            else:
+                st.warning(f"🔍 לא נמצא תיעוד קודם עבור '{student_name}'. וודא שהשם תקין.")
+
             c1, c2 = st.columns(2)
-            with c1: difficulty = st.select_slider("קושי", options=[1, 2, 3], value=2, key=f"d_{it}")
-            with c2: model_status = st.radio("מודל:", ["ללא מודל", "מודל חלקי", "מודל מלא"], horizontal=True, key=f"ms_{it}")
+            with c1: difficulty = st.select_slider("קושי המטלה", options=[1, 2, 3], value=2, key=f"d_{it}")
+            with c2: model_status = st.radio("סטטוס מודל:", ["ללא מודל", "מודל חלקי", "מודל מלא"], horizontal=True, key=f"ms_{it}")
             
             st.divider()
             m1, m2 = st.columns(2)
@@ -132,24 +157,23 @@ with tab1:
                 score_views = st.slider("מעבר בין היטלים", 1, 5, 3, key=f"s2_{it}")
             with m2:
                 score_model = st.slider("שימוש במודל", 1, 5, 3, key=f"s3_{it}")
-                score_efficacy = st.slider("מסוגלות", 1, 5, 3, key=f"s4_{it}")
+                score_efficacy = st.slider("מסוגלות עצמית", 1, 5, 3, key=f"s4_{it}")
 
             st.divider()
-            challenge = st.text_area("🗣️ תיאור קשיים (חובה לשמירה)", key=f"ch_{it}")
+            challenge = st.text_area("🗣️ קשיים", key=f"ch_{it}")
             done = st.text_area("👀 פעולות שבוצעו", key=f"do_{it}")
             tags = st.multiselect("🏷️ תגיות", OBSERVATION_TAGS, key=f"t_{it}")
             uploaded_files = st.file_uploader("קבצים", accept_multiple_files=True, key=f"f_{it}")
 
             if st.button("💾 שמור תצפית"):
-                # בדיקה שהשדות לא ריקים
-                if not challenge.strip() or not student_name.strip():
-                    st.error("❌ לא ניתן לשמור תצפית ריקה. אנא הזן שם סטודנט ותיאור קשיים.")
+                if not challenge.strip():
+                    st.error("אנא מלא תיאור קושי לפני השמירה.")
                 else:
                     links = []
                     if uploaded_files and svc:
                         for f in uploaded_files: links.append(upload_file_to_drive(f, svc))
                     entry = {
-                        "type": "reflection", "date": date.today().isoformat(), "student_name": student_name,
+                        "date": date.today().isoformat(), "student_name": student_name,
                         "difficulty": difficulty, "model_status": model_status, "score_spatial": score_spatial,
                         "score_views": score_views, "score_model": score_model, "score_efficacy": score_efficacy,
                         "challenge": challenge, "done": done, "timestamp": datetime.now().strftime("%H:%M:%S"),
@@ -157,36 +181,28 @@ with tab1:
                     }
                     with open(DATA_FILE, "a", encoding="utf-8") as f: f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                     if svc: update_master_excel([entry], svc)
-                    st.success("התצפית נשמרה בהצלחה.")
+                    st.success("נשמר!")
                     st.session_state.form_iteration += 1
                     st.session_state.chat_history = []
                     st.rerun()
 
     with col_chat:
-        st.subheader(f"🤖 שיחה: {student_name}")
+        st.subheader(f"🤖 צ'אט על: {student_name}")
         chat_cont = st.container(height=500)
         with chat_cont:
             for q, a in st.session_state.chat_history:
                 st.markdown(f"**🧐 חוקר:** {q}"); st.info(f"**🤖 AI:** {a}")
-        u_input = st.chat_input("שאל...")
+        u_input = st.chat_input("שאל את העוזר...")
         if u_input:
-            ans = chat_with_academic_ai(u_input, {"name": student_name}, st.session_state.chat_history, history_sum)
+            ans = chat_with_academic_ai(u_input, student_name, st.session_state.chat_history, full_history)
             st.session_state.chat_history.append((u_input, ans))
             st.rerun()
 
 with tab2:
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🔄 סנכרון לדרייב"):
-            if os.path.exists(DATA_FILE) and svc:
-                all_d = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")]
-                update_master_excel(all_d, svc); st.success("סונכרן!")
-    with col2:
-        if st.button("🗑️ מחיקת היסטוריה מקומית (שרת)"):
-            if os.path.exists(DATA_FILE):
-                os.remove(DATA_FILE)
-                st.warning("ההיסטוריה המקומית נמחקה מהשרת (הקבצים בדרייב נשמרו).")
-                st.rerun()
+    if st.button("🔄 סנכרון לדרייב"):
+        if os.path.exists(DATA_FILE) and svc:
+            all_d = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")]
+            update_master_excel(all_d, svc); st.success("סונכרן!")
 
 with tab3:
     st.header("🤖 ניתוח מגמות")
@@ -199,6 +215,5 @@ with tab3:
                     txt = "\n".join([f"תלמיד: {o.get('student_name')}, קושי: {o.get('challenge')}" for o in obs])
                     client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
                     res = client.models.generate_content(model="gemini-2.0-flash", contents=f"נתח מגמות (2014-2026) עבור:\n{txt}")
-                    st.session_state.current_summary = res.text
+                    st.markdown(res.text)
             else: st.warning("אין נתונים.")
-    if "current_summary" in st.session_state: st.markdown(st.session_state.current_summary)
