@@ -18,19 +18,20 @@ MASTER_FILENAME = "All_Observations_Master.xlsx"
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 OBSERVATION_TAGS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="עוזר מחקר אקדמי - גרסה סופית לתזה", layout="wide")
+st.set_page_config(page_title="מערכת תצפית אקדמית - גרסה 11.0", layout="wide")
 
+# עיצוב ממשק עברי
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
         html, body, .stApp { direction: rtl; text-align: right; font-family: 'Heebo', sans-serif !important; }
         .stTextInput input, .stTextArea textarea, .stSelectbox > div > div { direction: rtl; text-align: right; }
         [data-testid="stSlider"] { direction: ltr !important; }
-        .stButton > button { width: 100%; font-weight: bold; border-radius: 10px; }
+        .stButton > button { width: 100%; font-weight: bold; border-radius: 10px; background-color: #4A90E2; color: white; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. פונקציות Google Drive ---
+# --- 2. פונקציות ליבה (Google Drive API) ---
 def get_drive_service():
     try:
         json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
@@ -48,6 +49,7 @@ def upload_file_to_drive(uploaded_file, svc):
     except: return "Error"
 
 def fetch_history_from_drive(student_name, svc):
+    """שליפת היסטוריה מלאה מקובץ המאסטר בדרייב לצורך הזרקה לצ'אט"""
     try:
         query = f"name = '{MASTER_FILENAME}' and trashed = false"
         if GDRIVE_FOLDER_ID: query += f" and '{GDRIVE_FOLDER_ID}' in parents"
@@ -62,11 +64,12 @@ def fetch_history_from_drive(student_name, svc):
         if student_data.empty: return ""
         hist = ""
         for _, row in student_data.tail(15).iterrows():
-            hist += f"תאריך: {row.get('date')} | קושי: {row.get('challenge')} | שרטוטים: {row.get('num_drawings', 0)} | זמן: {row.get('work_duration', 0)} | פעולות: {row.get('done')}\n"
+            hist += f"תאריך: {row.get('date')} | קושי: {row.get('challenge')} | שרטוטים: {row.get('num_drawings', 0)} | זמן: {row.get('work_duration', 0)} דק' | פעולות: {row.get('done')}\n"
         return hist
     except: return ""
 
 def update_master_excel(data_to_add, svc):
+    """עדכון קובץ המאסטר בדרייב עם נתונים חדשים"""
     try:
         query = f"name = '{MASTER_FILENAME}' and trashed = false"
         if GDRIVE_FOLDER_ID: query += f" and '{GDRIVE_FOLDER_ID}' in parents"
@@ -96,7 +99,7 @@ def update_master_excel(data_to_add, svc):
 if "form_iteration" not in st.session_state: st.session_state.form_iteration = 0
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 
-st.title("🎓 יומן תצפית - סנכרון דרייב וחיפוש אקדמי")
+st.title("🎓 יומן תצפית חכם למחקר תזה")
 tab1, tab2, tab3 = st.tabs(["📝 תצפית ושיחה", "📊 ניהול נתונים", "🤖 סיכום מגמות"])
 svc = get_drive_service()
 
@@ -107,37 +110,39 @@ with tab1:
             it = st.session_state.form_iteration
             name_sel = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"n_{it}")
             student_name = st.text_input("שם חופשי:", key=f"fn_{it}") if name_sel == "תלמיד אחר..." else name_sel
+            
             drive_history = fetch_history_from_drive(student_name, svc) if (student_name and svc) else ""
-            if drive_history: st.success(f"✅ היסטוריה של {student_name} נטענה.")
+            if drive_history: st.success(f"✅ היסטוריה של {student_name} נטענה מהדרייב.")
 
             st.markdown("### 📊 מדדים כמותיים")
             q1, q2 = st.columns(2)
-            with q1: num_drawings = st.number_input("כמות שרטוטים", min_value=0, step=1, key=f"nd_{it}")
-            with q2: work_duration = st.number_input("זמן עבודה (דק')", min_value=0, step=5, key=f"wd_{it}")
+            with q1: num_drawings = st.number_input("כמות שרטוטים שבוצעו", min_value=0, step=1, key=f"nd_{it}")
+            with q2: work_duration = st.number_input("זמן עבודה כולל (דקות)", min_value=0, step=5, key=f"wd_{it}")
 
             st.divider()
             challenge = st.text_area("🗣️ תיאור קשיים (חובה)", key=f"ch_{it}")
             done = st.text_area("👀 פעולות שבוצעו", key=f"do_{it}")
-            tags = st.multiselect("🏷️ תגיות", OBSERVATION_TAGS, key=f"t_{it}")
-            uploaded_files = st.file_uploader("קבצים", accept_multiple_files=True, key=f"f_{it}")
+            tags = st.multiselect("🏷️ תגיות אבחון", OBSERVATION_TAGS, key=f"t_{it}")
+            uploaded_files = st.file_uploader("צרף קבצים/תמונות", accept_multiple_files=True, key=f"f_{it}")
 
-            if st.button("💾 שמור תצפית"):
-                if not challenge.strip(): st.error("חובה להזין קושי.")
+            if st.button("💾 שמור תצפית ומדדים"):
+                if not challenge.strip(): st.error("חובה להזין תיאור קושי.")
                 else:
-                    links = []
-                    if uploaded_files and svc:
-                        for f in uploaded_files: links.append(upload_file_to_drive(f, svc))
-                    entry = {
-                        "date": date.today().isoformat(), "student_name": student_name,
-                        "num_drawings": num_drawings, "work_duration": work_duration,
-                        "challenge": challenge, "done": done, "timestamp": datetime.now().strftime("%H:%M:%S"),
-                        "file_links": ", ".join(links), "tags": ", ".join(tags)
-                    }
-                    with open(DATA_FILE, "a", encoding="utf-8") as f: f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                    if svc: update_master_excel([entry], svc)
-                    st.success("נשמר!")
-                    st.session_state.form_iteration += 1
-                    st.rerun()
+                    with st.spinner("שומר ומסנכרן לדרייב..."):
+                        links = []
+                        if uploaded_files and svc:
+                            for f in uploaded_files: links.append(upload_file_to_drive(f, svc))
+                        entry = {
+                            "date": date.today().isoformat(), "student_name": student_name,
+                            "num_drawings": num_drawings, "work_duration": work_duration,
+                            "challenge": challenge, "done": done, "timestamp": datetime.now().strftime("%H:%M:%S"),
+                            "file_links": ", ".join(links), "tags": ", ".join(tags)
+                        }
+                        with open(DATA_FILE, "a", encoding="utf-8") as f: f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                        if svc: update_master_excel([entry], svc)
+                        st.success("הנתונים נשמרו בהצלחה!")
+                        st.session_state.form_iteration += 1
+                        st.rerun()
 
     with col_chat:
         st.subheader(f"🤖 עוזר מחקר אקדמי: {student_name}")
@@ -148,20 +153,18 @@ with tab1:
         u_input = st.chat_input("שאל את עוזר המחקר...")
         if u_input:
             client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-            # הגדרת דמות החוקר והפורמט המבוקש
+            # הגדרת "פרומפט המאסטר" למניעת הזיות והבטחת APA
             prompt = f"""
-            אתה עוזר מחקר אקדמי בכיר המלווה חוקר בכתיבת תזה על חינוך הנדסי וראייה מרחבית. 
-            פנה תמיד למשתמש כאל 'החוקר' וענה בצורה מקצועית ואקדמית.
+            אתה עוזר מחקר אקדמי בכיר המלווה חוקר בכתיבת תזה. 
+            פנה למשתמש כאל 'החוקר'. נתח את הסטודנט {student_name} כגורם שלישי בלבד.
+            נתוני היסטוריה מהדרייב: {drive_history}.
             
-            נושא השיחה: הסטודנט {student_name}.
-            נתוני התצפיות שנאספו עליו עד כה: {drive_history}.
-            
-            הנחיות לכתיבה:
-            1. השתמש בציטוטים בתוך הטקסט בפורמט APA (למשל: Smith, 2017).
-            2. התמקד במקורות מכתבי עת אקדמיים (Journals) וספרים מקצועיים משנת 2014 ומעלה.
-            3. הימנע מקישורים לאתרים כלליים כמו Quora, Reddit או ויקיפדיה.
+            חוקים מחייבים:
+            1. השתמש אך ורק במאמרים מכתבי עת (Journals) או ספרים אקדמיים מהשנים 2014-2026.
+            2. חובה להשתמש בציטוטים בתוך הטקסט בסגנון APA 7 (למשל: Sorby, 2024).
+            3. הימנע לחלוטין מקישורים לאתרים כלליים, YouTube, Quora או Reddit.
             4. בסוף התשובה, ספק רשימה ביבליוגרפית מלאה בפורמט APA 7th Edition.
-            5. נתח את הקשיים של הסטודנט מול התאוריות המקובלות (כמו המודל של Sorby או Cognitive Load Theory).
+            5. אל תתנצל על חוסר גישה למקורות. פעל כחוקר מומחה בעל ידע רחב.
             
             שאלה מהחוקר: {u_input}
             """
@@ -173,16 +176,17 @@ with tab1:
             st.session_state.chat_history.append((u_input, res.text)); st.rerun()
 
 with tab2:
-    if st.button("🔄 סנכרון לדרייב"):
+    if st.button("🔄 סנכרון מאולץ לדרייב"):
         if os.path.exists(DATA_FILE) and svc:
-            all_d = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")]
-            update_master_excel(all_d, svc); st.success("סונכרן!")
+            with st.spinner("מסנכרן את כל הקובץ המקומי לדרייב..."):
+                all_d = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")]
+                update_master_excel(all_d, svc); st.success("סנכרון מלא הושלם!")
 
 with tab3:
-    st.header("🤖 ניתוח מגמות אקדמי")
-    if st.button("✨ בצע ניתוח עומק לתזה"):
+    st.header("🤖 ניתוח מגמות אקדמי רוחבי")
+    if st.button("✨ בצע ניתוח עומק מבוסס כל נתוני המאסטר"):
         if svc:
-            with st.spinner("מנתח נתונים ומחפש ספרות רלוונטית..."):
+            with st.spinner("סורק את כל נתוני המאסטר בדרייב ומנתח..."):
                 query = f"name = '{MASTER_FILENAME}' and trashed = false"
                 res = svc.files().list(q=query, supportsAllDrives=True).execute().get('files', [])
                 if res:
@@ -194,17 +198,14 @@ with tab3:
                     
                     data_summary = ""
                     for _, row in df.iterrows():
-                        data_summary += f"תלמיד: {row['student_name']} | קושי: {row['challenge']} | פעולות: {row.get('done')}\n"
+                        data_summary += f"תלמיד: {row['student_name']} | תאריך: {row['date']} | שרטוטים: {row.get('num_drawings')} | זמן: {row.get('work_duration')} | קושי: {row['challenge']} | פעולות: {row.get('done')}\n"
                     
                     client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
                     prompt = f"""
-                    בצע ניתוח מגמות אקדמי עבור החוקר. 
-                    הנתונים: {data_summary}
-                    
-                    דגשים לניתוח:
-                    1. השתמש במינוח אקדמי מקצועי (Spatial Visualization, Mental Rotation, Orthographic Projection).
-                    2. שלב ציטוטים של חוקרים מובילים (כגון Sorby, Maier, Gorska) בתוך הניתוח.
-                    3. ספק רשימה ביבליוגרפית בפורמט APA 7th Edition בסוף.
+                    בצע ניתוח מגמות אקדמי עבור החוקר על בסיס נתוני המאסטר המלאים. 
+                    התייחס ספציפית לרועי, אלי, עילאי ונתנאל.
+                    שלב ספרות אקדמית (2014-2026) בפורמט APA 7 בלבד.
+                    נתונים: {data_summary}
                     """
                     response = client.models.generate_content(
                         model="gemini-2.0-flash", 
