@@ -10,7 +10,7 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 
-# --- 1. הגדרות ועיצוב RTL ---
+# --- 1. הגדרות ועיצוב ---
 DATA_FILE = "reflections.jsonl"
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID") 
 MASTER_FILENAME = "All_Observations_Master.xlsx"
@@ -18,7 +18,7 @@ MASTER_FILENAME = "All_Observations_Master.xlsx"
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 OBSERVATION_TAGS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="עוזר מחקר - סנכרון דרייב", layout="wide")
+st.set_page_config(page_title="מערכת תצפית מחקרית", layout="wide")
 
 st.markdown("""
     <style>
@@ -30,7 +30,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. פונקציות שירות (Google Drive) ---
+# --- 2. פונקציות ליבה (Google Drive) ---
 def get_drive_service():
     try:
         json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
@@ -48,31 +48,24 @@ def upload_file_to_drive(uploaded_file, svc):
     except: return "Error"
 
 def fetch_history_from_drive(student_name, svc):
-    """מושך את כל היסטוריית התלמיד מקובץ המאסטר בדרייב"""
     try:
         query = f"name = '{MASTER_FILENAME}' and trashed = false"
         if GDRIVE_FOLDER_ID: query += f" and '{GDRIVE_FOLDER_ID}' in parents"
         res = svc.files().list(q=query, supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
         if not res: return ""
-        
         file_id = res[0]['id']
         request = svc.files().get_media(fileId=file_id)
-        fh = io.BytesIO()
-        downloader = MediaIoBaseDownload(fh, request)
+        fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, request)
         done = False
         while not done: _, done = downloader.next_chunk()
-        
-        fh.seek(0)
-        df = pd.read_excel(fh)
-        
-        # חיפוש גמיש בשמות
+        fh.seek(0); df = pd.read_excel(fh)
+        # סינון חכם
         student_data = df[df['student_name'].str.contains(student_name, na=False, case=False)]
         if student_data.empty: return ""
-        
-        history_text = ""
-        for _, row in student_data.iterrows():
-            history_text += f"תאריך: {row.get('date')} | קושי: {row.get('challenge')} | פעולות: {row.get('done')} | תפיסה: {row.get('score_spatial')}\n"
-        return history_text
+        hist = ""
+        for _, row in student_data.tail(5).iterrows(): # לוקח 5 אחרונות לצ'אט
+            hist += f"תאריך: {row.get('date')} | קושי: {row.get('challenge')} | שרטוטים: {row.get('num_drawings', 0)} | זמן: {row.get('work_duration', 0)}\n"
+        return hist
     except: return ""
 
 def update_master_excel(data_to_add, svc):
@@ -84,21 +77,16 @@ def update_master_excel(data_to_add, svc):
         if res:
             file_id = res[0]['id']
             request = svc.files().get_media(fileId=file_id)
-            fh = io.BytesIO()
-            downloader = MediaIoBaseDownload(fh, request)
+            fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, request)
             done = False
             while not done: _, done = downloader.next_chunk()
-            fh.seek(0)
-            existing_df = pd.read_excel(fh)
+            fh.seek(0); existing_df = pd.read_excel(fh)
             df = pd.concat([existing_df, new_df]).drop_duplicates(subset=['timestamp', 'student_name'], keep='last')
         else:
-            df = new_df
-            file_id = None
+            df = new_df; file_id = None
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False)
-        output.seek(0)
-        media = MediaIoBaseUpload(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        with pd.ExcelWriter(output, engine='openpyxl') as writer: df.to_excel(writer, index=False)
+        output.seek(0); media = MediaIoBaseUpload(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         if file_id: svc.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
         else:
             file_meta = {'name': MASTER_FILENAME}
@@ -111,7 +99,7 @@ def update_master_excel(data_to_add, svc):
 if "form_iteration" not in st.session_state: st.session_state.form_iteration = 0
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 
-st.title("🎓 עוזר מחקר חכם (סנכרון דרייב מלא)")
+st.title("🎓 יומן תצפית חכם (גרסת מחקר מלאה)")
 tab1, tab2, tab3 = st.tabs(["📝 תצפית ושיחה", "📊 ניהול נתונים", "🤖 סיכום מגמות"])
 svc = get_drive_service()
 
@@ -123,19 +111,20 @@ with tab1:
             name_sel = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"n_{it}")
             student_name = st.text_input("שם חופשי:", key=f"fn_{it}") if name_sel == "תלמיד אחר..." else name_sel
             
-            # שליפת היסטוריה מהדרייב בזמן אמת
-            drive_history = ""
-            if student_name and svc:
-                drive_history = fetch_history_from_drive(student_name, svc)
-                if drive_history:
-                    st.success(f"✅ נמצאה היסטוריה בדרייב עבור {student_name}")
-                else:
-                    st.warning(f"🔍 לא נמצא תיעוד קודם בדרייב עבור {student_name}")
+            drive_history = fetch_history_from_drive(student_name, svc) if (student_name and svc) else ""
+            if drive_history: st.success(f"✅ היסטוריה של {student_name} נטענה מהדרייב.")
 
+            st.markdown("### 📊 מדדים כמותיים")
+            q1, q2 = st.columns(2)
+            with q1: num_drawings = st.number_input("כמות שרטוטים שבוצעו", min_value=0, step=1, key=f"nd_{it}")
+            with q2: work_duration = st.number_input("זמן עבודה (דקות)", min_value=0, step=5, key=f"wd_{it}")
+
+            st.divider()
             c1, c2 = st.columns(2)
-            with c1: difficulty = st.select_slider("קושי", options=[1, 2, 3], value=2, key=f"d_{it}")
-            with c2: model_status = st.radio("מודל:", ["ללא מודל", "מודל חלקי", "מודל מלא"], horizontal=True, key=f"ms_{it}")
+            with c1: difficulty = st.select_slider("קושי המטלה", options=[1, 2, 3], value=2, key=f"d_{it}")
+            with c2: model_status = st.radio("שימוש במודל:", ["ללא", "חלקי", "מלא"], horizontal=True, key=f"ms_{it}")
             
+            st.markdown("### 🎯 הערכה (1-5)")
             m1, m2 = st.columns(2)
             with m1:
                 score_spatial = st.slider("תפיסה מרחבית", 1, 5, 3, key=f"s1_{it}")
@@ -145,44 +134,44 @@ with tab1:
                 score_efficacy = st.slider("מסוגלות", 1, 5, 3, key=f"s4_{it}")
 
             st.divider()
-            challenge = st.text_area("🗣️ קשיים", key=f"ch_{it}")
-            done = st.text_area("👀 פעולות", key=f"do_{it}")
+            challenge = st.text_area("🗣️ תיאור קשיים (חובה)", key=f"ch_{it}")
+            done = st.text_area("👀 פעולות שבוצעו", key=f"do_{it}")
             tags = st.multiselect("🏷️ תגיות", OBSERVATION_TAGS, key=f"t_{it}")
             uploaded_files = st.file_uploader("קבצים", accept_multiple_files=True, key=f"f_{it}")
 
             if st.button("💾 שמור תצפית"):
-                if not challenge.strip():
-                    st.error("אנא מלא תיאור קושי לפני השמירה.")
+                if not challenge.strip(): st.error("חובה להזין תיאור קושי.")
                 else:
                     links = []
                     if uploaded_files and svc:
                         for f in uploaded_files: links.append(upload_file_to_drive(f, svc))
                     entry = {
                         "date": date.today().isoformat(), "student_name": student_name,
-                        "difficulty": difficulty, "model_status": model_status, "score_spatial": score_spatial,
-                        "score_views": score_views, "score_model": score_model, "score_efficacy": score_efficacy,
+                        "num_drawings": num_drawings, "work_duration": work_duration,
+                        "difficulty": difficulty, "model_status": model_status,
+                        "score_spatial": score_spatial, "score_views": score_views,
+                        "score_model": score_model, "score_efficacy": score_efficacy,
                         "challenge": challenge, "done": done, "timestamp": datetime.now().strftime("%H:%M:%S"),
                         "file_links": ", ".join(links), "tags": ", ".join(tags)
                     }
                     with open(DATA_FILE, "a", encoding="utf-8") as f: f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                     if svc: update_master_excel([entry], svc)
-                    st.success("נשמר בדרייב!")
+                    st.success("נשמר!")
                     st.session_state.form_iteration += 1
                     st.rerun()
 
     with col_chat:
-        st.subheader(f"🤖 צ'אט על: {student_name}")
+        st.subheader(f"🤖 צ'אט: {student_name}")
         chat_cont = st.container(height=500)
         with chat_cont:
             for q, a in st.session_state.chat_history:
                 st.markdown(f"**🧐 חוקר:** {q}"); st.info(f"**🤖 AI:** {a}")
-        u_input = st.chat_input("שאל על היסטוריית הסטודנט...")
+        u_input = st.chat_input("שאל על התקדמותו...")
         if u_input:
             client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-            prompt = f"אתה עוזר מחקר אקדמי. מנתח התקדמות של {student_name}. היסטוריה מהדרייב: {drive_history}. שאלת החוקר: {u_input}. השתמש במקורות 2014-2026 בלבד."
+            prompt = f"מנתח אקדמי. סטודנט: {student_name}. היסטוריית דרייב: {drive_history}. שאלה: {u_input}. השתמש במקורות 2014-2026."
             res = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-            st.session_state.chat_history.append((u_input, res.text))
-            st.rerun()
+            st.session_state.chat_history.append((u_input, res.text)); st.rerun()
 
 with tab2:
     if st.button("🔄 סנכרון לדרייב"):
@@ -191,14 +180,24 @@ with tab2:
             update_master_excel(all_d, svc); st.success("סונכרן!")
 
 with tab3:
-    st.header("🤖 ניתוח מגמות")
-    if st.button("✨ בצע ניתוח מגמות"):
-        if os.path.exists(DATA_FILE):
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                obs = [json.loads(l) for l in f][-15:]
-            if obs:
-                with st.spinner("מנתח..."):
-                    txt = "\n".join([f"תלמיד: {o.get('student_name')}, קושי: {o.get('challenge')}" for o in obs])
+    st.header("🤖 ניתוח מגמות ומדדים (Master Data)")
+    if st.button("✨ בצע ניתוח עומק מכל הנתונים"):
+        if svc:
+            with st.spinner("סורק נתונים..."):
+                query = f"name = '{MASTER_FILENAME}' and trashed = false"
+                res = svc.files().list(q=query, supportsAllDrives=True).execute().get('files', [])
+                if res:
+                    file_id = res[0]['id']; request = svc.files().get_media(fileId=file_id)
+                    fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, request)
+                    done = False
+                    while not done: _, done = downloader.next_chunk()
+                    fh.seek(0); df = pd.read_excel(fh)
+                    
+                    data_summary = ""
+                    for _, row in df.iterrows():
+                        data_summary += f"תלמיד: {row['student_name']} | שרטוטים: {row.get('num_drawings')} | זמן: {row.get('work_duration')} | קושי: {row['challenge']}\n"
+                    
                     client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-                    res = client.models.generate_content(model="gemini-2.0-flash", contents=f"נתח מגמות (2014-2026):\n{txt}")
-                    st.markdown(res.text)
+                    prompt = f"נתח מגמות כמותיות (זמן, כמות) ואיכותיות (קשיים) מתוך המידע. התייחס ספציפית לרועי, אלי, עילאי ונתנאל: {data_summary}. מקורות 2014-2026."
+                    response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+                    st.markdown(response.text)
