@@ -18,7 +18,7 @@ MASTER_FILENAME = "All_Observations_Master.xlsx"
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 OBSERVATION_TAGS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="מערכת תצפית אקדמית - Real-Time Search", layout="wide")
+st.set_page_config(page_title="עוזר מחקר אקדמי - גרסה סופית לתזה", layout="wide")
 
 st.markdown("""
     <style>
@@ -101,12 +101,12 @@ tab1, tab2, tab3 = st.tabs(["📝 תצפית ושיחה", "📊 ניהול נת�
 svc = get_drive_service()
 
 with tab1:
-    col_in, col_chat = st.columns([1.2, 1])
+    col_in, col_chat = st.columns([1.1, 1.1])
     with col_in:
         with st.container(border=True):
             it = st.session_state.form_iteration
             name_sel = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"n_{it}")
-            student_name = st.text_input("שם חופשי:", key=f"fn_{it}") if name_sel == "תלמידחר..." else name_sel
+            student_name = st.text_input("שם חופשי:", key=f"fn_{it}") if name_sel == "תלמיד אחר..." else name_sel
             drive_history = fetch_history_from_drive(student_name, svc) if (student_name and svc) else ""
             if drive_history: st.success(f"✅ היסטוריה של {student_name} נטענה.")
 
@@ -140,31 +140,35 @@ with tab1:
                     st.rerun()
 
     with col_chat:
-        st.subheader(f"🤖 עוזר מחקר חכם: {student_name}")
-        chat_cont = st.container(height=500)
+        st.subheader(f"🤖 עוזר מחקר אקדמי: {student_name}")
+        chat_cont = st.container(height=550)
         with chat_cont:
             for q, a in st.session_state.chat_history:
                 st.markdown(f"**🧐 חוקר:** {q}"); st.info(f"**🤖 AI:** {a}")
-        u_input = st.chat_input("שאל...")
+        u_input = st.chat_input("שאל את עוזר המחקר...")
         if u_input:
             client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-            # שימוש בחיפוש מובנה למניעת הזיות
+            # הגדרת דמות החוקר והפורמט המבוקש
             prompt = f"""
-            אתה חוקר אקדמי בכיר. סטודנט: {student_name}.
-            היסטוריית תצפיות מהדרייב: {drive_history}.
+            אתה עוזר מחקר אקדמי בכיר המלווה חוקר בכתיבת תזה על חינוך הנדסי וראייה מרחבית. 
+            פנה תמיד למשתמש כאל 'החוקר' וענה בצורה מקצועית ואקדמית.
             
-            משימה:
-            1. בצע חיפוש במאגרים אקדמיים (Semantic Scholar, IEEE, וכו') כדי למצוא מקורות אמיתיים (2014-2026).
-            2. אל תמציא שמות של מאמרים. אם אתה מצטט מאמר, ציין את שם החוקר, השנה ושם המאמר המדויק.
-            3. ספק רשימה ביבליוגרפית בפורמט APA 7th Edition בסוף התשובה.
+            נושא השיחה: הסטודנט {student_name}.
+            נתוני התצפיות שנאספו עליו עד כה: {drive_history}.
+            
+            הנחיות לכתיבה:
+            1. השתמש בציטוטים בתוך הטקסט בפורמט APA (למשל: Smith, 2017).
+            2. התמקד במקורות מכתבי עת אקדמיים (Journals) וספרים מקצועיים משנת 2014 ומעלה.
+            3. הימנע מקישורים לאתרים כלליים כמו Quora, Reddit או ויקיפדיה.
+            4. בסוף התשובה, ספק רשימה ביבליוגרפית מלאה בפורמט APA 7th Edition.
+            5. נתח את הקשיים של הסטודנט מול התאוריות המקובלות (כמו המודל של Sorby או Cognitive Load Theory).
             
             שאלה מהחוקר: {u_input}
             """
-            # הפעלת ג'מיני עם יכולת חיפוש
             res = client.models.generate_content(
                 model="gemini-2.0-flash", 
                 contents=prompt,
-                config={'tools': [{'google_search': {}}]} # חיפוש בזמן אמת לאימות מקורות
+                config={'tools': [{'google_search': {}}]} 
             )
             st.session_state.chat_history.append((u_input, res.text)); st.rerun()
 
@@ -175,10 +179,10 @@ with tab2:
             update_master_excel(all_d, svc); st.success("סונכרן!")
 
 with tab3:
-    st.header("🤖 ניתוח מגמות רוחבי")
-    if st.button("✨ בצע ניתוח אקדמי עמוק"):
+    st.header("🤖 ניתוח מגמות אקדמי")
+    if st.button("✨ בצע ניתוח עומק לתזה"):
         if svc:
-            with st.spinner("סורק נתונים ומחפש מקורות..."):
+            with st.spinner("מנתח נתונים ומחפש ספרות רלוונטית..."):
                 query = f"name = '{MASTER_FILENAME}' and trashed = false"
                 res = svc.files().list(q=query, supportsAllDrives=True).execute().get('files', [])
                 if res:
@@ -190,10 +194,18 @@ with tab3:
                     
                     data_summary = ""
                     for _, row in df.iterrows():
-                        data_summary += f"תלמיד: {row['student_name']} | קושי: {row['challenge']} | זמן: {row.get('work_duration')} | שרטוטים: {row.get('num_drawings')}\n"
+                        data_summary += f"תלמיד: {row['student_name']} | קושי: {row['challenge']} | פעולות: {row.get('done')}\n"
                     
                     client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-                    prompt = f"בצע ניתוח מגמות אקדמי (2014-2026) על בסיס הנתונים הבאים. חפש מקורות אקדמיים אמיתיים ב-APA: {data_summary}"
+                    prompt = f"""
+                    בצע ניתוח מגמות אקדמי עבור החוקר. 
+                    הנתונים: {data_summary}
+                    
+                    דגשים לניתוח:
+                    1. השתמש במינוח אקדמי מקצועי (Spatial Visualization, Mental Rotation, Orthographic Projection).
+                    2. שלב ציטוטים של חוקרים מובילים (כגון Sorby, Maier, Gorska) בתוך הניתוח.
+                    3. ספק רשימה ביבליוגרפית בפורמט APA 7th Edition בסוף.
+                    """
                     response = client.models.generate_content(
                         model="gemini-2.0-flash", 
                         contents=prompt,
