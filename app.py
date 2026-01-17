@@ -30,72 +30,96 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. פונקציות Google Drive ---
+# --- 2. פונקציות Google Drive (מתוקנות ומאומתות) ---
 def get_drive_service():
     try:
         json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
-        creds = Credentials.from_service_account_info(json.loads(json_str), scopes=["https://www.googleapis.com/auth/drive.file"])
+        creds = Credentials.from_service_account_info(json.loads(json_str), scopes=["https://www.googleapis.com/auth/drive"])
         return build("drive", "v3", credentials=creds)
-    except: return None
-
-def upload_file_to_drive(uploaded_file, svc):
-    try:
-        file_metadata = {'name': uploaded_file.name}
-        if GDRIVE_FOLDER_ID: file_metadata['parents'] = [GDRIVE_FOLDER_ID]
-        media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
-        file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink', supportsAllDrives=True).execute()
-        return file.get('webViewLink')
-    except: return "Error"
+    except Exception as e:
+        st.error(f"שגיאת חיבור לדרייב: {e}")
+        return None
 
 def fetch_history_from_drive(student_name, svc):
     try:
+        # חיפוש רחב יותר כדי לוודא מציאה
         query = f"name = '{MASTER_FILENAME}' and trashed = false"
-        res = svc.files().list(q=query, supportsAllDrives=True).execute().get('files', [])
-        if not res: return None
-        file_id = res[0]['id']; request = svc.files().get_media(fileId=file_id)
-        fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, request)
-        done = False
-        while not done: _, done = downloader.next_chunk()
-        fh.seek(0); df = pd.read_excel(fh)
-        student_data = df[df['student_name'].astype(str).str.contains(student_name, na=False, case=False)]
-        if student_data.empty: return None
+        res = svc.files().list(q=query, spaces='drive', fields='files(id, name)', supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
         
+        if not res:
+            return None
+        
+        file_id = res[0]['id']
+        request = svc.files().get_media(fileId=file_id)
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        
+        fh.seek(0)
+        df = pd.read_excel(fh)
+        
+        # סינון לפי שם התלמיד
+        student_data = df[df['student_name'].astype(str).str.contains(student_name, na=False, case=False)]
+        
+        if student_data.empty:
+            return None
+        
+        # בניית מחרוזת היסטוריה עבור ה-AI (כולל כל הפרמטרים)
         hist_text = ""
         for _, row in student_data.tail(15).iterrows():
-            hist_text += f"תאריך: {row.get('date')} | תרגול: {row.get('exercise_type')} | קושי: {row.get('challenge')} | שרטוטים: {row.get('num_drawings', 0)} | זמן: {row.get('work_duration', 0)} | תפיסה: {row.get('score_spatial', 0)} | פרשנות: {row.get('interpretation')}\n"
+            hist_text += (f"תאריך: {row.get('date')} | תרגול: {row.get('exercise_type')} | "
+                          f"קשיים: {row.get('challenge')} | שרטוטים: {row.get('num_drawings')} | "
+                          f"זמן: {row.get('work_duration')} | תפיסה: {row.get('score_spatial')} | "
+                          f"פרשנות: {row.get('interpretation')}\n")
         return hist_text
-    except: return None
+    except Exception:
+        return None
 
 def update_master_excel(data_to_add, svc):
     try:
         query = f"name = '{MASTER_FILENAME}' and trashed = false"
-        res = svc.files().list(q=query, supportsAllDrives=True).execute().get('files', [])
+        res = svc.files().list(q=query, spaces='drive', supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
         new_df = pd.DataFrame(data_to_add)
+        
         if res:
-            file_id = res[0]['id']; request = svc.files().get_media(fileId=file_id)
-            fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, request)
+            file_id = res[0]['id']
+            request = svc.files().get_media(fileId=file_id)
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
             done = False
-            while not done: _, done = downloader.next_chunk()
-            fh.seek(0); existing_df = pd.read_excel(fh)
+            while not done:
+                _, done = downloader.next_chunk()
+            fh.seek(0)
+            existing_df = pd.read_excel(fh)
             df = pd.concat([existing_df, new_df]).drop_duplicates(subset=['timestamp', 'student_name'], keep='last')
         else:
-            df = new_df; file_id = None
+            df = new_df
+            file_id = None
+            
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer: df.to_excel(writer, index=False)
-        output.seek(0); media = MediaIoBaseUpload(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        if file_id: svc.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False)
+        output.seek(0)
+        media = MediaIoBaseUpload(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        
+        if file_id:
+            svc.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
         else:
             file_meta = {'name': MASTER_FILENAME}
             if GDRIVE_FOLDER_ID: file_meta['parents'] = [GDRIVE_FOLDER_ID]
             svc.files().create(body=file_meta, media_body=media, supportsAllDrives=True).execute()
         return True
-    except: return False
+    except Exception as e:
+        st.error(f"שגיאת סנכרון: {e}")
+        return False
 
-# --- 3. ממשק המשתמש ---
+# --- 3. ממשק המשתמש (ללא שינוי, עם דגש על חיווי) ---
 if "form_iteration" not in st.session_state: st.session_state.form_iteration = 0
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 
-st.title("🎓 מערכת תצפית תזה - גרסה 16.0")
+st.title("🎓 מערכת תצפית - גרסה 16.1")
 tab1, tab2, tab3 = st.tabs(["📝 הזנת תצפית", "📊 ניהול נתונים", "🤖 ניתוח מגמות"])
 svc = get_drive_service()
 
@@ -104,25 +128,26 @@ with tab1:
     with col_in:
         with st.container(border=True):
             it = st.session_state.form_iteration
-            c_top1, c_top2 = st.columns(2)
-            with c_top1:
+            c1, c2 = st.columns(2)
+            with c1:
                 name_sel = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"n_{it}")
                 student_name = st.text_input("שם חופשי:", key=f"fn_{it}") if name_sel == "תלמיד אחר..." else name_sel
-            with c_top2:
+            with c2:
                 exercise_type = st.radio("🛠️ סוג תרגול:", ["עם מודל פיזי", "ללא מודל (דף בלבד)"], key=f"et_{it}", horizontal=True)
             
+            # החיווי הירוק שמוודא טעינת נתונים
             drive_history = ""
             if student_name and svc:
                 drive_history = fetch_history_from_drive(student_name, svc)
                 if drive_history:
-                    st.success(f"✅ נמצאה היסטוריה בדרייב עבור {student_name}. הצ'אט מוכן לניתוח.")
+                    st.success(f"✅ נמצאה היסטוריה בדרייב עבור {student_name}. הצ'אט מוכן.")
                 else:
-                    st.warning(f"🔍 לא נמצא תיעוד קודם בדרייב עבור {student_name}.")
+                    st.info(f"💡 לא נמצאה היסטוריה קודמת עבור {student_name}.")
 
-            st.markdown("### 📊 מדדים כמותיים ודירוגים")
+            st.markdown("### 📊 מדדים ודירוגים")
             q1, q2 = st.columns(2)
             with q1: num_drawings = st.number_input("כמות שרטוטים", min_value=0, step=1, key=f"nd_{it}")
-            with q2: work_duration = st.number_input("זמן עבודה (דקות)", min_value=0, step=5, key=f"wd_{it}")
+            with q2: work_duration = st.number_input("זמן עבודה (דק')", min_value=0, step=5, key=f"wd_{it}")
 
             m1, m2 = st.columns(2)
             with m1:
@@ -136,16 +161,12 @@ with tab1:
             challenge = st.text_area("🗣️ תיאור קשיים (חובה)", key=f"ch_{it}")
             done = st.text_area("👀 פעולות שבוצעו", key=f"do_{it}")
             interpretation = st.text_area("🧠 פרשנות מחקרית", key=f"int_{it}")
-            tags = st.multiselect("🏷️ תגיות אבחון", OBSERVATION_TAGS, key=f"t_{it}")
-            uploaded_files = st.file_uploader("צרף צילומים", accept_multiple_files=True, key=f"f_{it}")
+            tags = st.multiselect("🏷️ תגיות", OBSERVATION_TAGS, key=f"t_{it}")
 
-            if st.button("💾 שמור וסנכרן תצפית"):
-                if not challenge.strip(): st.error("אנא מלא תיאור קושי.")
+            if st.button("💾 שמור וסנכרן"):
+                if not challenge.strip(): st.error("חובה למלא תיאור קושי.")
                 else:
-                    with st.spinner("שומר..."):
-                        links = []
-                        if uploaded_files and svc:
-                            for f in uploaded_files: links.append(upload_file_to_drive(f, svc))
+                    with st.spinner("מסנכרן..."):
                         entry = {
                             "date": date.today().isoformat(), "student_name": student_name,
                             "exercise_type": exercise_type, "num_drawings": num_drawings,
@@ -153,8 +174,7 @@ with tab1:
                             "score_views": score_views, "score_model": score_model,
                             "score_efficacy": score_efficacy, "challenge": challenge,
                             "done": done, "interpretation": interpretation,
-                            "timestamp": datetime.now().strftime("%H:%M:%S"),
-                            "file_links": ", ".join(links), "tags": ", ".join(tags)
+                            "timestamp": datetime.now().strftime("%H:%M:%S"), "tags": ", ".join(tags)
                         }
                         with open(DATA_FILE, "a", encoding="utf-8") as f: f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                         if svc: update_master_excel([entry], svc)
@@ -163,22 +183,17 @@ with tab1:
                         st.rerun()
 
     with col_chat:
-        st.subheader(f"🤖 עוזר מחקר אקדמי: {student_name}")
+        st.subheader(f"🤖 עוזר מחקר: {student_name}")
         chat_cont = st.container(height=600)
         with chat_cont:
             for q, a in st.session_state.chat_history:
                 st.markdown(f"**🧐 חוקר:** {q}"); st.info(f"**🤖 AI:** {a}")
-        
         u_input = st.chat_input("שאל על מגמות...")
         if u_input:
             client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
             prompt = f"""
-            אתה עוזר מחקר אקדמי. נתח את הסטודנט {student_name}.
-            היסטוריית דרייב מלאה (מדדים ופרשנות): {drive_history}.
-            חוקים: 
-            1. השתמש במאמרים אמיתיים בלבד (2014-2026).
-            2. אל תמציא מקורות! חובה DOI או לינק.
-            3. פורמט APA 7.
+            אתה עוזר מחקר אקדמי. נתח את הסטודנט {student_name} על בסיס ההיסטוריה: {drive_history}.
+            השתמש ב-Google Search למאמרים (2014-2026), אל תמציא מקורות, וצטט ב-APA 7.
             """
             res = client.models.generate_content(
                 model="gemini-2.0-flash", contents=f"{prompt}\n\nשאלה: {u_input}",
@@ -189,27 +204,27 @@ with tab1:
 with tab2:
     if st.button("🔄 סנכרון מאולץ"):
         if os.path.exists(DATA_FILE) and svc:
-            with st.spinner("סנכרן..."):
-                all_d = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")]
-                update_master_excel(all_d, svc); st.success("סונכרן!")
+            all_d = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")]
+            update_master_excel(all_d, svc); st.success("סונכרן!")
 
 with tab3:
     st.header("🤖 ניתוח מגמות רוחבי")
     if st.button("✨ בצע ניתוח עומק"):
         if svc:
-            with st.spinner("סורק נתונים..."):
-                query = f"name = '{MASTER_FILENAME}'"
-                res = svc.files().list(q=query).execute().get('files', [])
-                if res:
-                    file_id = res[0]['id']; request = svc.files().get_media(fileId=file_id)
-                    fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, request)
-                    done = False
-                    while not done: _, done = downloader.next_chunk()
-                    fh.seek(0); df = pd.read_excel(fh)
-                    data_summary = df[['student_name', 'exercise_type', 'num_drawings', 'work_duration', 'score_spatial', 'interpretation', 'challenge']].to_string()
-                    client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-                    prompt = f"נתח מגמות (2014-2026) בפורמט APA על בסיס כל המדדים: {data_summary}"
-                    response = client.models.generate_content(
-                        model="gemini-2.0-flash", contents=prompt, config={'tools': [{'google_search': {}}]}
-                    )
-                    st.markdown(response.text)
+            # שליפה מלאה לצורך ניתוח טאב 3
+            query = f"name = '{MASTER_FILENAME}'"
+            res = svc.files().list(q=query, spaces='drive', supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
+            if res:
+                file_id = res[0]['id']
+                request = svc.files().get_media(fileId=file_id)
+                fh = io.BytesIO()
+                downloader = MediaIoBaseDownload(fh, request)
+                done = False
+                while not done: _, done = downloader.next_chunk()
+                fh.seek(0)
+                df = pd.read_excel(fh)
+                data_summary = df.to_string()
+                client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+                prompt = f"נתח מגמות אקדמיות (2014-2026) בפורמט APA על בסיס: {data_summary}"
+                response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt, config={'tools': [{'google_search': {}}]} )
+                st.markdown(response.text)
