@@ -18,7 +18,7 @@ MASTER_FILENAME = "All_Observations_Master.xlsx"
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 OBSERVATION_TAGS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="מערכת תצפית אקדמית - גרסה 13.0", layout="wide")
+st.set_page_config(page_title="מערכת תצפית אקדמית - Master Version", layout="wide")
 
 st.markdown("""
     <style>
@@ -26,7 +26,7 @@ st.markdown("""
         html, body, .stApp { direction: rtl; text-align: right; font-family: 'Heebo', sans-serif !important; }
         .stTextInput input, .stTextArea textarea, .stSelectbox > div > div { direction: rtl; text-align: right; }
         [data-testid="stSlider"] { direction: ltr !important; }
-        .stButton > button { width: 100%; font-weight: bold; border-radius: 10px; }
+        .stButton > button { width: 100%; font-weight: bold; border-radius: 12px; height: 3em; background-color: #007BFF; color: white; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -50,8 +50,7 @@ def upload_file_to_drive(uploaded_file, svc):
 def fetch_history_from_drive(student_name, svc):
     try:
         query = f"name = '{MASTER_FILENAME}' and trashed = false"
-        if GDRIVE_FOLDER_ID: query += f" and '{GDRIVE_FOLDER_ID}' in parents"
-        res = svc.files().list(q=query, supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
+        res = svc.files().list(q=query, supportsAllDrives=True).execute().get('files', [])
         if not res: return ""
         file_id = res[0]['id']; request = svc.files().get_media(fileId=file_id)
         fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, request)
@@ -62,15 +61,14 @@ def fetch_history_from_drive(student_name, svc):
         if student_data.empty: return ""
         hist = ""
         for _, row in student_data.tail(10).iterrows():
-            hist += f"תאריך: {row.get('date')} | תרגול: {row.get('exercise_type')} | קושי: {row.get('challenge')} | תפיסה: {row.get('score_spatial', 0)}/5\n"
+            hist += f"תאריך: {row.get('date')} | תרגול: {row.get('exercise_type')} | קושי: {row.get('challenge')} | פרשנות: {row.get('interpretation')}\n"
         return hist
     except: return ""
 
 def update_master_excel(data_to_add, svc):
     try:
         query = f"name = '{MASTER_FILENAME}' and trashed = false"
-        if GDRIVE_FOLDER_ID: query += f" and '{GDRIVE_FOLDER_ID}' in parents"
-        res = svc.files().list(q=query, supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
+        res = svc.files().list(q=query, supportsAllDrives=True).execute().get('files', [])
         new_df = pd.DataFrame(data_to_add)
         if res:
             file_id = res[0]['id']; request = svc.files().get_media(fileId=file_id)
@@ -96,33 +94,35 @@ def update_master_excel(data_to_add, svc):
 if "form_iteration" not in st.session_state: st.session_state.form_iteration = 0
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 
-st.title("🎓 יומן תצפית אקדמי - גרסה סופית")
-tab1, tab2, tab3 = st.tabs(["📝 תצפית ושיחה", "📊 ניהול נתונים", "🤖 סיכום מגמות"])
+st.title("🎓 עוזר מחקר תזה - המערכת המלאה")
+tab1, tab2, tab3 = st.tabs(["📝 הזנת תצפית", "📊 ניהול נתונים", "🤖 ניתוח מגמות"])
 svc = get_drive_service()
 
 with tab1:
-    col_in, col_chat = st.columns([1.1, 1.1])
+    col_in, col_chat = st.columns([1.2, 1])
     with col_in:
         with st.container(border=True):
             it = st.session_state.form_iteration
             
-            # --- בחירת סטודנט וסוג תרגול ---
-            c_top1, c_top2 = st.columns(2)
-            with c_top1:
+            # --- פרטי התצפית ---
+            c1, c2 = st.columns(2)
+            with c1:
                 name_sel = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"n_{it}")
                 student_name = st.text_input("שם חופשי:", key=f"fn_{it}") if name_sel == "תלמיד אחר..." else name_sel
-            with c_top2:
-                exercise_type = st.radio("🛠️ סוג התרגול:", ["עם מודל פיזי", "ללא מודל (דף בלבד)"], key=f"et_{it}")
+            with c2:
+                exercise_type = st.radio("🛠️ סוג תרגול:", ["עם מודל פיזי", "ללא מודל (דף בלבד)"], key=f"et_{it}", horizontal=True)
             
             drive_history = fetch_history_from_drive(student_name, svc) if (student_name and svc) else ""
-            if drive_history: st.success(f"✅ נטענה היסטוריה עבור {student_name}")
+            if drive_history: st.success(f"✅ היסטוריה עבור {student_name} נטענה.")
 
+            # --- מדדים כמותיים ---
             st.markdown("### 📊 מדדים כמותיים")
             q1, q2 = st.columns(2)
             with q1: num_drawings = st.number_input("כמות שרטוטים שבוצעו", min_value=0, step=1, key=f"nd_{it}")
             with q2: work_duration = st.number_input("זמן עבודה (דקות)", min_value=0, step=5, key=f"wd_{it}")
 
-            st.markdown("### 🎯 הערכה מרחבית (1-5)")
+            # --- מדדים איכותיים (ציונים) ---
+            st.markdown("### 🎯 הערכה (1-5)")
             m1, m2 = st.columns(2)
             with m1:
                 score_spatial = st.slider("תפיסה מרחבית", 1, 5, 3, key=f"s1_{it}")
@@ -132,15 +132,19 @@ with tab1:
                 score_efficacy = st.slider("תחושת מסוגלות", 1, 5, 3, key=f"s4_{it}")
 
             st.divider()
-            challenge = st.text_area("🗣️ תיאור קשיים (חובה)", key=f"ch_{it}")
-            done = st.text_area("👀 פעולות שבוצעו", key=f"do_{it}")
+            
+            # --- טקסט חופשי ופרשנות ---
+            challenge = st.text_area("🗣️ תיאור קשיים (חובה)", placeholder="מה קרה בפועל?", key=f"ch_{it}")
+            done = st.text_area("👀 פעולות שבוצעו", placeholder="מה הסטודנט עשה כדי לפתור?", key=f"do_{it}")
+            interpretation = st.text_area("🧠 פרשנות מחקרית", placeholder="התובנה שלך כחוקר - למה זה קרה?", key=f"int_{it}")
+            
             tags = st.multiselect("🏷️ תגיות אבחון", OBSERVATION_TAGS, key=f"t_{it}")
-            uploaded_files = st.file_uploader("צרף קבצים", accept_multiple_files=True, key=f"f_{it}")
+            uploaded_files = st.file_uploader("צרף צילומי שרטוטים", accept_multiple_files=True, key=f"f_{it}")
 
-            if st.button("💾 שמור תצפית ומדדים"):
-                if not challenge.strip(): st.error("חובה להזין תיאור קושי.")
+            if st.button("💾 שמור תצפית מאובטחת"):
+                if not challenge.strip(): st.error("חובה להזין את תיאור הקושי.")
                 else:
-                    with st.spinner("שומר..."):
+                    with st.spinner("מסנכרן לדרייב..."):
                         links = []
                         if uploaded_files and svc:
                             for f in uploaded_files: links.append(upload_file_to_drive(f, svc))
@@ -150,52 +154,52 @@ with tab1:
                             "work_duration": work_duration, "score_spatial": score_spatial,
                             "score_views": score_views, "score_model": score_model,
                             "score_efficacy": score_efficacy, "challenge": challenge,
-                            "done": done, "timestamp": datetime.now().strftime("%H:%M:%S"),
+                            "done": done, "interpretation": interpretation,
+                            "timestamp": datetime.now().strftime("%H:%M:%S"),
                             "file_links": ", ".join(links), "tags": ", ".join(tags)
                         }
                         with open(DATA_FILE, "a", encoding="utf-8") as f: f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                         if svc: update_master_excel([entry], svc)
-                        st.success("נשמר בהצלחה!")
+                        st.success("הנתונים נשמרו בדרייב!")
                         st.session_state.form_iteration += 1
                         st.rerun()
 
     with col_chat:
         st.subheader(f"🤖 עוזר מחקר אקדמי: {student_name}")
-        chat_cont = st.container(height=550)
+        chat_cont = st.container(height=580)
         with chat_cont:
             for q, a in st.session_state.chat_history:
                 st.markdown(f"**🧐 חוקר:** {q}"); st.info(f"**🤖 AI:** {a}")
-        u_input = st.chat_input("שאל על מגמות...")
+        u_input = st.chat_input("שאל על מגמות בהיסטוריית הסטודנט...")
         if u_input:
             client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
             prompt = f"""
-            אתה עוזר מחקר אקדמי. נתח את הסטודנט {student_name}.
-            היסטוריית דרייב הכוללת סוגי תרגול (עם/ללא מודל): {drive_history}.
+            אתה עוזר מחקר אקדמי. פנה למשתמש כאל 'החוקר'. נתח את הסטודנט {student_name} כגורם שלישי.
+            היסטוריה (כולל פרשנויות): {drive_history}.
             
             חוקים:
-            1. השתמש במאמרים אקדמיים אמיתיים בלבד (2014-2026).
-            2. חובה APA 7th Edition.
-            3. נתח את השפעת המודל הפיזי על התוצאות בהתבסס על הנתונים.
+            1. השתמש אך ורק במאמרים אקדמיים (Journals) אמיתיים מהשנים 2014-2026.
+            2. אל תמציא מקורות! חפש ב-Google Search וספק לינקים/DOI.
+            3. חובה פורמט APA 7th Edition בסוף התשובה.
             """
             res = client.models.generate_content(
-                model="gemini-2.0-flash", 
-                contents=f"{prompt}\n\nשאלה: {u_input}",
+                model="gemini-2.0-flash", contents=f"{prompt}\n\nשאלה: {u_input}",
                 config={'tools': [{'google_search': {}}]} 
             )
             st.session_state.chat_history.append((u_input, res.text)); st.rerun()
 
 with tab2:
-    if st.button("🔄 סנכרון לדרייב"):
+    if st.button("🔄 סנכרון מאולץ של כל הנתונים לדרייב"):
         if os.path.exists(DATA_FILE) and svc:
             with st.spinner("מסנכרן..."):
                 all_d = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")]
-                update_master_excel(all_d, svc); st.success("סונכרן!")
+                update_master_excel(all_d, svc); st.success("כל הנתונים בדרייב מעודכנים!")
 
 with tab3:
-    st.header("🤖 ניתוח מגמות השוואתי")
-    if st.button("✨ בצע ניתוח עומק"):
+    st.header("🤖 ניתוח מגמות ומסקנות לתזה")
+    if st.button("✨ בצע ניתוח עומק אקדמי"):
         if svc:
-            with st.spinner("מנתח..."):
+            with st.spinner("סורק נתונים ומחפש ספרות תומכת..."):
                 query = f"name = '{MASTER_FILENAME}'"
                 res = svc.files().list(q=query).execute().get('files', [])
                 if res:
@@ -205,10 +209,15 @@ with tab3:
                     while not done: _, done = downloader.next_chunk()
                     fh.seek(0); df = pd.read_excel(fh)
                     
-                    data_summary = df[['student_name', 'exercise_type', 'score_spatial', 'challenge']].to_string()
+                    data_summary = df[['student_name', 'exercise_type', 'num_drawings', 'work_duration', 'score_spatial', 'interpretation', 'challenge']].to_string()
                     
                     client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-                    prompt = f"בצע ניתוח מגמות אקדמי (2014-2026). השווה בין ביצועים עם מודל לבין ביצועים ללא מודל: {data_summary}"
+                    prompt = f"""
+                    בצע ניתוח מגמות אקדמי (2014-2026) עבור מחקר התזה. 
+                    השווה בין ביצועים עם מודל פיזי לבין ללא מודל. 
+                    התייחס ספציפית לפרשנויות המחקריות ולציוני התפיסה המרחבית של רועי, אלי, עילאי ונתנאל.
+                    צטט בפורמט APA. נתונים: {data_summary}
+                    """
                     response = client.models.generate_content(
                         model="gemini-2.0-flash", contents=prompt,
                         config={'tools': [{'google_search': {}}]}
