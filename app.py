@@ -10,7 +10,7 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 
-# --- 1. הגדרות ועיצוב ---
+# --- 1. הגדרות ועיצוב RTL ---
 DATA_FILE = "reflections.jsonl"
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID") 
 MASTER_FILENAME = "All_Observations_Master.xlsx"
@@ -18,7 +18,7 @@ MASTER_FILENAME = "All_Observations_Master.xlsx"
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 OBSERVATION_TAGS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="עוזר מחקר - גרסת מדדים מלאה", layout="wide")
+st.set_page_config(page_title="עוזר מחקר אקדמי - גרסה מלאה", layout="wide")
 
 st.markdown("""
     <style>
@@ -61,9 +61,8 @@ def fetch_history_from_drive(student_name, svc):
         student_data = df[df['student_name'].astype(str).str.contains(student_name, na=False, case=False)]
         if student_data.empty: return ""
         hist = ""
-        for _, row in student_data.tail(15).iterrows():
-            # הוספת המדדים הכמותיים להיסטוריה שה-AI רואה
-            hist += f"תאריך: {row.get('date')} | קושי: {row.get('challenge')} | שרטוטים: {row.get('num_drawings', 0)} | זמן עבודה: {row.get('work_duration', 0)} דקות | פעולות: {row.get('done')}\n"
+        for _, row in student_data.tail(10).iterrows():
+            hist += f"תאריך: {row.get('date')} | קושי: {row.get('challenge')} | שרטוטים: {row.get('num_drawings', 0)} | זמן: {row.get('work_duration', 0)} | תפיסה: {row.get('score_spatial', 0)}/5\n"
         return hist
     except: return ""
 
@@ -97,7 +96,7 @@ def update_master_excel(data_to_add, svc):
 if "form_iteration" not in st.session_state: st.session_state.form_iteration = 0
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 
-st.title("🎓 יומן תצפית - מדדים כמותיים ואקדמיים")
+st.title("🎓 יומן תצפית אקדמי - גרסה סופית למחקר")
 tab1, tab2, tab3 = st.tabs(["📝 תצפית ושיחה", "📊 ניהול נתונים", "🤖 סיכום מגמות"])
 svc = get_drive_service()
 
@@ -108,14 +107,23 @@ with tab1:
             it = st.session_state.form_iteration
             name_sel = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"n_{it}")
             student_name = st.text_input("שם חופשי:", key=f"fn_{it}") if name_sel == "תלמיד אחר..." else name_sel
+            
             drive_history = fetch_history_from_drive(student_name, svc) if (student_name and svc) else ""
-            if drive_history: st.success(f"✅ היסטוריה נטענה מהדרייב.")
+            if drive_history: st.success(f"✅ נטענה היסטוריה עבור {student_name}")
 
             st.markdown("### 📊 מדדים כמותיים")
             q1, q2 = st.columns(2)
-            # המדדים חזרו לקוד
-            with q1: num_drawings = st.number_input("כמות שרטוטים שבוצעו", min_value=0, step=1, key=f"nd_{it}")
-            with q2: work_duration = st.number_input("זמן עבודה כולל (דקות)", min_value=0, step=5, key=f"wd_{it}")
+            with q1: num_drawings = st.number_input("כמות שרטוטים", min_value=0, step=1, key=f"nd_{it}")
+            with q2: work_duration = st.number_input("זמן עבודה (דקות)", min_value=0, step=5, key=f"wd_{it}")
+
+            st.markdown("### 🎯 הערכה מרחבית (1-5)")
+            m1, m2 = st.columns(2)
+            with m1:
+                score_spatial = st.slider("תפיסה מרחבית", 1, 5, 3, key=f"s1_{it}")
+                score_views = st.slider("מעבר בין היטלים", 1, 5, 3, key=f"s2_{it}")
+            with m2:
+                score_model = st.slider("שימוש במודל", 1, 5, 3, key=f"s3_{it}")
+                score_efficacy = st.slider("תחושת מסוגלות", 1, 5, 3, key=f"s4_{it}")
 
             st.divider()
             challenge = st.text_area("🗣️ תיאור קשיים (חובה)", key=f"ch_{it}")
@@ -132,7 +140,9 @@ with tab1:
                             for f in uploaded_files: links.append(upload_file_to_drive(f, svc))
                         entry = {
                             "date": date.today().isoformat(), "student_name": student_name,
-                            "num_drawings": num_drawings, "work_duration": work_duration, # שמירה לאקסל
+                            "num_drawings": num_drawings, "work_duration": work_duration,
+                            "score_spatial": score_spatial, "score_views": score_views,
+                            "score_model": score_model, "score_efficacy": score_efficacy,
                             "challenge": challenge, "done": done, "timestamp": datetime.now().strftime("%H:%M:%S"),
                             "file_links": ", ".join(links), "tags": ", ".join(tags)
                         }
@@ -144,21 +154,21 @@ with tab1:
 
     with col_chat:
         st.subheader(f"🤖 עוזר מחקר אקדמי: {student_name}")
-        chat_cont = st.container(height=500)
+        chat_cont = st.container(height=550)
         with chat_cont:
             for q, a in st.session_state.chat_history:
                 st.markdown(f"**🧐 חוקר:** {q}"); st.info(f"**🤖 AI:** {a}")
-        u_input = st.chat_input("שאל...")
+        u_input = st.chat_input("שאל את עוזר המחקר...")
         if u_input:
             client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
             prompt = f"""
             אתה עוזר מחקר אקדמי. פנה למשתמש כאל 'החוקר'. נתח את הסטודנט {student_name} כגורם שלישי.
-            השתמש במדדים הכמותיים (זמן ושרטוטים) ובהיסטוריה מהדרייב: {drive_history}.
+            היסטוריית דרייב כולל מדדים: {drive_history}.
             
             חוקים:
             1. השתמש במאמרים אקדמיים אמיתיים בלבד (2014-2026).
             2. חובה APA 7th Edition וציטוטים בטקסט.
-            3. אל תמציא מקורות. השתמש בחיפוש לאימות.
+            3. אל תמציא מקורות. השתמש בחיפוש לאימות DOI/Link.
             """
             res = client.models.generate_content(
                 model="gemini-2.0-flash", 
@@ -175,10 +185,10 @@ with tab2:
                 update_master_excel(all_d, svc); st.success("סונכרן!")
 
 with tab3:
-    st.header("🤖 ניתוח מגמות אקדמי (כמותי ואיכותי)")
+    st.header("🤖 ניתוח מגמות (Master Data Analysis)")
     if st.button("✨ בצע ניתוח עומק"):
         if svc:
-            with st.spinner("מנתח את כל נתוני המאסטר..."):
+            with st.spinner("סורק נתונים ומחפש ספרות..."):
                 query = f"name = '{MASTER_FILENAME}'"
                 res = svc.files().list(q=query).execute().get('files', [])
                 if res:
@@ -188,16 +198,11 @@ with tab3:
                     while not done: _, done = downloader.next_chunk()
                     fh.seek(0); df = pd.read_excel(fh)
                     
-                    # הזרקת המדדים לניתוח המגמות המלא
-                    data_summary = df[['student_name', 'date', 'num_drawings', 'work_duration', 'challenge']].to_string()
+                    # הזרקת כל הנתונים כולל הדירוגים לניתוח ה-AI
+                    data_summary = df[['student_name', 'date', 'num_drawings', 'work_duration', 'score_spatial', 'score_views', 'challenge']].to_string()
                     
                     client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-                    prompt = f"""
-                    בצע ניתוח מגמות אקדמי (2014-2026). 
-                    נתח את הקשר בין המדדים הכמותיים (זמן ושרטוטים) לבין הקשיים האיכותיים שנצפו.
-                    ספק ציטוטים בפורמט APA.
-                    נתונים: {data_summary}
-                    """
+                    prompt = f"נתח מגמות אקדמיות (2014-2026) בפורמט APA. נתח את הקשר בין הציונים המרחביים לבין קצב העבודה: {data_summary}"
                     response = client.models.generate_content(
                         model="gemini-2.0-flash", contents=prompt,
                         config={'tools': [{'google_search': {}}]}
