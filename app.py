@@ -164,29 +164,53 @@ with tab1:
                         st.session_state.form_iteration += 1
                         st.rerun()
 
-    with col_chat:
-        st.subheader(f"🤖 עוזר מחקר אקדמי: {student_name}")
-        chat_cont = st.container(height=580)
-        with chat_cont:
-            for q, a in st.session_state.chat_history:
-                st.markdown(f"**🧐 חוקר:** {q}"); st.info(f"**🤖 AI:** {a}")
-        u_input = st.chat_input("שאל על מגמות בהיסטוריית הסטודנט...")
-        if u_input:
-            client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-            prompt = f"""
-            אתה עוזר מחקר אקדמי. פנה למשתמש כאל 'החוקר'. נתח את הסטודנט {student_name} כגורם שלישי.
-            היסטוריה (כולל פרשנויות): {drive_history}.
-            
-            חוקים:
-            1. השתמש אך ורק במאמרים אקדמיים (Journals) אמיתיים מהשנים 2014-2026.
-            2. אל תמציא מקורות! חפש ב-Google Search וספק לינקים/DOI.
-            3. חובה פורמט APA 7th Edition בסוף התשובה.
-            """
-            res = client.models.generate_content(
-                model="gemini-2.0-flash", contents=f"{prompt}\n\nשאלה: {u_input}",
-                config={'tools': [{'google_search': {}}]} 
-            )
-            st.session_state.chat_history.append((u_input, res.text)); st.rerun()
+   # --- החלק של הצ'אט בטאב 1 ---
+with col_chat:
+    st.subheader(f"🤖 עוזר מחקר אקדמי: {student_name}")
+    chat_cont = st.container(height=580)
+    with chat_cont:
+        for q, a in st.session_state.chat_history:
+            st.markdown(f"**🧐 חוקר:** {q}"); st.info(f"**🤖 AI:** {a}")
+    
+    u_input = st.chat_input("שאל את עוזר המחקר על מגמות הסטודנט...")
+    
+    if u_input:
+        client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+        
+        # בניית בסיס הנתונים עבור ה-AI - כולל את כל המדדים שביקשת
+        # ה-AI מקבל כאן את ההיסטוריה המלאה מהדרייב (זמן, שרטוטים, ציוני 1-5 ופרשנות)
+        context_data = f"""
+        נתוני מחקר עבור הסטודנט: {student_name}
+        היסטוריית תצפיות גולמית מהדרייב:
+        {drive_history}
+        """
+
+        # הפרומפט הקשיח למניעת המצאות והבטחת רמה אקדמית
+        master_prompt = f"""
+        אתה עוזר מחקר אקדמי בכיר. פנה למשתמש כאל 'החוקר'. 
+        נתח את הסטודנט {student_name} כגורם שלישי בלבד.
+        
+        {context_data}
+        
+        חוקים נוקשים לציטוטים:
+        1. המצאת מקורות (Hallucination) תגרום לפסילת המחקר. אל תמציא שמות חוקרים (כמו Alias, Black וכו').
+        2. השתמש בכלי ה-Google Search המחובר אליך כדי לאמת מאמרים קיימים בלבד מהשנים 2014-2026.
+        3. חובה לספק DOI או קישור ישיר לכל מאמר שאתה מצטט.
+        4. אם אינך מוצא מאמר ספציפי שתואם ב-100%, כתוב: 'לא נמצא מקור אקדמי מאומת לסיטואציה זו', ובצע ניתוח פנומנולוגי על בסיס נתוני התצפית והפרשנות של החוקר בלבד.
+        5. צטט בפורמט APA 7th Edition.
+        
+        שאלה מהחוקר: {u_input}
+        """
+
+        # הפעלת המודל עם כלי חיפוש אינטרנטי פעיל (Grounding)
+        res = client.models.generate_content(
+            model="gemini-2.0-flash", 
+            contents=master_prompt,
+            config={'tools': [{'google_search': {}}]} 
+        )
+        
+        st.session_state.chat_history.append((u_input, res.text))
+        st.rerun()
 
 with tab2:
     if st.button("🔄 סנכרון מאולץ של כל הנתונים לדרייב"):
@@ -223,3 +247,4 @@ with tab3:
                         config={'tools': [{'google_search': {}}]}
                     )
                     st.markdown(response.text)
+
