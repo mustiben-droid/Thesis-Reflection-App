@@ -203,13 +203,51 @@ with tab2:
     else: st.write("✨ הכל מעודכן.")
 
 with tab3:
-    st.header("🤖 ניתוח מגמות")
-    if st.button("✨ בצע ניתוח עומק"):
+    st.header("🤖 ניתוח מגמות ושמירה אוטומטית")
+    st.write("ה-AI ינתח את המדדים הכמותיים (זמן, כמות שרטוטים וציונים) וישמור סיכום בדרייב.")
+    
+    if st.button("✨ ייצר ושמור סיכום אקדמי לדרייב", use_container_width=True):
         if svc:
-            df, _ = load_master_from_drive_internal(svc)
-            if df is not None:
-                summary = df.to_string()
-                client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-                prompt = f"נתח מגמות בנתונים אלו וספק תובנות מחקריות. אל תמציא רפרנסים: {summary}"
-                response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-                st.markdown(response.text)
+            with st.spinner("מנתח נתונים כמותיים ואיכותיים ושומר קובץ..."):
+                # טעינת המאסטר המלא מהדרייב לטובת הניתוח
+                df, _ = load_master_from_drive_internal(svc)
+                if df is not None:
+                    # הפיכת הנתונים לטקסט עבור ה-AI (כולל זמנים ומדדים כמותיים)
+                    summary_context = df.to_string()
+                    
+                    client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+                    prompt = f"""
+                    בצע ניתוח מגמות אקדמי עמוק על בסיס נתוני המחקר הבאים.
+                    
+                    דרישות הניתוח:
+                    1. ניתוח כמותי: התייחס לממוצעי זמני העבודה (duration_min) וכמות השרטוטים (drawings_count).
+                    2. הצלבת נתונים: בדוק האם יש קשר בין זמן העבודה לבין מדדי היכולת (cat_convert_rep, cat_proj_trans וכו').
+                    3. השוואת שיטות: השווה בין מדדי ההצלחה בעבודה עם מודל פיזי לעומת עבודה ללא מודל.
+                    4. תובנות פרטניות: ציין סטודנטים בולטים מבחינת התקדמות או קושי חריג.
+                    
+                    נתונים:
+                    {summary_context}
+                    
+                    אל תמציא רפרנסים חיצוניים. הסתמך רק על המספרים והתיאורים בטבלה.
+                    """
+                    
+                    response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+                    
+                    # הצגת התוצאה למשתמש
+                    st.markdown("---")
+                    st.markdown("### 📄 ניתוח משולב (כמותי ואיכותי):")
+                    st.write(response.text)
+                    
+                    # שמירה אוטומטית של הסיכום כקובץ טקסט בדרייב
+                    saved_name = save_summary_to_drive(response.text, svc)
+                    if saved_name:
+                        st.success(f"✅ הסיכום נשמר בהצלחה בדרייב: **{saved_name}**")
+                    else:
+                        st.error("הסיכום נוצר אך אירעה שגיאה בשמירתו לדרייב.")
+                else:
+                    st.error("לא הצלחתי לטעון את נתוני המאסטר לביצוע הניתוח.")
+        else:
+            st.error("אין חיבור לשירותי Google Drive.")
+
+# סוף הקוד - אין צורך להוסיף דבר מתחת לשורה זו.
+
