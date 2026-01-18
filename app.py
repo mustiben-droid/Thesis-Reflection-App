@@ -16,9 +16,9 @@ MASTER_FILENAME = "All_Observations_Master.xlsx"
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID") 
 
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
-OBSERVATION_TAGS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
+TAGS_OPTIONS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="מערכת תצפית - גרסה 28.0", layout="wide")
+st.set_page_config(page_title="מערכת תצפית - גרסה 30.0", layout="wide")
 
 st.markdown("""
     <style>
@@ -30,7 +30,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. פונקציות Google Drive ---
+# --- 2. פונקציות Google Drive (כולל הפונקציה שחסרה לך) ---
 def get_drive_service():
     try:
         json_str = base64.b64decode(st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]).decode("utf-8")
@@ -46,6 +46,20 @@ def upload_file_to_drive(uploaded_file, svc):
         file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink', supportsAllDrives=True).execute()
         return file.get('webViewLink')
     except: return "Error"
+
+def save_summary_to_drive(content, svc):
+    """שומר את הניתוח האקדמי כקובץ טקסט בדרייב"""
+    try:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+        filename = f"Research_Summary_{timestamp}.txt"
+        file_metadata = {'name': filename}
+        if GDRIVE_FOLDER_ID: file_metadata['parents'] = [GDRIVE_FOLDER_ID]
+        media = MediaIoBaseUpload(io.BytesIO(content.encode('utf-8')), mimetype='text/plain')
+        svc.files().create(body=file_metadata, media_body=media, fields='id', supportsAllDrives=True).execute()
+        return filename
+    except Exception as e:
+        st.error(f"שגיאת שמירה לדרייב: {e}")
+        return None
 
 def fetch_history_from_drive(student_name, svc):
     try:
@@ -67,6 +81,19 @@ def fetch_history_from_drive(student_name, svc):
         return hist
     except: return ""
 
+def load_master_from_drive_internal(svc):
+    try:
+        query = f"name = '{MASTER_FILENAME}' and trashed = false"
+        res = svc.files().list(q=query, spaces='drive', supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
+        target = next((f for f in res if f['name'] == MASTER_FILENAME), None)
+        if not target: return None, None
+        request = svc.files().get_media(fileId=target['id'])
+        fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done: _, done = downloader.next_chunk()
+        fh.seek(0); return pd.read_excel(fh), target['id']
+    except: return None, None
+
 def update_master_in_drive(new_data_df, svc):
     try:
         existing_df, file_id = load_master_from_drive_internal(svc)
@@ -83,17 +110,6 @@ def update_master_in_drive(new_data_df, svc):
         return True
     except: return False
 
-def load_master_from_drive_internal(svc):
-    query = f"name = '{MASTER_FILENAME}' and trashed = false"
-    res = svc.files().list(q=query, spaces='drive', supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
-    target = next((f for f in res if f['name'] == MASTER_FILENAME), None)
-    if not target: return None, None
-    request = svc.files().get_media(fileId=target['id'])
-    fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while not done: _, done = downloader.next_chunk()
-    fh.seek(0); return pd.read_excel(fh), target['id']
-
 # --- 3. ממשק המשתמש ---
 if "it" not in st.session_state: st.session_state.it = 0
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
@@ -101,8 +117,8 @@ if "student_context" not in st.session_state: st.session_state.student_context =
 if "last_selected_student" not in st.session_state: st.session_state.last_selected_student = ""
 
 svc = get_drive_service()
-st.title("🎓 מערכת תצפית תזה - גרסה 28.0 (דיוק נתונים)")
-tab1, tab2, tab3 = st.tabs(["📝 הזנה וצ'אט", "🔄 סנכרון", "🤖 ניתוח"])
+st.title("🎓 מערכת תצפית תזה - גרסה 30.0")
+tab1, tab2, tab3 = st.tabs(["📝 הזנה וצ'אט", "🔄 סנכרון", "🤖 ניתוח מגמות"])
 
 with tab1:
     col_in, col_chat = st.columns([1.2, 1])
@@ -113,19 +129,14 @@ with tab1:
             with c1:
                 name_sel = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"n_{it}")
                 student_name = st.text_input("שם חופשי:", key=f"fn_{it}") if name_sel == "תלמיד אחר..." else name_sel
-                
-                # ניקוי זיכרון הצ'אט אם הסטודנט הוחלף
                 if student_name != st.session_state.last_selected_student:
                     st.session_state.chat_history = []
                     st.session_state.student_context = ""
                     st.session_state.last_selected_student = student_name
-
-                # טעינת היסטוריה
                 drive_history = fetch_history_from_drive(student_name, svc) if (student_name and svc) else ""
                 if drive_history:
                     st.success(f"✅ נתוני {student_name} נטענו.")
                     st.session_state.student_context = drive_history
-
             with c2:
                 work_method = st.radio("🛠️ סוג תרגול:", ["🧊 בעזרת גוף מודפס", "🎨 ללא גוף (דמיון)"], key=f"wm_{it}", horizontal=True)
 
@@ -133,7 +144,6 @@ with tab1:
             q1, q2 = st.columns(2)
             with q1: drawings_count = st.number_input("כמות שרטוטים", min_value=0, step=1, key=f"dc_{it}")
             with q2: duration_min = st.number_input("זמן עבודה (דקות)", min_value=0, step=5, key=f"dm_{it}")
-
             m1, m2 = st.columns(2)
             with m1:
                 cat_convert_rep = st.slider("המרת ייצוגים", 1, 5, 3, key=f"s1_{it}")
@@ -144,7 +154,7 @@ with tab1:
                 cat_self_efficacy = st.slider("מסוגלות", 1, 5, 3, key=f"s5_{it}")
 
             st.divider()
-            tags = st.multiselect("🏷️ תגיות אבחון", OBSERVATION_TAGS, key=f"t_{it}")
+            tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
             challenge = st.text_area("🗣️ תיאור קשיים ותצפית", key=f"ch_{it}")
             done = st.text_area("👀 פעולות שבוצעו", key=f"do_{it}")
             interpretation = st.text_area("🧠 פרשנות מחקרית", key=f"int_{it}")
@@ -168,7 +178,7 @@ with tab1:
                     }
                     with open(DATA_FILE, "a", encoding="utf-8") as f:
                         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                    st.success("נשמר מקומית.")
+                    st.success("נשמר מקומית. סנכרן בטאב 2.")
                     st.session_state.it += 1
                     st.rerun()
 
@@ -177,19 +187,10 @@ with tab1:
         chat_cont = st.container(height=500)
         for q, a in st.session_state.chat_history:
             with chat_cont: st.chat_message("user").write(q); st.chat_message("assistant").write(a)
-        user_q = st.chat_input("שאל על הסטודנט הנבחר...")
+        user_q = st.chat_input("שאל על הסטודנט...")
         if user_q:
             client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-            # Prompt נקי ללא חיפוש חיצוני וללא המצאת רפרנסים
-            prompt = f"""
-            אתה עוזר מחקר המנתח תצפיות על סטודנט יחיד: {student_name}.
-            הסתמך אך ורק על נתוני התצפית הבאים:
-            {st.session_state.student_context}
-            
-            אל תחפש מקורות חיצוניים ואל תמציא רפרנסים אקדמיים. 
-            ספק תובנות המבוססות על המגמות שאתה רואה בנתונים שסופקו לך בלבד.
-            שאלה: {user_q}
-            """
+            prompt = f"מנחה: עוזר מחקר. סטודנט: {student_name}. היסטוריה: {st.session_state.student_context}. שאלה: {user_q}"
             res = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
             st.session_state.chat_history.append((user_q, res.text)); st.rerun()
 
@@ -203,51 +204,24 @@ with tab2:
     else: st.write("✨ הכל מעודכן.")
 
 with tab3:
-    st.header("🤖 ניתוח מגמות ושמירה אוטומטית")
-    st.write("ה-AI ינתח את המדדים הכמותיים (זמן, כמות שרטוטים וציונים) וישמור סיכום בדרייב.")
-    
+    st.header("🤖 ניתוח מגמות ושמירה")
     if st.button("✨ ייצר ושמור סיכום אקדמי לדרייב", use_container_width=True):
         if svc:
-            with st.spinner("מנתח נתונים כמותיים ואיכותיים ושומר קובץ..."):
-                # טעינת המאסטר המלא מהדרייב לטובת הניתוח
+            with st.spinner("מנתח נתונים ושומר קובץ..."):
                 df, _ = load_master_from_drive_internal(svc)
                 if df is not None:
-                    # הפיכת הנתונים לטקסט עבור ה-AI (כולל זמנים ומדדים כמותיים)
                     summary_context = df.to_string()
-                    
                     client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
                     prompt = f"""
                     בצע ניתוח מגמות אקדמי עמוק על בסיס נתוני המחקר הבאים.
-                    
-                    דרישות הניתוח:
-                    1. ניתוח כמותי: התייחס לממוצעי זמני העבודה (duration_min) וכמות השרטוטים (drawings_count).
-                    2. הצלבת נתונים: בדוק האם יש קשר בין זמן העבודה לבין מדדי היכולת (cat_convert_rep, cat_proj_trans וכו').
-                    3. השוואת שיטות: השווה בין מדדי ההצלחה בעבודה עם מודל פיזי לעומת עבודה ללא מודל.
-                    4. תובנות פרטניות: ציין סטודנטים בולטים מבחינת התקדמות או קושי חריג.
-                    
-                    נתונים:
-                    {summary_context}
-                    
-                    אל תמציא רפרנסים חיצוניים. הסתמך רק על המספרים והתיאורים בטבלה.
+                    נתח מדדים כמותיים (זמן עבודה, כמות שרטוטים) ומדדים איכותיים.
+                    השווה בין עבודה עם מודל פיזי לעומת ללא מודל.
+                    נתונים: {summary_context}
                     """
-                    
                     response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+                    st.markdown(response.text)
                     
-                    # הצגת התוצאה למשתמש
-                    st.markdown("---")
-                    st.markdown("### 📄 ניתוח משולב (כמותי ואיכותי):")
-                    st.write(response.text)
-                    
-                    # שמירה אוטומטית של הסיכום כקובץ טקסט בדרייב
+                    # הפעלת פונקציית השמירה
                     saved_name = save_summary_to_drive(response.text, svc)
-                    if saved_name:
-                        st.success(f"✅ הסיכום נשמר בהצלחה בדרייב: **{saved_name}**")
-                    else:
-                        st.error("הסיכום נוצר אך אירעה שגיאה בשמירתו לדרייב.")
-                else:
-                    st.error("לא הצלחתי לטעון את נתוני המאסטר לביצוע הניתוח.")
-        else:
-            st.error("אין חיבור לשירותי Google Drive.")
-
-# סוף הקוד - אין צורך להוסיף דבר מתחת לשורה זו.
-
+                    if saved_name: st.success(f"✅ נשמר בדרייב: {saved_name}")
+                else: st.error("לא הצלחתי לטעון נתונים.")
