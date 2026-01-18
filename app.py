@@ -196,16 +196,24 @@ with tab1:
             st.session_state.chat_history.append((user_q, res.text)); st.rerun()
 
 with tab2:
-    st.header("🔄 מרכז סנכרון")
+    st.header("🔄 מרכז סנכרון לדרייב")
+    
+    # בדיקה אם יש בכלל נתונים חדשים שממתינים לסנכרון
     if os.path.exists(DATA_FILE):
-        local_df = pd.read_json(DATA_FILE, lines=True)
-        st.dataframe(local_df.tail(10))
-        if st.button("🚀 דחף נתונים חדשים לדרייב"):
-            with st.spinner("מעדכן מאסטר..."):
+        st.info("יש נתונים חדשים שממתינים לעדכון בקובץ המאסטר בדרייב.")
+        
+        # כפתור הסנכרון בלבד, ללא הצגת הטבלה
+        if st.button("🚀 עדכן את קובץ המאסטר בדרייב (סנכרון)", use_container_width=True):
+            with st.spinner("מתחבר לדרייב ומעדכן את האקסל..."):
                 all_entries = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")]
                 if update_master_in_drive(pd.DataFrame(all_entries), svc):
-                    st.success("הסנכרון הושלם!")
-    else: st.info("אין נתונים חדשים לסנכרון.")
+                    st.success("✅ הסנכרון הושלם בהצלחה! כל הנתונים נמצאים כעת בדרייב.")
+                    # אופציונלי: מחיקת הקובץ המקומי אחרי סנכרון כדי "לנקות" את התור
+                    # os.remove(DATA_FILE) 
+                else:
+                    st.error("שגיאה בסנכרון. בדוק את החיבור לדרייב.")
+    else:
+        st.write("✨ הכל מעודכן! אין נתונים חדשים לסנכרון כרגע.")
 
 with tab3:
     st.header("🤖 ניתוח מגמות רוחבי")
@@ -225,3 +233,4 @@ with tab3:
                 prompt = f"בצע ניתוח מגמות אקדמי (2014-2026) בפורמט APA על בסיס הנתונים: {summary}"
                 response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt, config={'tools': [{'google_search': {}}]} )
                 st.markdown(response.text)
+
