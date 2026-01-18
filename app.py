@@ -48,22 +48,47 @@ def upload_file_to_drive(uploaded_file, svc):
         return file.get('webViewLink')
     except: return "Error"
 
-def load_master_from_drive(svc):
+def fetch_history_from_drive(student_name, svc):
     try:
+        # חיפוש הקובץ לפי השם המדויק שהגדרת
         query = f"name = '{MASTER_FILENAME}' and trashed = false"
         res = svc.files().list(q=query, spaces='drive', supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
-        target = next((f for f in res if f['name'] == MASTER_FILENAME), None)
-        if not target: return None, None
-        request = svc.files().get_media(fileId=target['id'])
+        if not res: return ""
+        
+        file_id = res[0]['id']
+        request = svc.files().get_media(fileId=file_id)
         fh = io.BytesIO()
         downloader = MediaIoBaseDownload(fh, request)
         done = False
         while not done: _, done = downloader.next_chunk()
+        
         fh.seek(0)
         df = pd.read_excel(fh)
-        df['student_name'] = df['student_name'].astype(str).str.strip()
-        return df, target['id']
-    except: return None, None
+        
+        # --- לב המנגנון: ניקוי שמות וחיפוש גמיש ---
+        target = str(student_name).strip() # השם שנבחר באפליקציה
+        df['student_name'] = df['student_name'].astype(str).str.strip() # ניקוי השמות באקסל
+        
+        # חיפוש שבודק אם השם קיים בתוך התא (פותר בעיות של "דניאל.ר" לעומת "דניאל")
+        student_data = df[df['student_name'].str.contains(target, na=False, case=False)]
+        
+        if student_data.empty:
+            return ""
+            # בתוך tab1, מיד אחרי בחירת השם:
+drive_history = ""
+if student_name and svc:
+    drive_history = fetch_history_from_drive(student_name, svc)
+    if drive_history:
+        st.success(f"✅ היסטוריה עבור {student_name} זוהתה ונטענה מהאקסל.")
+    else:
+        st.info(f"🔍 לא נמצא תיעוד קודם עבור {student_name} בקובץ המאסטר.")
+        # החזרת הנתונים בצורה שה-AI יוכל לקרוא (מילוי תאים ריקים בטקסט ריק)
+        hist = ""
+        for _, row in student_data.tail(10).fillna("").iterrows():
+            hist += f"תאריך: {row.get('date')} | קושי: {row.get('challenge')} | פרשנות: {row.get('interpretation')}\n"
+        return hist
+    except Exception as e:
+        return ""
 
 def update_master_in_drive(new_data_df, svc):
     try:
@@ -193,3 +218,4 @@ with tab3:
                 prompt = f"נתח מגמות אקדמיות (2014-2026) בפורמט APA על בסיס כל הנתונים: {summary}"
                 response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt, config={'tools': [{'google_search': {}}]} )
                 st.markdown(response.text)
+
