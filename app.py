@@ -18,7 +18,7 @@ GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 OBSERVATION_TAGS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="מערכת תצפית - גרסה 27.0", layout="wide")
+st.set_page_config(page_title="מערכת תצפית - גרסה 28.0", layout="wide")
 
 st.markdown("""
     <style>
@@ -27,7 +27,6 @@ st.markdown("""
         .stTextInput input, .stTextArea textarea, .stSelectbox > div > div { direction: rtl; text-align: right; }
         [data-testid="stSlider"] { direction: ltr !important; }
         .stButton > button { width: 100%; font-weight: bold; border-radius: 12px; height: 3em; background-color: #28a745; color: white; }
-        .stSuccess { border-radius: 10px; padding: 10px; background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -99,9 +98,10 @@ def load_master_from_drive_internal(svc):
 if "it" not in st.session_state: st.session_state.it = 0
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 if "student_context" not in st.session_state: st.session_state.student_context = ""
+if "last_selected_student" not in st.session_state: st.session_state.last_selected_student = ""
 
 svc = get_drive_service()
-st.title("🎓 מערכת תצפית תזה - גרסה 27.0")
+st.title("🎓 מערכת תצפית תזה - גרסה 28.0 (דיוק נתונים)")
 tab1, tab2, tab3 = st.tabs(["📝 הזנה וצ'אט", "🔄 סנכרון", "🤖 ניתוח"])
 
 with tab1:
@@ -114,10 +114,16 @@ with tab1:
                 name_sel = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"n_{it}")
                 student_name = st.text_input("שם חופשי:", key=f"fn_{it}") if name_sel == "תלמיד אחר..." else name_sel
                 
-                # טעינה אוטומטית של היסטוריה
+                # ניקוי זיכרון הצ'אט אם הסטודנט הוחלף
+                if student_name != st.session_state.last_selected_student:
+                    st.session_state.chat_history = []
+                    st.session_state.student_context = ""
+                    st.session_state.last_selected_student = student_name
+
+                # טעינת היסטוריה
                 drive_history = fetch_history_from_drive(student_name, svc) if (student_name and svc) else ""
                 if drive_history:
-                    st.success(f"✅ היסטוריה עבור {student_name} נטענה.")
+                    st.success(f"✅ נתוני {student_name} נטענו.")
                     st.session_state.student_context = drive_history
 
             with c2:
@@ -125,7 +131,7 @@ with tab1:
 
             st.markdown("### 📊 מדדים כמותיים")
             q1, q2 = st.columns(2)
-            with q1: drawings_count = st.number_input("כמות שרטוטים שבוצעו", min_value=0, step=1, key=f"dc_{it}")
+            with q1: drawings_count = st.number_input("כמות שרטוטים", min_value=0, step=1, key=f"dc_{it}")
             with q2: duration_min = st.number_input("זמן עבודה (דקות)", min_value=0, step=5, key=f"dm_{it}")
 
             m1, m2 = st.columns(2)
@@ -162,26 +168,34 @@ with tab1:
                     }
                     with open(DATA_FILE, "a", encoding="utf-8") as f:
                         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                    st.success("נשמר מקומית. סנכרן בטאב 2.")
+                    st.success("נשמר מקומית.")
                     st.session_state.it += 1
                     st.rerun()
 
     with col_chat:
-        st.subheader(f"🤖 צ'אט מחקר: {student_name}")
+        st.subheader(f"🤖 עוזר מחקר חכם")
         chat_cont = st.container(height=500)
         for q, a in st.session_state.chat_history:
             with chat_cont: st.chat_message("user").write(q); st.chat_message("assistant").write(a)
-        user_q = st.chat_input("שאל על הסטודנט...")
+        user_q = st.chat_input("שאל על הסטודנט הנבחר...")
         if user_q:
             client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-            prompt = f"נתח את {student_name} לפי: {st.session_state.student_context}\nשאלה: {user_q}. APA 7."
-            res = client.models.generate_content(model="gemini-2.0-flash", contents=prompt, config={'tools': [{'google_search': {}}]} )
+            # Prompt נקי ללא חיפוש חיצוני וללא המצאת רפרנסים
+            prompt = f"""
+            אתה עוזר מחקר המנתח תצפיות על סטודנט יחיד: {student_name}.
+            הסתמך אך ורק על נתוני התצפית הבאים:
+            {st.session_state.student_context}
+            
+            אל תחפש מקורות חיצוניים ואל תמציא רפרנסים אקדמיים. 
+            ספק תובנות המבוססות על המגמות שאתה רואה בנתונים שסופקו לך בלבד.
+            שאלה: {user_q}
+            """
+            res = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
             st.session_state.chat_history.append((user_q, res.text)); st.rerun()
 
 with tab2:
     st.header("🔄 מרכז סנכרון")
     if os.path.exists(DATA_FILE):
-        st.info("ממתינים לסנכרון נתונים חדשים.")
         if st.button("🚀 עדכן את הדרייב", use_container_width=True):
             all_entries = [json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")]
             if update_master_in_drive(pd.DataFrame(all_entries), svc):
@@ -196,6 +210,6 @@ with tab3:
             if df is not None:
                 summary = df.to_string()
                 client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-                prompt = f"נתח מגמות אקדמיות (2014-2026) בפורמט APA על בסיס: {summary}"
-                response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt, config={'tools': [{'google_search': {}}]} )
+                prompt = f"נתח מגמות בנתונים אלו וספק תובנות מחקריות. אל תמציא רפרנסים: {summary}"
+                response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
                 st.markdown(response.text)
