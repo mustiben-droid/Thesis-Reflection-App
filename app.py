@@ -76,6 +76,7 @@ def fetch_history_from_drive(student_name, svc):
             return ""
             # בתוך tab1, מיד אחרי בחירת השם:
 drive_history = ""
+
 if student_name and svc:
     drive_history = fetch_history_from_drive(student_name, svc)
     if drive_history:
@@ -218,4 +219,5 @@ with tab3:
                 prompt = f"נתח מגמות אקדמיות (2014-2026) בפורמט APA על בסיס כל הנתונים: {summary}"
                 response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt, config={'tools': [{'google_search': {}}]} )
                 st.markdown(response.text)
+
 
