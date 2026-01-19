@@ -120,7 +120,15 @@ with tab1:
                 
                 if student_name != st.session_state.last_selected_student:
                     st.session_state.chat_history = []
-                    st.session_state.student_context = fetch_history_from_drive(student_name, svc) if (student_name and svc) else ""
+                    # טעינה והצגת אישור
+                    with st.spinner(f"טוען היסטוריה עבור {student_name}..."):
+                        st.session_state.student_context = fetch_history_from_drive(student_name, svc) if (student_name and svc) else ""
+                    
+                    if st.session_state.student_context:
+                        st.success(f"✅ נתוני העבר של {student_name} זוהו ונטענו בהצלחה.")
+                    else:
+                        st.info(f"🔍 לא נמצאה היסטוריה קודמת עבור {student_name}. מתחיל תצפית חדשה.")
+                    
                     st.session_state.last_selected_student = student_name
             with c2:
                 work_method = st.radio("🛠️ סוג תרגול:", ["🧊 בעזרת גוף מודפס", "🎨 ללא גוף (דמיון)"], key=f"wm_{it}", horizontal=True)
@@ -226,3 +234,4 @@ with tab3:
                     full_txt = f"סיכום מחקר {datetime.now().strftime('%d/%m/%Y')}\n\n{response.text}\n\nסטטיסטיקה:\n{stats_text}"
                     saved = save_summary_to_drive(full_txt, svc)
                     if saved: st.success(f"נשמר בדרייב: {saved}")
+
