@@ -18,7 +18,7 @@ GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 TAGS_OPTIONS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="מערכת תצפית - גרסה 31.0", layout="wide")
+st.set_page_config(page_title="מערכת תצפית - גרסה 32.0", layout="wide")
 
 st.markdown("""
     <style>
@@ -113,7 +113,7 @@ if "current_obs_timestamp" not in st.session_state: st.session_state.current_obs
 if "last_selected_student" not in st.session_state: st.session_state.last_selected_student = ""
 
 svc = get_drive_service()
-st.title("🎓 מערכת תצפית תזה חכמה - 31.0")
+st.title("🎓 מערכת תצפית תזה חכמה - 32.0")
 tab1, tab2, tab3 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "🤖 ניתוח מגמות"])
 
 with tab1:
@@ -132,13 +132,15 @@ with tab1:
                         st.session_state.student_context = fetch_history_from_drive(student_name, svc) if (student_name and svc) else ""
                     
                     if st.session_state.student_context:
-                        st.success(f"✅ נתוני העבר של {student_name} זוהו ונטענו בהצלחה.")
+                        st.success(f"✅ נתוני העבר של {student_name} זוהו ונטענו.")
                     else:
-                        st.info(f"🔍 לא נמצאה היסטוריה קודמת עבור {student_name}. מתחיל תצפית חדשה.")
-                    
+                        st.info(f"🔍 לא נמצאה היסטוריה עבור {student_name}.")
                     st.session_state.last_selected_student = student_name
+
             with c2:
                 work_method = st.radio("🛠️ סוג תרגול:", ["🧊 בעזרת גוף מודפס", "🎨 ללא גוף (דמיון)"], key=f"wm_{it}", horizontal=True)
+                # הוספת רמת קושי
+                exercise_diff = st.select_slider("📉 רמת קושי התרגיל:", options=["קל", "בינוני", "קשה"], value="בינוני", key=f"ed_{it}")
 
             q1, q2 = st.columns(2)
             with q1: drawings_count = st.number_input("כמות שרטוטים", min_value=0, step=1, key=f"dc_{it}")
@@ -159,7 +161,6 @@ with tab1:
             challenge = st.text_area("🗣️ תיאור קשיים ותצפית (מה ראית?)", key=f"ch_{it}")
             interpretation = st.text_area("🧠 פרשנות מחקרית (מה זה אומר?)", key=f"int_{it}")
             
-            # הוספת רכיב העלאת תמונות
             uploaded_files = st.file_uploader("📷 צרף תמונות או שרטוטים", accept_multiple_files=True, key=f"up_{it}")
 
             if st.session_state.last_obs_feedback:
@@ -173,27 +174,26 @@ with tab1:
                     if not st.session_state.current_obs_timestamp:
                         st.session_state.current_obs_timestamp = datetime.now().isoformat()
                     
-                    # לוגיקה להעלאת קבצים
                     links = []
                     if uploaded_files and svc:
-                        for f in uploaded_files:
-                            links.append(upload_file_to_drive(f, svc))
+                        for f in uploaded_files: links.append(upload_file_to_drive(f, svc))
                     
                     entry = {
                         "date": date.today().isoformat(), "student_name": student_name, "work_method": work_method,
-                        "drawings_count": drawings_count, "duration_min": duration_min, "challenge": challenge,
-                        "interpretation": interpretation, "cat_convert_rep": cat_convert_rep, "cat_dims_props": cat_dims_props,
-                        "cat_proj_trans": cat_proj_trans, "cat_3d_support": cat_3d_support, "cat_self_efficacy": cat_self_efficacy,
-                        "tags": str(tags), "file_links": ", ".join(links), "timestamp": st.session_state.current_obs_timestamp
+                        "exercise_difficulty": exercise_diff, "drawings_count": drawings_count, "duration_min": duration_min, 
+                        "challenge": challenge, "interpretation": interpretation, "cat_convert_rep": cat_convert_rep, 
+                        "cat_dims_props": cat_dims_props, "cat_proj_trans": cat_proj_trans, "cat_3d_support": cat_3d_support, 
+                        "cat_self_efficacy": cat_self_efficacy, "tags": str(tags), "file_links": ", ".join(links), 
+                        "timestamp": st.session_state.current_obs_timestamp
                     }
                     with open(DATA_FILE, "a", encoding="utf-8") as f:
                         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                     
                     client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-                    feedback_prompt = f"מנחה תזה: בדוק אם התיאור 'מה ראיתי' והפרשנות מספקים עבור התגיות {tags}. אם חסר פירוט על פעולה פיזית או רגשית, ציין זאת ב-2 שורות. תצפית: {challenge}"
+                    feedback_prompt = f"מנחה תזה: החוקר הזין תצפית ברמת קושי {exercise_diff}. בדוק אם התיאור {challenge} מספק. תן 2 שורות משוב."
                     res = client.models.generate_content(model="gemini-2.0-flash", contents=feedback_prompt)
                     st.session_state.last_obs_feedback = res.text
-                    st.success("נשמר מקומית. ניתן לתקן ולשמור שוב או לסיים.")
+                    st.success("נשמר מקומית. ניתן לתקן או לסיים.")
                     st.rerun()
 
             if st.button("✅ סיימתי עם הסטודנט - נקה טופס"):
@@ -232,15 +232,14 @@ with tab3:
                 if df is not None:
                     score_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_self_efficacy', 'duration_min']
                     for col in score_cols: df[col] = pd.to_numeric(df[col], errors='coerce')
-                    stats_text = df.groupby('work_method')[score_cols].mean().round(2).to_string()
+                    stats_text = df.groupby(['work_method', 'exercise_difficulty'])[score_cols].mean().round(2).to_string()
                     
                     client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
                     prompt = f"""
-                    נתח את המחקר:
-                    1. השווה ממוצעים: {stats_text}
-                    2. בצע 'קידוד איכותני' לרפלקציות: {df[['student_name', 'interpretation', 'challenge']].to_string()}
-                    3. בנה 'פרופיל לומד' (טיפולוגיה) לכל סטודנט.
-                    4. ספק ביקורת על עקביות התיעוד של החוקר.
+                    נתח את המחקר תוך התייחסות לרמת קושי התרגילים:
+                    1. השווה ממוצעים לפי שיטה וקושי: {stats_text}
+                    2. האם המודל הפיזי עוזר יותר בתרגילים קשים?
+                    3. בנה 'פרופיל לומד' והערך את עקביות החוקר.
                     """
                     response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
                     st.markdown(response.text)
