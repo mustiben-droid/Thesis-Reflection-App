@@ -224,26 +224,34 @@ with tab2:
     else: st.write("✨ הכל מעודכן.")
 
 with tab3:
-    st.header("🤖 ניתוח מגמות ופרופילים")
-    if st.button("✨ ייצר ניתוח עומק סטטיסטי ואיכותני", use_container_width=True):
+    st.header("🤖 ניתוח מגמות ופרופילים אישיים")
+    if st.button("✨ ייצר ניתוח עומק שממי וסטטיסטי", use_container_width=True):
         if svc:
-            with st.spinner("מנתח נתונים..."):
+            with st.spinner("מנתח נתונים ברמה שמית..."):
                 df, _ = load_master_from_drive_internal(svc)
                 if df is not None:
+                    # חישוב סטטיסטי מקובץ
                     score_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_self_efficacy', 'duration_min']
                     for col in score_cols: df[col] = pd.to_numeric(df[col], errors='coerce')
                     stats_text = df.groupby(['work_method', 'exercise_difficulty'])[score_cols].mean().round(2).to_string()
                     
                     client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
                     prompt = f"""
-                    נתח את המחקר תוך התייחסות לרמת קושי התרגילים:
-                    1. השווה ממוצעים לפי שיטה וקושי: {stats_text}
-                    2. האם המודל הפיזי עוזר יותר בתרגילים קשים?
-                    3. בנה 'פרופיל לומד' והערך את עקביות החוקר.
+                    אתה מנחה תזה. בצע ניתוח מעמיק בשלוש רמות:
+                    
+                    1. רמת המאקרו: השוואת ממוצעים לפי שיטה וקושי. 
+                    סטטיסטיקה מחושבת: {stats_text}
+                    
+                    2. רמת המיקרו (פר תלמיד): עבור כל אחד מהסטודנטים בנתונים: {df['student_name'].unique().tolist()}, 
+                       נתח את המגמה האישית שלו. האם המודל עוזר לו? האם הוא חווה 'אשליית מסוגלות'?
+                    
+                    3. ביקורת החוקר: זהה היכן התיאור האיכותני דל מדי וזקוק לחיזוק בתצפיות הבאות.
+                    
+                    נתונים גולמיים: {df.to_string()}
                     """
                     response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
                     st.markdown(response.text)
                     
-                    full_txt = f"סיכום מחקר {datetime.now().strftime('%d/%m/%Y')}\n\n{response.text}\n\nסטטיסטיקה:\n{stats_text}"
+                    full_txt = f"ניתוח שממי ומגמות - {datetime.now().strftime('%d/%m/%Y')}\n\n{response.text}"
                     saved = save_summary_to_drive(full_txt, svc)
-                    if saved: st.success(f"נשמר בדרייב: {saved}")
+                    if saved: st.success(f"הסיכום השמי נשמר בדרייב: {saved}")
