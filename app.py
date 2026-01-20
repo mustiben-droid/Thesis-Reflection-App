@@ -39,6 +39,15 @@ def get_drive_service():
         return build("drive", "v3", credentials=creds)
     except: return None
 
+def upload_file_to_drive(uploaded_file, svc):
+    try:
+        file_metadata = {'name': uploaded_file.name}
+        if GDRIVE_FOLDER_ID: file_metadata['parents'] = [GDRIVE_FOLDER_ID]
+        media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
+        file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink', supportsAllDrives=True).execute()
+        return file.get('webViewLink')
+    except: return "Error"
+
 def save_summary_to_drive(content, svc):
     try:
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
@@ -67,7 +76,6 @@ def update_master_in_drive(new_data_df, svc):
     try:
         existing_df, file_id = load_master_from_drive_internal(svc)
         if existing_df is not None:
-            # מניעת כפילויות בעדכון און-ליין (Keep Last)
             df = pd.concat([existing_df, new_data_df], ignore_index=True).drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
         else: df = new_data_df
         output = io.BytesIO()
@@ -120,7 +128,6 @@ with tab1:
                 
                 if student_name != st.session_state.last_selected_student:
                     st.session_state.chat_history = []
-                    # טעינה והצגת אישור
                     with st.spinner(f"טוען היסטוריה עבור {student_name}..."):
                         st.session_state.student_context = fetch_history_from_drive(student_name, svc) if (student_name and svc) else ""
                     
@@ -151,6 +158,9 @@ with tab1:
             tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
             challenge = st.text_area("🗣️ תיאור קשיים ותצפית (מה ראית?)", key=f"ch_{it}")
             interpretation = st.text_area("🧠 פרשנות מחקרית (מה זה אומר?)", key=f"int_{it}")
+            
+            # הוספת רכיב העלאת תמונות
+            uploaded_files = st.file_uploader("📷 צרף תמונות או שרטוטים", accept_multiple_files=True, key=f"up_{it}")
 
             if st.session_state.last_obs_feedback:
                 st.markdown(f'<div class="feedback-box"><b>💡 משוב לחיזוק התיעוד:</b><br>{st.session_state.last_obs_feedback}</div>', unsafe_allow_html=True)
@@ -163,17 +173,22 @@ with tab1:
                     if not st.session_state.current_obs_timestamp:
                         st.session_state.current_obs_timestamp = datetime.now().isoformat()
                     
+                    # לוגיקה להעלאת קבצים
+                    links = []
+                    if uploaded_files and svc:
+                        for f in uploaded_files:
+                            links.append(upload_file_to_drive(f, svc))
+                    
                     entry = {
                         "date": date.today().isoformat(), "student_name": student_name, "work_method": work_method,
                         "drawings_count": drawings_count, "duration_min": duration_min, "challenge": challenge,
                         "interpretation": interpretation, "cat_convert_rep": cat_convert_rep, "cat_dims_props": cat_dims_props,
                         "cat_proj_trans": cat_proj_trans, "cat_3d_support": cat_3d_support, "cat_self_efficacy": cat_self_efficacy,
-                        "tags": str(tags), "timestamp": st.session_state.current_obs_timestamp
+                        "tags": str(tags), "file_links": ", ".join(links), "timestamp": st.session_state.current_obs_timestamp
                     }
                     with open(DATA_FILE, "a", encoding="utf-8") as f:
                         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                     
-                    # ניתוח איכותני מיידי
                     client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
                     feedback_prompt = f"מנחה תזה: בדוק אם התיאור 'מה ראיתי' והפרשנות מספקים עבור התגיות {tags}. אם חסר פירוט על פעולה פיזית או רגשית, ציין זאת ב-2 שורות. תצפית: {challenge}"
                     res = client.models.generate_content(model="gemini-2.0-flash", contents=feedback_prompt)
@@ -215,7 +230,6 @@ with tab3:
             with st.spinner("מנתח נתונים..."):
                 df, _ = load_master_from_drive_internal(svc)
                 if df is not None:
-                    # חישוב סטטיסטי
                     score_cols = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_self_efficacy', 'duration_min']
                     for col in score_cols: df[col] = pd.to_numeric(df[col], errors='coerce')
                     stats_text = df.groupby('work_method')[score_cols].mean().round(2).to_string()
@@ -234,4 +248,3 @@ with tab3:
                     full_txt = f"סיכום מחקר {datetime.now().strftime('%d/%m/%Y')}\n\n{response.text}\n\nסטטיסטיקה:\n{stats_text}"
                     saved = save_summary_to_drive(full_txt, svc)
                     if saved: st.success(f"נשמר בדרייב: {saved}")
-
