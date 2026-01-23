@@ -166,7 +166,6 @@ with tab2:
             os.remove(DATA_FILE); st.success("סונכרן בהצלחה!"); st.rerun()
 
 # --- Tab 3: ניתוח מחקרי איכותני שבועי (גרסה סופית ומתוקנת) ---
-# --- Tab 3: ניתוח מחקרי איכותני שבועי (גרסה סופית ומתוקנת) ---
 
 if full_df.empty:
     st.info("אין נתונים לניתוח. וודא שביצעת סנכרון בטאב 2.")
@@ -233,10 +232,11 @@ else:
 
                     try:
                         # הגדרה תקינה של Google AI SDK
+                        from google import generativeai as genai
                         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-                        # מודל תקין – API חדש
-                        model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+                        # מודל חדש ויציב – gemini‑2.0‑flash
+                        model = genai.GenerativeModel(model_name="gemini-2.0-flash")
 
                         response = model.generate_content(prompt)
                         res = response.text
@@ -268,6 +268,8 @@ else:
                         st.error(f"שגיאה בהפקת הניתוח: {str(e)}")
 
 # --- סוף הקוד ---
+
+
 
 
 
