@@ -82,11 +82,6 @@ def get_drive_service():
 
 # הפעלה גלובלית
 svc = get_drive_service()
-# הפעלה גלובלית
-svc = get_drive_service()
-
-# הפעלה גלובלית
-svc = get_drive_service()
 
 def load_full_dataset(svc):
     all_dfs = []
@@ -366,6 +361,7 @@ else:
                         st.error(f"שגיאה בהפקת הניתוח: {str(e)}")
 
 # --- סוף הקוד ---
+
 
 
 
