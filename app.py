@@ -228,46 +228,60 @@ with tab2:
             all_entries = [json.loads(line) for line in f if line.strip()]
         # לוגיקת סנכרון (update_master_in_drive)
         st.success("הנתונים מוכנים לסנכרון.")
-# --- Tab 3: ניתוח מחקרי ---
+        
 with tab3:
-    if full_df.empty:
-        st.info("אין נתונים לניתוח. בצעי סנכרון בטאב 2.")
+    st.header("📊 ניתוח נתונים ומגמות")
+    
+    # טעינה מחדש של הנתונים כדי למנוע את שגיאת ה-full_df.empty
+    with st.spinner("מושך נתונים עדכניים מהדרייב..."):
+        # קריאה לפונקציה שקיימת אצלך בראש הקוד
+        df_analysis = load_full_dataset(svc)
+    
+    # בדיקה אם הדאטה פנוי לשימוש
+    if df_analysis.empty:
+        st.info("ℹ️ אין עדיין נתונים במערכת. בצעי סנכרון בטאב 2 כדי להתחיל בניתוח.")
     else:
-        st.header("🧠 ניתוח תמות AI")
-        df_an = full_df.copy()
-        df_an['date'] = pd.to_datetime(df_an['date'], errors='coerce')
-        df_an['week'] = df_an['date'].dt.strftime('%Y - שבוע %U')
+        # פילטרים מהירים
+        col_f1, col_f2 = st.columns([1, 1])
+        with col_f1:
+            all_students = sorted(df_analysis['student_name'].unique().tolist())
+            selected_s = st.selectbox("👤 בחר סטודנט לניתוח:", ["כולם"] + all_students, key="ana_s_tab3")
         
-        weeks = sorted(df_an['week'].unique(), reverse=True)
-        sel_week = st.selectbox("בחר שבוע:", weeks)
-        w_df = df_an[df_an['week'] == sel_week]
+        # סינון הנתונים לפי הבחירה
+        view_df = df_analysis if selected_s == "כולם" else df_analysis[df_analysis['student_name'] == selected_s]
         
-        st.dataframe(w_df)
+        # תצוגת טבלה חכמה - רק עמודות רלוונטיות
+        st.subheader(f"📋 תצפיות עבור: {selected_s}")
+        
+        # רשימת עמודות לתצוגה (מבוסס על השדות בטאב 1 שלך)
+        cols_to_show = ['date', 'student_name', 'challenge', 'interpretation', 'tags', 'cat_convert_rep', 'cat_proj_trans', 'cat_self_efficacy']
+        actual_cols = [c for c in cols_to_show if c in view_df.columns]
+        
+        st.dataframe(view_df[actual_cols].sort_values(by='date', ascending=False), use_container_width=True)
 
-        if st.button("✨ הפק ניתוח ושמור לדרייב"):
-            with st.spinner("ג'ימיני מנתח..."):
-                txt = ""
-                for _, r in w_df.iterrows():
-                    txt += f"סטודנט: {r.get('student_name','')} | תצפית: {r.get('challenge','')} | תובנה: {r.get('insight','')}\n---\n"
-
-                try:
-                    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    response = model.generate_content(f"נתח תמות אקדמיות בעברית לשבוע {sel_week}: {txt}").text
-                    
-                    st.info(response)
-                    
-                    if svc:
-                        f_name = f"ניתוח_{sel_week}.txt"
-                        media = MediaIoBaseUpload(io.BytesIO(response.encode('utf-8')), mimetype='text/plain')
-                        svc.files().create(body={'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
-                        st.success(f"נשמר בדרייב בשם {f_name}")
-                except Exception as e:
-                    st.error(f"שגיאה בניתוח: {e}")
-
-# --- Sidebar ---
-st.sidebar.write("מצב חיבור:", "✅ מחובר" if svc else "❌ לא מחובר")
-
+        # ניתוח AI מעמיק
+        st.markdown("---")
+        st.subheader("🧠 תובנות סוכן ה-AI")
+        
+        if st.button("✨ הפק ניתוח מגמות למידה"):
+            with st.spinner(f"הסוכן מנתח את ההיסטוריה של {selected_s}..."):
+                # הכנת הקשר ל-AI (לוקחים את השורות האחרונות)
+                recent_context = view_df.tail(10).to_string()
+                
+                analysis_prompt = {
+                    "name": selected_s,
+                    "history": recent_context,
+                    "question": """
+                    נתח את נתוני התצפיות. 
+                    1. זהה דפוסי קושי חוזרים לפי התגיות והתיאור.
+                    2. התייחס למדדים הכמותיים (1-5).
+                    3. הצע המלצה פדגוגית להמשך.
+                    """
+                }
+                
+                # שימוש בפונקציית ה-AI הקיימת אצלך
+                analysis_res = get_ai_response("chat", analysis_prompt)
+                st.markdown(f'<div class="feedback-box">{analysis_res}</div>', unsafe_allow_html=True)
 
 
 
