@@ -80,17 +80,34 @@ def load_full_dataset(svc):
 
 def get_ai_response(prompt_type, context_data):
     api_key = st.secrets.get("GOOGLE_API_KEY")
-    if not api_key: return "שגיאת API"
+    if not api_key: 
+        return "שגיאה: מפתח ה-AI (API KEY) לא מוגדר ב-Secrets."
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
-        prompts = {
-            "chat": f"אתה עוזר מחקר. היסטוריה של {context_data['name']}: {context_data['history']}. שאלה: {context_data['question']}",
-            "feedback": f"מנחה פדגוגי. תצפית: {context_data['challenge']}. תן 2 שורות משוב בונה."
-        }
-        res = model.generate_content(prompts[prompt_type])
+        
+        # ניקוי ההיסטוריה מתווים שעלולים לשבור את ה-Prompt
+        clean_history = str(context_data.get('history', ""))[:5000] # הגבלת אורך
+        
+        if prompt_type == "chat":
+            full_prompt = (
+                f"אתה עוזר מחקר אקדמי המנתח תצפיות של סטודנטים. "
+                f"להלן נתוני העבר של הסטודנט {context_data['name']}:\n"
+                f"{clean_history}\n\n"
+                f"השאלה של המשתמש: {context_data['question']}\n"
+                f"ענה בצורה מקצועית וממוקדת על סמך הנתונים."
+            )
+        else: # feedback
+            full_prompt = (
+                f"תן משוב פדגוגי קצר (עד 3 שורות) על התצפית הבאה: {context_data['challenge']}. "
+                f"התמקד בהיבטים של חינוך גרפי והבנה מרחבית."
+            )
+            
+        res = model.generate_content(full_prompt)
         return res.text
-    except: return "שגיאה ב-AI"
+    except Exception as e:
+        logger.error(f"AI Error: {e}")
+        return f"שגיאה בחיבור ל-AI: וודא שהמפתח תקין (Gemini API)."
 
 # --- 2. ניהול מצב ---
 if "it" not in st.session_state: st.session_state.it = 0
@@ -200,3 +217,4 @@ with tab2:
             all_entries = [json.loads(line) for line in f if line.strip()]
         # לוגיקת סנכרון (update_master_in_drive)
         st.success("הנתונים מוכנים לסנכרון.")
+
