@@ -166,18 +166,17 @@ with tab2:
             os.remove(DATA_FILE); st.success("סונכרן בהצלחה!"); st.rerun()
 
 # --- Tab 3: ניתוח איכותני כיתתי (רוחב) - מותאם אישית לעמודת insight ---
-# --- Tab 3: ניתוח מחקרי איכותני שבועי (גרסה סופית ומתוקנת) ---
+# --- Tab 3: ניתוח מחקרי איכותני שבועי (מתוקן) ---
 with tab3:
     if full_df.empty:
         st.info("אין נתונים לניתוח. וודא שביצעת סנכרון בטאב 2.")
     else:
         st.header("🧠 ניתוח מחקר איכותני - רוחב כיתתי")
         
-        # 1. הכנת הדאטה ומיפוי עמודות
         df_an = full_df.copy()
         actual_columns = df_an.columns.tolist()
         
-        # זיהוי עמודות (שימוש ב-insight לפרשנות כפי שקיים באקסל שלך)
+        # מיפוי עמודות לפי מה שזיהינו אצלך
         target_cols = {
             'date': 'date' if 'date' in actual_columns else None,
             'student_name': 'student_name' if 'student_name' in actual_columns else None,
@@ -186,9 +185,8 @@ with tab3:
         }
 
         if not target_cols['interpretation']:
-            st.error("❌ לא נמצאה עמודת Insight באקסל. הניתוח לא יכול להמשיך.")
+            st.error("❌ לא נמצאה עמודת Insight באקסל.")
         else:
-            # בניית דאטה-פרים מעובד
             final_df = pd.DataFrame()
             for key, original_name in target_cols.items():
                 if original_name: final_df[key] = df_an[original_name]
@@ -197,64 +195,52 @@ with tab3:
             final_df = final_df.dropna(subset=['date'])
             final_df['week'] = final_df['date'].dt.strftime('%Y - שבוע %U')
             
-            # 2. בחירת שבוע לניתוח (רוחב כיתתי)
             weeks = sorted(final_df['week'].unique(), reverse=True)
-            sel_week = st.selectbox("בחר שבוע לניתוח תמות:", weeks)
+            sel_week = st.selectbox("בחר שבוע לניתוח:", weeks, key="analysis_week_sel")
             
             w_df = final_df[final_df['week'] == sel_week]
             
             if w_df.empty:
                 st.warning("לא נמצאו תצפיות בשבוע שנבחר.")
             else:
-                st.subheader(f"📋 תצפיות שנאספו בשבוע זה ({len(w_df)} שורות)")
-                st.dataframe(w_df[['student_name', 'challenge', 'interpretation']])
+                st.subheader(f"📋 נתוני השבוע: {sel_week}")
+                st.dataframe(w_df)
 
-                # 3. כפתור ג'ימיני לניתוח ושמירה
-                if st.button(f"✨ הפק ניתוח איכותני כולל לשבוע זה (שמור לדרייב)"):
-                    with st.spinner("ג'ימיני מנתח תמות מכלל התלמידים..."):
-                        
-                        # ריכוז כל התצפיות לטקסט אחד
+                if st.button(f"✨ הפק ניתוח איכותני שבועי ושמור לדרייב"):
+                    with st.spinner("ג'ימיני מנתח תמות כיתתיות..."):
+                        # הכנת הטקסט לניתוח
                         research_context = ""
                         for _, row in w_df.iterrows():
                             research_context += f"סטודנט: {row['student_name']}\n"
-                            research_context += f"תצפית (Challenge): {row['challenge']}\n"
+                            research_context += f"תצפית: {row['challenge']}\n"
                             research_context += f"פרשנות (Insight): {row['interpretation']}\n"
                             research_context += "--- \n"
 
-                        # פרומפט מחקרי (Thematic Analysis)
                         prompt = f"""
-                        אתה חוקר אקדמי בכיר. בצע ניתוח תמטי (Thematic Analysis) על נתוני שבוע {sel_week}.
-                        עליך לנתח את כלל הסטודנטים שנצפו בשבוע זה.
-                        זהה קשרים בין התצפיות לבין התובנות (Insights) שכתבה החוקרת.
-                        חלץ תמות (Themes) מרכזיות לגבי הקשיים הקוגניטיביים של הכיתה ונסח פסקה אקדמית לממצאים.
-                        
-                        הנתונים לניתוח:
-                        {research_context}
+                        אתה חוקר אקדמי. בצע ניתוח תמטי על נתוני שבוע {sel_week}.
+                        זהה קשרים בין התצפיות לתובנות ונסח פסקה אקדמית לממצאים.
+                        נתונים: {research_context}
                         """
 
                         try:
-                            # שימוש במודל בפורמט בטוח
+                            # התיקון כאן: שם מודל תקין
                             genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
-                            model = genai.GenerativeModel('models/gemini-1.5-flash-latest')
+                            model = genai.GenerativeModel('gemini-1.5-flash') 
                             
                             res = model.generate_content(prompt).text
                             
                             st.markdown("---")
-                            st.markdown("### 📝 תוצאות הניתוח המחקרי:")
                             st.info(res)
                             
-                            # שמירה לדרייב
                             if svc:
-                                f_name = f"ניתוח_איכותני_כיתתי_{sel_week.replace(' ', '_')}.txt"
-                                meta = {'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
+                                f_name = f"ניתוח_איכותני_{sel_week.replace(' ', '_')}.txt"
                                 media = MediaIoBaseUpload(io.BytesIO(res.encode('utf-8')), mimetype='text/plain')
-                                svc.files().create(body=meta, media_body=media, supportsAllDrives=True).execute()
-                                st.success(f"✅ הניתוח נשמר בדרייב בשם: {f_name}")
-                        
+                                svc.files().create(body={'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
+                                st.success("✅ נשמר בדרייב")
                         except Exception as e:
-                            st.error(f"שגיאה בהפקת הניתוח: {str(e)}")
-
+                            st.error(f"שגיאה בניתוח: {str(e)}")
 # --- סוף הקוד ---# --- סוף הקוד ---
+
 
 
 
