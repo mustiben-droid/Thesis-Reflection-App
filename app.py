@@ -209,16 +209,36 @@ with tab1:
             if st.button("✅ סיימתי עם הסטודנט - נקה טופס"):
                 st.session_state.last_obs_feedback = ""; st.session_state.current_obs_timestamp = ""; st.session_state.it += 1; st.rerun()
 
-    with col_chat:
+   with col_chat:
         st.subheader(f"🤖 יועץ פדגוגי: {student_name}")
         chat_cont = st.container(height=400)
         for q, a in st.session_state.chat_history:
-            with chat_cont: st.chat_message("user").write(q); st.chat_message("assistant").write(a)
-        user_q = st.chat_input("שאל על מגמות...")
+            with chat_cont: 
+                st.chat_message("user").write(q)
+                st.chat_message("assistant").write(a)
+        
+        user_q = st.chat_input("שאל על מגמות הסטודנט...")
         if user_q:
             client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-            res = client.models.generate_content(model="gemini-2.0-flash", contents=f"נתח את {student_name}. שאלה: {user_q}")
-            st.session_state.chat_history.append((user_q, res.text)); st.rerun()
+            
+            # בניית פרומפט שכולל את המידע מהדרייב שהאפליקציה כבר משכה
+            context_prompt = f"""
+            אתה עוזר מחקר פדגוגי המלווה תצפיות בכיתה. 
+            להלן היסטוריית התצפיות של הסטודנט {student_name} כפי שנשמרו בדרייב:
+            ---
+            {st.session_state.student_context if st.session_state.student_context else "אין מידע קודם על סטודנט זה."}
+            ---
+            בהתבסס על המידע הזה בלבד, ענה על השאלה: {user_q}
+            חשוב: אל תגיד שאין לך גישה למידע - המידע הרלוונטי נמצא ממש כאן למעלה בתוך הפרומפט.
+            """
+            
+            try:
+                res = client.models.generate_content(model="gemini-2.0-flash", contents=context_prompt)
+                st.session_state.chat_history.append((user_q, res.text))
+                st.rerun()
+            except Exception as e:
+                logger.exception("Chat generation failed.")
+                st.error("שגיאה ביצירת תשובה. וודא ש-API Key תקין.")
 
 with tab2:
     st.header("🔄 סנכרון לדרייב")
@@ -243,3 +263,4 @@ with tab3:
                     response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
                     st.markdown(response.text)
                     save_summary_to_drive(f"ניתוח {datetime.now().strftime('%d/%m/%Y')}\n\n{response.text}", svc)
+
