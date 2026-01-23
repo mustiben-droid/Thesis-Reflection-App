@@ -3,7 +3,6 @@ import base64
 import os
 import io
 import time
-import logging
 import pandas as pd
 import streamlit as st
 import google.generativeai as genai
@@ -12,19 +11,15 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from datetime import date, datetime
 
-# --- 0. הגדרות לוגיקה ועיצוב ---
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
+# --- 0. הגדרות ועיצוב ---
 DATA_FILE = "reflections.jsonl"
 MASTER_FILENAME = "All_Observations_Master.xlsx"
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 TAGS_OPTIONS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="מערכת תצפית ומחקר - 51.0", layout="wide")
+st.set_page_config(page_title="מערכת תצפית אקדמית - 53.0", layout="wide")
 
-# עיצוב RTL וסטייל אקדמי
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
@@ -35,11 +30,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 1. מודול נתונים ודרייב (שיפורי קלוד ו-Gemini) ---
-def normalize_name(name):
-    if not isinstance(name, str): return ""
-    return name.replace(" ", "").replace(".", "").replace("־", "").replace("-", "").strip()
-
+# --- 1. מודול נתונים (טעינה מהירה) ---
 @st.cache_resource
 def get_drive_service():
     try:
@@ -48,94 +39,72 @@ def get_drive_service():
         json_str = base64.b64decode(b64).decode("utf-8")
         creds = Credentials.from_service_account_info(json.loads(json_str), scopes=["https://www.googleapis.com/auth/drive"])
         return build("drive", "v3", credentials=creds)
-    except Exception as e:
-        logger.error(f"Drive error: {e}")
-        return None
+    except: return None
 
 def load_full_dataset(svc):
     df_drive = pd.DataFrame()
     if svc:
         try:
-            query = f"name = '{MASTER_FILENAME}' and trashed = false"
-            res = svc.files().list(q=query, spaces='drive', supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
+            res = svc.files().list(q=f"name = '{MASTER_FILENAME}' and trashed = false", supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
             if res:
-                request = svc.files().get_media(fileId=res[0]['id'])
                 fh = io.BytesIO()
-                downloader = MediaIoBaseDownload(fh, request)
+                downloader = MediaIoBaseDownload(fh, svc.files().get_media(fileId=res[0]['id']))
                 done = False
                 while not done: _, done = downloader.next_chunk()
                 fh.seek(0)
                 df_drive = pd.read_excel(fh)
-                # מיפוי שמות עמודות גמיש להתאמה לאקסל
                 mapping = {'score_conv': 'cat_convert_rep', 'score_proj': 'cat_proj_trans', 'score_model': 'cat_3d_support', 'score_efficacy': 'cat_self_efficacy'}
                 df_drive = df_drive.rename(columns=mapping)
         except: pass
-
+    
     df_local = pd.DataFrame()
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 df_local = pd.DataFrame([json.loads(l) for l in f if l.strip()])
         except: pass
-
+    
     df = pd.concat([df_drive, df_local], ignore_index=True)
-    if not df.empty:
-        df = df.dropna(subset=['student_name'])
-        df['name_clean'] = df['student_name'].apply(normalize_name)
+    if not df.empty and 'student_name' in df.columns:
+        df['name_clean'] = df['student_name'].apply(lambda x: str(x).replace(" ", "").replace(".", "").strip())
     return df
 
-# --- 2. מנגנון AI חסין (תיקון 404 והתאמה למודלים חדשים) ---
-def get_ai_response(prompt_type, context_data):
+def get_ai_response(prompt_type, context):
     api_key = st.secrets.get("GOOGLE_API_KEY")
-    if not api_key: return "⚠️ מפתח API חסר ב-Secrets"
+    if not api_key: return "⚠️ מפתח API חסר"
     
-    # לופ מודלים לגיבוי למניעת שגיאות 404
-    models_to_try = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-2.0-flash-exp', 'gemini-1.5-pro']
+    # אופטימיזציה: מנסים את המודל המהיר ביותר עם REST
+    genai.configure(api_key=api_key, transport='rest')
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
-    history_str = str(context_data.get('history', ""))[:5000]
+    hist = str(context.get('history', ""))[:4000]
     if prompt_type == "chat":
-        prompt = f"אתה עוזר מחקר. נתח נתוני סטודנט {context_data['name']}:\n{history_str}\nשאלה: {context_data['question']}"
+        p = f"אתה עוזר מחקר. נתח את {context['name']} לפי התצפיות:\n{hist}\nשאלה: {context['question']}"
     else:
-        prompt = f"ניתוח יומי משולב:\n{history_str}\nדרישה: {context_data.get('question', 'סכם מגמות עיקריות לפרק הממצאים')}"
+        p = f"סכם תובנות מחקריות (כמותי ואיכותני) מהיום הבא:\n{hist}"
 
-    for model_name in models_to_try:
-        try:
-            genai.configure(api_key=api_key, transport='rest')
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            if response and response.text:
-                return response.text
-        except:
-            continue
-    return "❌ כל המודלים נכשלו. בדוק את מפתח ה-API או את גרסת הספריות."
+    try:
+        return model.generate_content(p).text
+    except Exception as e:
+        return f"שגיאת AI: {str(e)[:50]}"
 
-# --- 3. ניהול מצב האפליקציה ---
+# --- 2. ממשק המערכת ---
 if "it" not in st.session_state: st.session_state.it = 0
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
-if "student_context" not in st.session_state: st.session_state.student_context = ""
-if "last_selected_student" not in st.session_state: st.session_state.last_selected_student = ""
 if "ai_analysis_result" not in st.session_state: st.session_state.ai_analysis_result = ""
-if "daily_analysis" not in st.session_state: st.session_state.daily_analysis = ""
 
 svc = get_drive_service()
-st.title("🎓 מערכת תצפית חכמה למחקר")
+full_df = load_full_dataset(svc)
+
 tab1, tab2, tab3 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח ותובנות"])
 
-# --- Tab 1: הזנה שוטפת ---
+# --- Tab 1: הזנה מלאה ---
 with tab1:
     col_in, col_chat = st.columns([1.2, 1])
     with col_in:
         it = st.session_state.it
         student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
         
-        if student_name != st.session_state.last_selected_student:
-            with st.spinner("טוען היסטוריה..."):
-                df = load_full_dataset(svc)
-                match = df[df['name_clean'] == normalize_name(student_name)] if not df.empty else pd.DataFrame()
-                st.session_state.student_context = match.tail(15).to_string() if not match.empty else ""
-            st.session_state.last_selected_student = student_name
-            st.session_state.chat_history = []; st.rerun()
-
         st.markdown("---")
         c1, c2 = st.columns(2)
         with c1:
@@ -145,7 +114,7 @@ with tab1:
             drw_cnt = st.number_input("כמות שרטוטים", min_value=0, key=f"dc_{it}")
             dur_min = st.number_input("זמן עבודה (דק')", min_value=0, key=f"dm_{it}")
 
-        st.markdown("### 📊 מדדי ביצוע (1-5)")
+        st.markdown("### 📊 מדדים (1-5)")
         m1, m2 = st.columns(2)
         with m1:
             s1 = st.slider("המרת ייצוגים", 1, 5, 3, key=f"s1_{it}")
@@ -154,100 +123,90 @@ with tab1:
             s3 = st.slider("שימוש במודל", 1, 5, 3, key=f"s3_{it}")
             s4 = st.slider("מסוגלות עצמית", 1, 5, 3, key=f"s4_{it}")
 
-        challenge = st.text_area("🗣️ תיאור התצפית", key=f"ch_{it}", placeholder="תאר מה קרה...")
-        interpretation = st.text_area("🧠 פרשנות מחקרית", key=f"int_{it}", placeholder="הסבר פדגוגי/מחקרי")
+        challenge = st.text_area("🗣️ תיאור התצפית (חובה)", key=f"ch_{it}")
+        interpretation = st.text_area("🧠 פרשנות מחקרית", key=f"int_{it}")
 
         if st.button("💾 שמור תצפית"):
-            if not challenge: st.error("❌ חובה להזין תיאור!")
+            if not challenge: st.error("אנא מלא תיאור תצפית.")
             else:
-                with st.spinner("שומר..."):
-                    entry = {
-                        "date": date.today().isoformat(), "student_name": student_name, "work_method": work_method,
-                        "exercise_difficulty": ex_diff, "drawings_count": int(drw_cnt), "duration_min": int(dur_min),
-                        "cat_convert_rep": int(s1), "cat_proj_trans": int(s2), "cat_3d_support": int(s3), 
-                        "cat_self_efficacy": int(s4), "challenge": challenge, "interpretation": interpretation, "timestamp": datetime.now().isoformat()
-                    }
-                    with open(DATA_FILE, "a", encoding="utf-8") as f:
-                        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                    st.toast("✅ נשמר בהצלחה!"); time.sleep(1); st.session_state.it += 1; st.rerun()
+                entry = {
+                    "date": date.today().isoformat(), "student_name": student_name, "work_method": work_method,
+                    "exercise_difficulty": ex_diff, "drawings_count": int(drw_cnt), "duration_min": int(dur_min),
+                    "cat_convert_rep": int(s1), "cat_proj_trans": int(s2), "cat_3d_support": int(s3), 
+                    "cat_self_efficacy": int(s4), "challenge": challenge, "interpretation": interpretation, "timestamp": datetime.now().isoformat()
+                }
+                with open(DATA_FILE, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                st.success("נשמר בהצלחה!")
+                time.sleep(1); st.session_state.it += 1; st.rerun()
 
     with col_chat:
-        st.subheader(f"🤖 יועץ: {student_name}")
-        chat_cont = st.container(height=450)
+        st.subheader(f"🤖 צ'אט: {student_name}")
+        chat_cont = st.container(height=400)
         for q, a in st.session_state.chat_history:
             with chat_cont: st.chat_message("user").write(q); st.chat_message("assistant").write(a)
-        u_q = st.chat_input("שאל על מגמות הסטודנט...")
+        u_q = st.chat_input("שאל על הסטודנט...")
         if u_q:
-            resp = get_ai_response("chat", {"name": student_name, "history": st.session_state.student_context, "question": u_q})
-            st.session_state.chat_history.append((u_q, resp)); st.rerun()
+            match = full_df[full_df['name_clean'] == student_name.replace(" ","").replace(".","")] if not full_df.empty else pd.DataFrame()
+            ans = get_ai_response("chat", {"name": student_name, "history": match.tail(10).to_string(), "question": u_q})
+            st.session_state.chat_history.append((u_q, ans)); st.rerun()
 
-# --- Tab 2: סנכרון חכם ---
+# --- Tab 2: סנכרון (הצעת קלוד) ---
 with tab2:
-    st.header("🔄 סנכרון ומיזוג נתונים")
-    if st.button("🚀 סנכרן הכל ל-Google Drive"):
-        if not os.path.exists(DATA_FILE): st.warning("אין נתונים חדשים לסנכרון.")
+    st.header("🔄 סנכרון לדרייב")
+    if st.button("🚀 סנכרן הכל עכשיו"):
+        if not os.path.exists(DATA_FILE): st.warning("אין נתונים חדשים.")
         else:
-            with st.spinner("מבצע מיזוג מאגרי נתונים..."):
+            with st.spinner("ממזג נתונים..."):
                 try:
-                    with open(DATA_FILE, "r", encoding="utf-8") as f:
-                        locals_ = [json.loads(l) for l in f if l.strip()]
-                    df_all = pd.concat([load_full_dataset(svc), pd.DataFrame(locals_)], ignore_index=True)
-                    df_all = df_all.drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
-                    
+                    with open(DATA_FILE, "r", encoding="utf-8") as f: locals_ = [json.loads(l) for l in f if l.strip()]
+                    df_final = pd.concat([full_df, pd.DataFrame(locals_)], ignore_index=True).drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
                     buf = io.BytesIO()
-                    with pd.ExcelWriter(buf, engine='openpyxl') as w: df_all.to_excel(w, index=False)
+                    with pd.ExcelWriter(buf, engine='openpyxl') as w: df_final.to_excel(w, index=False)
                     buf.seek(0)
-                    
                     query = f"name = '{MASTER_FILENAME}' and trashed = false"
                     res = svc.files().list(q=query, supportsAllDrives=True).execute().get('files', [])
                     media = MediaIoBaseUpload(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                     if res: svc.files().update(fileId=res[0]['id'], media_body=media, supportsAllDrives=True).execute()
                     else: svc.files().create(body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
-                    
-                    os.remove(DATA_FILE); st.success("✅ הסנכרון והמיזוג הושלמו!")
-                except Exception as e: st.error(f"שגיאה בסנכרון: {e}")
+                    os.remove(DATA_FILE); st.success("הסנכרון הושלם!")
+                except Exception as e: st.error(f"שגיאה: {e}")
 
-# --- Tab 3: מרכז תובנות מחקריות ---
+# --- Tab 3: ניתוח משופר ---
 with tab3:
-    st.header("📊 ניתוח נתונים ותובנות למחקר")
-    full_df = load_full_dataset(svc)
-    if full_df.empty: st.info("אין מספיק נתונים לניתוח.")
+    st.header("📊 ניתוח תובנות מחקריות")
+    if full_df.empty: st.info("אין נתונים להצגה.")
     else:
-        analysis_mode = st.radio("בחר סוג ניתוח:", ["🔍 ניתוח סטודנט לאורך זמן", "📅 ניתוח יומי משולב"], horizontal=True)
-
-        if analysis_mode == "🔍 ניתוח סטודנט לאורך זמן":
+        mode = st.radio("סוג ניתוח:", ["🔍 סטודנט לאורך זמן", "📅 סיכום יומי משולב"], horizontal=True)
+        
+        if mode == "🔍 סטודנט לאורך זמן":
             sel = st.selectbox("בחר סטודנט", full_df['student_name'].unique())
             sd = full_df[full_df['student_name'] == sel].sort_values('timestamp')
             
             c1, c2, c3 = st.columns(3)
             c1.metric("ממוצע המרה", f"{sd['cat_convert_rep'].mean():.1f}")
             c2.metric("ממוצע היטלים", f"{sd['cat_proj_trans'].mean():.1f}")
-            c3.metric("סה\"כ תצפיות", len(sd))
-            st.line_chart(sd.set_index('date')[['cat_convert_rep', 'cat_proj_trans']])
+            c3.metric("תצפיות", len(sd))
             
-            user_req = st.text_area("התכתבות עם ה-AI לגבי הסטודנט (למשל: נתח התקדמות):", key="st_req")
+            st.line_chart(sd.set_index('date')[['cat_convert_rep', 'cat_proj_trans', 'cat_self_efficacy']])
+            
+            user_req = st.text_area("בקשה מיוחדת מה-AI:")
             if st.button("🚀 הפק ניתוח אישי"):
-                with st.spinner("מנתח היסטוריה מלאה..."):
-                    st.session_state.ai_analysis_result = get_ai_response("chat", {"name": sel, "history": sd.to_string(), "question": user_req if user_req else "נתח מגמות עיקריות"})
+                with st.spinner("מנתח..."):
+                    st.session_state.ai_analysis_result = get_ai_response("chat", {"name": sel, "history": sd.to_string(), "question": user_req if user_req else "סכם מגמות עיקריות"})
             
             if st.session_state.ai_analysis_result:
                 st.info(st.session_state.ai_analysis_result)
-                file_txt = f"דוח מחקר עבור: {sel}\nתאריך: {date.today()}\nממוצעים: {sd[['cat_convert_rep', 'cat_proj_trans']].mean().to_string()}\n\nניתוח:\n{st.session_state.ai_analysis_result}"
-                st.download_button("📥 הורד ניתוח כקובץ TXT", file_txt, file_name=f"Analysis_{sel}.txt")
+                st.download_button("📥 הורד ניתוח (TXT)", st.session_state.ai_analysis_result, file_name=f"Analysis_{sel}.txt")
 
-        else: # ניתוח יומי משולב
-            selected_date = st.selectbox("בחר תאריך:", sorted(full_df['date'].unique(), reverse=True))
-            day_data = full_df[full_df['date'] == selected_date]
+        else: # ניתוח יומי
+            sel_date = st.selectbox("בחר תאריך", sorted(full_df['date'].unique(), reverse=True))
+            day_data = full_df[full_df['date'] == sel_date]
+            st.write(f"ממוצעים ליום זה:")
+            st.dataframe(day_data[['cat_convert_rep', 'cat_proj_trans', 'cat_self_efficacy']].mean())
             
-            st.write(f"📊 ממוצעים כיתתיים לתאריך {selected_date}:")
-            st.dataframe(day_data[['cat_convert_rep', 'cat_proj_trans', 'cat_3d_support', 'cat_self_efficacy']].mean())
-
-            if st.button("✨ הפק תובנות רוחביות ליום זה"):
-                with st.spinner("ה-AI סורק את כלל התצפיות..."):
-                    day_history = day_data[['student_name', 'challenge', 'interpretation']].to_string()
-                    st.session_state.daily_analysis = get_ai_response("class", {"history": day_history, "question": "נסח תובנות רוחביות לפרק הממצאים בתזה"})
-            
-            if st.session_state.daily_analysis:
-                st.success(st.session_state.daily_analysis)
-                daily_report = f"דוח תצפית יומי: {selected_date}\n\nניתוח רוחבי לתזה:\n{st.session_state.daily_analysis}"
-                st.download_button("📥 הורד דוח יומי כקובץ TXT", daily_report, file_name=f"Daily_Report_{selected_date}.txt")
+            if st.button("✨ הפק תובנות ליום זה"):
+                with st.spinner("מנתח את כלל הכיתה..."):
+                    res = get_ai_response("class", {"history": day_data.to_string()})
+                    st.success(res)
+                    st.download_button("📥 הורד דוח יומי", res, file_name=f"Daily_{sel_date}.txt")
