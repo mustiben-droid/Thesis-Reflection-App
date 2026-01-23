@@ -115,31 +115,40 @@ tab1, tab2, tab3 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "�
 with tab1:
     col_in, col_chat = st.columns([1.2, 1])
     with col_in:
+       # --- בלוק מתוקן: טעינת נתונים וסטריפ ירוק ---
         it = st.session_state.it
         student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
         
-        # לוגיקה חדשה לסטריפ הירוק: חיפוש משולב (דרייב + מקומי)
         if student_name != st.session_state.last_selected_student:
             st.session_state.chat_history = []
             st.session_state.show_success_bar = False
+            st.session_state.student_context = "" # איפוס הקשר קודם
+            
             with st.spinner(f"סורק היסטוריה עבור {student_name}..."):
-                # 1. חיפוש בדרייב
+                # 1. טעינה משולבת
                 df_hist, _ = load_master_from_drive(id(svc))
-                # 2. חיפוש בקובץ המקומי (אם קיים)
                 df_local = pd.DataFrame([json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")] if os.path.exists(DATA_FILE) else [])
                 
                 # איחוד מקורות
                 full_data = pd.concat([df_hist, df_local], ignore_index=True) if df_hist is not None else df_local
                 
                 if not full_data.empty and 'student_name' in full_data.columns:
-                    match = full_data[full_data['student_name'].astype(str).str.strip() == student_name.strip()]
+                    # ניקוי רווחים משני הצדדים לפני ההשוואה
+                    full_data['student_name_clean'] = full_data['student_name'].astype(str).str.strip()
+                    search_term = student_name.strip()
+                    
+                    match = full_data[full_data['student_name_clean'] == search_term]
+                    
                     if not match.empty:
-                        st.session_state.student_context = match.tail(10).to_string()
+                        st.session_state.student_context = match.tail(15).to_string()
                         st.session_state.show_success_bar = True
-                    else: st.session_state.student_context = ""
+                    else:
+                        st.session_state.show_success_bar = False
+                
             st.session_state.last_selected_student = student_name
             st.rerun()
 
+        # הצגת הסטריפ (מחוץ לבלוק ה-if כדי שיישאר יציב ברינדור)
         if st.session_state.show_success_bar:
             st.success(f"✅ נמצאה היסטוריה עבור {student_name}. הסוכן מעודכן.")
         else:
@@ -215,3 +224,4 @@ with tab3:
         if df is not None:
             stats = df.groupby(['student_name'])[['s1', 's2', 's3', 's4']].mean().to_string()
             st.markdown(get_ai_response("chat", {"name": "מערכת", "history": stats, "question": "נתח את המגמות הכלליות של הכיתה"}))
+
