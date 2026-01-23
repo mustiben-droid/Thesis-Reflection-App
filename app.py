@@ -48,41 +48,31 @@ def map_research_cols(df):
         if p: df.rename(columns={p[0]: 'student_name'}, inplace=True)
     return df
 
+import json, base64, os, io, time, pandas as pd, streamlit as st
+import google.generativeai as genai
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
+from datetime import date, datetime
+
+# פונקציית החיבור המשוחזרת - בדיוק כמו שעבד בעבר
 @st.cache_resource
 def get_drive_service():
     try:
-        raw_data = st.secrets.get("GDRIVE_SERVICE_ACCOUNT_B64") or st.secrets.get("GOOGLE_SERVICE_ACCOUNT")
-        
-        if not raw_data:
-            st.error("❌ לא נמצא Secret עבור חיבור לדרייב.")
-            return None
-
-        # ניקוי תווים בלתי נראים שעלולים לשבור את ה-JSON
-        if isinstance(raw_data, str):
-            clean_data = raw_data.strip()
-            # תיקון נפוץ: אם בטעות הועתק עם גרשיים בודדים חיצוניים
-            if clean_data.startswith("'") and clean_data.endswith("'"):
-                clean_data = clean_data[1:-1]
-            info = json.loads(clean_data)
-        else:
-            info = dict(raw_data)
-            
-        creds = Credentials.from_service_account_info(
-            info, 
-            scopes=["https://www.googleapis.com/auth/drive"]
-        )
+        b64 = st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]
+        js = base64.b64decode(b64).decode("utf-8")
+        info = json.loads(js)
+        creds = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive"])
         return build("drive", "v3", credentials=creds)
-    
-    except json.JSONDecodeError as je:
-        st.error(f"❌ שגיאת פורמט ב-JSON: ודאי שהשתמשת בגרשיים כפולים (\"). שגיאה: {je}")
-        return None
-    except Exception as e:
-        st.error(f"❌ שגיאה בחיבור לדרייב: {e}")
+    except:
         return None
 
-# הפעלה גלובלית
 svc = get_drive_service()
 
+# הגדרות קבצים (לוודא שקיימות)
+MASTER_FILENAME = st.secrets.get("MASTER_FILENAME", "All_Observations_Master.xlsx")
+GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID", "")
+DATA_FILE = "local_data.json"
 def load_full_dataset(svc):
     all_dfs = []
     if svc:
@@ -361,6 +351,7 @@ else:
                         st.error(f"שגיאה בהפקת הניתוח: {str(e)}")
 
 # --- סוף הקוד ---
+
 
 
 
