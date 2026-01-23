@@ -12,7 +12,7 @@ CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "ג�
 TAGS_OPTIONS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 
-st.set_page_config(page_title="מערכת תצפית - 77.0", layout="wide")
+st.set_page_config(page_title="מערכת תצפית מחקרית - 87.0", layout="wide")
 
 st.markdown("""
     <style>
@@ -20,11 +20,10 @@ st.markdown("""
         html, body, .stApp { direction: rtl; text-align: right; font-family: 'Heebo', sans-serif !important; }
         [data-testid="stSlider"] { direction: ltr !important; }
         .stButton > button { width: 100%; font-weight: bold; border-radius: 12px; background-color: #28a745; color: white; height: 3em; }
-        .feedback-box { background-color: #f0f9ff; padding: 15px; border-radius: 10px; border: 1px solid #bae6fd; margin-top: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 1. מודול טעינה חסין שגיאות ---
+# --- 1. מודול טעינה ---
 def normalize_name(name):
     if not isinstance(name, str): return ""
     return name.replace(" ", "").replace(".", "").replace("־", "").replace("-", "").strip()
@@ -33,12 +32,11 @@ def map_research_cols(df):
     if df is None or df.empty: return pd.DataFrame()
     df.columns = [str(c).strip() for c in df.columns]
     mapping = {
-        'cat_convert_rep': ['cat_convert_rep', 'score_conv', 'score_spatial'],
-        'cat_proj_trans': ['cat_proj_trans', 'score_proj', 'score_views'],
+        'cat_convert_rep': ['cat_convert_rep', 'score_conv'],
+        'cat_proportions': ['cat_proportions', 'score_prop'],
+        'cat_model_usage': ['cat_model_usage', 'score_model'],
         'cat_self_efficacy': ['cat_self_efficacy', 'score_efficacy'],
-        'cat_3d_support': ['cat_3d_support', 'score_model'],
-        'work_method': ['work_method', 'physical_model'],
-        'exercise_difficulty': ['exercise_difficulty', 'difficulty']
+        'cat_model_difficulty': ['cat_model_difficulty', 'difficulty_model']
     }
     for target, sources in mapping.items():
         for s in sources:
@@ -46,15 +44,16 @@ def map_research_cols(df):
                 if target not in df.columns: df[target] = df[s]
                 else: df[target] = df[target].fillna(df[s])
     if 'student_name' not in df.columns:
-        possible = [c for c in df.columns if "student" in c.lower() or "name" in c.lower()]
-        if possible: df.rename(columns={possible[0]: 'student_name'}, inplace=True)
+        p = [c for c in df.columns if "student" in c.lower() or "name" in c.lower()]
+        if p: df.rename(columns={p[0]: 'student_name'}, inplace=True)
     return df
 
 @st.cache_resource
 def get_drive_service():
     try:
         b64 = st.secrets.get("GDRIVE_SERVICE_ACCOUNT_B64")
-        creds = Credentials.from_service_account_info(json.loads(base64.b64decode(b64).decode("utf-8")), scopes=["https://www.googleapis.com/auth/drive"])
+        js = base64.b64decode(b64).decode("utf-8")
+        creds = Credentials.from_service_account_info(json.loads(js), scopes=["https://www.googleapis.com/auth/drive"])
         return build("drive", "v3", credentials=creds)
     except: return None
 
@@ -62,14 +61,12 @@ def load_full_dataset(svc):
     all_dfs = []
     if svc:
         try:
-            res = svc.files().list(q=f"name = '{MASTER_FILENAME}'", supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
+            res = svc.files().list(q=f"name = '{MASTER_FILENAME}'", supportsAllDrives=True).execute().get('files', [])
             if res:
-                fh = io.BytesIO()
-                downloader = MediaIoBaseDownload(fh, svc.files().get_media(fileId=res[0]['id']))
+                fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, svc.files().get_media(fileId=res[0]['id']))
                 done = False
                 while not done: _, done = downloader.next_chunk()
-                fh.seek(0)
-                all_dfs.append(map_research_cols(pd.read_excel(fh)))
+                fh.seek(0); all_dfs.append(map_research_cols(pd.read_excel(fh)))
         except: pass
     if os.path.exists(DATA_FILE):
         try:
@@ -78,16 +75,14 @@ def load_full_dataset(svc):
         except: pass
     if not all_dfs: return pd.DataFrame()
     df = pd.concat(all_dfs, ignore_index=True, sort=False)
-    if 'student_name' in df.columns:
-        df['name_clean'] = df['student_name'].apply(normalize_name)
+    if 'student_name' in df.columns: df['name_clean'] = df['student_name'].apply(normalize_name)
     return df
 
-# --- 2. ניהול מצב (Session State) ---
+# --- 2. ניהול מצב ---
 if "it" not in st.session_state: st.session_state.it = 0
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 if "student_context" not in st.session_state: st.session_state.student_context = ""
 if "last_selected_student" not in st.session_state: st.session_state.last_selected_student = ""
-if "show_success_bar" not in st.session_state: st.session_state.show_success_bar = False
 
 svc = get_drive_service()
 full_df = load_full_dataset(svc)
@@ -98,200 +93,94 @@ with tab1:
     col_in, col_chat = st.columns([1.2, 1])
     with col_in:
         it = st.session_state.it
-        student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
+        name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
         
-        # לוגיקת הסטריפ הירוק
-        if student_name != st.session_state.last_selected_student:
-            target = normalize_name(student_name)
+        if name != st.session_state.last_selected_student:
+            target = normalize_name(name)
             match = full_df[full_df['name_clean'] == target] if not full_df.empty else pd.DataFrame()
-            if not match.empty:
-                st.session_state.student_context = match.tail(15).to_string()
-                st.session_state.show_success_bar = True
-            else:
-                st.session_state.student_context = ""
-                st.session_state.show_success_bar = False
-            st.session_state.last_selected_student = student_name
+            st.session_state.student_context = match.tail(15).to_string() if not match.empty else ""
+            if not match.empty: st.success(f"✅ נמצאה היסטוריה עבור {name}.")
+            st.session_state.last_selected_student = name
             st.session_state.chat_history = []
             st.rerun()
-
-        if st.session_state.show_success_bar:
-            st.success(f"✅ נמצאה היסטוריה עבור {student_name}.")
 
         c1, c2 = st.columns(2)
         with c1:
             meth = st.radio("🛠️ תרגול:", ["🧊 גוף מודפס", "🎨 דמיון"], key=f"wm_{it}")
-            diff = st.select_slider("📉 קושי:", ["קל", "בינוני", "קשה"], key=f"ed_{it}")
+            diff_ex = st.select_slider("📉 רמת קושי התרגיל:", ["קל", "בינוני", "קשה"], key=f"ed_{it}")
             img_files = st.file_uploader("📸 העלאת תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"img_{it}")
         with c2:
-            s1 = st.slider("המרה", 1, 5, 3, key=f"s1_{it}")
-            s2 = st.slider("היטלים", 1, 5, 3, key=f"s2_{it}")
-            s4 = st.slider("מסוגלות", 1, 5, 3, key=f"s4_{it}")
+            s1 = st.slider("המרת ייצוגים", 1, 5, 3, key=f"s1_{it}")
+            s2 = st.slider("פרופורציות", 1, 5, 3, key=f"s2_{it}")
+            s3 = st.slider("שימוש במודל", 1, 5, 3, key=f"s3_{it}")
+            s4 = st.slider("מסוגלות עצמית", 1, 5, 3, key=f"s4_{it}")
+            s5 = st.slider("רמת קושי המודל", 1, 5, 3, key=f"s5_{it}")
 
         tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
-        challenge = st.text_area("🗣️ תיאור התצפית", key=f"ch_{it}")
-        interp = st.text_area("🧠 פרשנות מחקרית", key=f"int_{it}")
+        ch = st.text_area("🗣️ תיאור התצפית (Challenge)", key=f"ch_{it}")
+        interp = st.text_area("🧠 פרשנות מחקרית (Interpretation)", key=f"int_{it}")
 
-        if st.button("💾 שמור"):
-            if challenge:
+        if st.button("💾 שמור תצפית"):
+            if ch:
                 links = []
                 if img_files and svc:
                     for f in img_files:
-                        f_meta = {'name': f.name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
                         media = MediaIoBaseUpload(io.BytesIO(f.getvalue()), mimetype=f.type)
-                        res = svc.files().create(body=f_meta, media_body=media, fields='webViewLink', supportsAllDrives=True).execute()
+                        res = svc.files().create(body={'name': f.name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, fields='webViewLink', supportsAllDrives=True).execute()
                         links.append(res.get('webViewLink'))
-
-                entry = {
-                    "date": str(date.today()), "student_name": student_name, "work_method": meth, 
-                    "exercise_difficulty": diff, "cat_convert_rep": s1, "cat_proj_trans": s2, 
-                    "cat_self_efficacy": s4, "challenge": challenge, "interpretation": interp,
-                    "tags": tags, "file_links": links, "timestamp": datetime.now().isoformat()
-                }
+                entry = {"date": str(date.today()), "student_name": name, "work_method": meth, "exercise_difficulty": diff_ex, "cat_convert_rep": s1, "cat_proportions": s2, "cat_model_usage": s3, "cat_self_efficacy": s4, "cat_model_difficulty": s5, "challenge": ch, "interpretation": interp, "tags": tags, "file_links": links, "timestamp": datetime.now().isoformat()}
                 with open(DATA_FILE, "a", encoding="utf-8") as f: f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                st.session_state.it += 1
-                st.rerun()
+                st.session_state.it += 1; st.rerun()
 
     with col_chat:
-        st.subheader(f"🤖 יועץ: {student_name}")
+        st.subheader(f"🤖 יועץ: {name}")
         chat_cont = st.container(height=450)
         for q, a in st.session_state.chat_history:
             chat_cont.chat_message("user").write(q); chat_cont.chat_message("assistant").write(a)
-        if p := st.chat_input("שאל את הסוכן..."):
+        if p := st.chat_input("שאל את היועץ..."):
             genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
             model = genai.GenerativeModel('gemini-1.5-flash')
-            resp = model.generate_content(f"Student: {student_name}. History:\n{st.session_state.student_context}\nQuestion: {p}").text
+            resp = model.generate_content(f"אתה עוזר מחקר. נתח את הסטודנט {name}. היסטוריה: {st.session_state.student_context}. שאלה: {p}").text
             st.session_state.chat_history.append((p, resp)); st.rerun()
 
 with tab2:
-    if st.button("🚀 סנכרן"):
+    if st.button("🚀 סנכרן נתונים"):
         if os.path.exists(DATA_FILE):
             with open(DATA_FILE, "r", encoding="utf-8") as f: l_ = [json.loads(line) for line in f if line.strip()]
             final = pd.concat([full_df, pd.DataFrame(l_)], ignore_index=True).drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
-            buf = io.BytesIO()
+            buf = io.BytesIO(); 
             with pd.ExcelWriter(buf, engine='openpyxl') as w: final.to_excel(w, index=False)
-            buf.seek(0)
-            res = svc.files().list(q=f"name = '{MASTER_FILENAME}'", supportsAllDrives=True).execute().get('files', [])
+            buf.seek(0); res = svc.files().list(q=f"name = '{MASTER_FILENAME}'", supportsAllDrives=True).execute().get('files', [])
             media = MediaIoBaseUpload(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             if res: svc.files().update(fileId=res[0]['id'], media_body=media, supportsAllDrives=True).execute()
             else: svc.files().create(body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
-            os.remove(DATA_FILE); st.success("סונכרן!"); st.rerun()
+            os.remove(DATA_FILE); st.success("סונכרן בהצלחה!"); st.rerun()
 
-# --- Tab 3: ניתוח מחקרי עומק (גרסה 85.0 - פרומפט אקדמי משופר) ---
 with tab3:
-    if full_df.empty:
-        st.info("אין נתונים להצגת ניתוח.")
+    if full_df.empty: st.info("אין נתונים לניתוח.")
     else:
-        st.header("📊 ניתוח רוחב ועומק מחקרי")
+        st.header("📊 ניתוח מחקרי")
+        v_names = sorted(full_df['student_name'].astype(str).unique())
+        cur_s = st.session_state.get('last_selected_student', v_names[0])
+        idx = v_names.index(cur_s) if cur_s in v_names else 0
+        sel_s = st.selectbox("בחר סטודנט לניתוח:", v_names, index=idx)
+        sd = full_df[full_df['student_name'] == sel_s].sort_values('date')
         
-        mode = st.radio("רמת ניתוח:", ["שבועי כיתתי (רוחב)", "אישי (אורך)"], horizontal=True)
-
-        # הכנת דאטה בטוחה
-        df_an = full_df.copy()
-        if 'student_name' not in df_an.columns:
-            name_cols = [c for c in df_an.columns if 'name' in c.lower() or 'student' in c.lower()]
-            if name_cols: df_an['student_name'] = df_an[name_cols[0]]
-        
-        df_an = df_an.dropna(subset=['student_name'])
-        df_an['student_name'] = df_an['student_name'].astype(str).str.strip().replace(r'\s+', ' ', regex=True)
-        df_an['date'] = pd.to_datetime(df_an['date'], errors='coerce')
-        df_an = df_an.dropna(subset=['date'])
-        df_an['week'] = df_an['date'].dt.strftime('%Y - שבוע %U')
-        
-        metrics = [c for c in ['cat_convert_rep', 'cat_proj_trans', 'cat_self_efficacy', 'cat_3d_support'] if c in df_an.columns]
-        for m in metrics:
-            df_an[m] = pd.to_numeric(df_an[m], errors='coerce')
-
-        if mode == "שבועי כיתתי (רוחב)":
-            weeks = sorted(df_an['week'].unique(), reverse=True)
-            sel_week = st.selectbox("בחר שבוע לניתוח:", weeks)
-            w_df = df_an[df_an['week'] == sel_week]
+        # גרף מגמות
+        st.subheader(f"📈 מגמות התקדמות עבור {sel_s}")
+        metrics = [c for c in ['cat_convert_rep', 'cat_proportions', 'cat_model_usage', 'cat_self_efficacy', 'cat_model_difficulty'] if c in sd.columns]
+        if not sd.empty and metrics:
+            st.line_chart(sd.set_index('date')[metrics])
             
-            st.subheader(f"📈 ממוצעים כיתתיים: {sel_week}")
-            avg_stats = w_df[metrics].mean()
-            if not avg_stats.empty:
-                st.dataframe(avg_stats.to_frame().T.rename(index={0: 'ממוצע כיתתי'}))
-            
-            st.subheader("📋 ריכוז תצפיות ופרשנויות")
-            disp_cols = [c for c in ['date', 'student_name', 'challenge', 'interpretation'] if c in w_df.columns]
-            st.dataframe(w_df[disp_cols].sort_values('student_name'))
-
-            if st.button("✨ הפק ניתוח רוחב שבועי לדרייב"):
-                with st.spinner("מבצע ניתוח רוחב איכותני..."):
-                    context = f"נתוני שבוע: {sel_week}\nסטטיסטיקה: {avg_stats.to_dict()}\n"
-                    context += "תצפיות ופרשנויות:\n" + w_df[['student_name', 'challenge', 'interpretation']].to_string()
-                    
-                    prompt = f"""
-                    אתה חוקר אקדמי בכיר המנתח נתוני שטח עבור תזה בחינוך טכנולוגי. 
-                    בצע ניתוח רוחב כיתתי לשבוע {sel_week} על סמך התצפיות והפרשנויות המצורפות.
-                    
-                    דגשים לניתוח:
-                    1. זיהוי תמות משותפות: האם יש קושי ספציפי (למשל הבנת היטלים) שחזר אצל מספר סטודנטים?
-                    2. ניתוח איכותני של הפרשנויות: מהן התובנות המרכזיות שעלו מתוך הפרשנות המחקרית על תהליך הלמידה השבועי?
-                    3. השוואה למדדים הכמותיים: כיצד הציון הממוצע {avg_stats.to_dict()} מתיישב עם התיאורים האיכותניים?
-                    
-                    נסח את הממצאים בעברית אקדמית רהוטה המתאימה לפרק 'ממצאים ודיון'.
-                    נתונים: {context}
-                    """
-                    
-                    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    txt = model.generate_content(prompt).text
-                    
-                    if svc:
-                        f_name = f"ניתוח_רוחב_שבועי_{sel_week.replace(' ', '_')}.txt"
-                        meta = {'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
-                        media = MediaIoBaseUpload(io.BytesIO(txt.encode('utf-8')), mimetype='text/plain')
-                        svc.files().create(body=meta, media_body=media, supportsAllDrives=True).execute()
-                        st.success(f"✅ נשמר בדרייב")
-                        st.info(txt)
-
-        else:
-            all_valid_students = sorted(df_an['student_name'].unique())
-            last_s = st.session_state.get('last_selected_student', '')
-            def_idx = all_valid_students.index(last_s) if last_s in all_valid_students else 0
-                
-            sel_s = st.selectbox("בחר סטודנט לניתוח:", all_valid_students, index=def_idx)
-            sd = df_an[df_an['student_name'] == sel_s].sort_values('date')
-            
-            st.subheader(f"📈 מגמות התקדמות: {sel_s}")
-            if metrics and sd[metrics].notna().any().any():
-                st.line_chart(sd.set_index('date')[metrics])
-            
-            st.subheader("📝 היסטוריית תצפיות ופרשנות")
-            q_cols = [c for c in ['date', 'challenge', 'interpretation'] if c in sd.columns]
-            st.dataframe(sd[q_cols])
-
-            if st.button(f"✨ הפק ניתוח עומק איכותני לדרייב עבור {sel_s}"):
-                with st.spinner(f"מנתח לעומק את {sel_s}..."):
-                    stats = sd[metrics].mean().to_dict()
-                    obs_data = sd[q_cols].to_string()
-                    
-                    prompt = f"""
-                    אתה חוקר אקדמי המנתח נתוני מחקר איכותני עבור תזה.
-                    לפניך תצפיות ופרשנויות על הסטודנט {sel_s}. 
-                    
-                    אנא בצע ניתוח עומק:
-                    1. זיהוי דפוסי פעולה: מהם הקשיים העקביים העולים מתוך ה-Challenges והאם הפרשנות המחקרית (Interpretation) מצביעה על שינוי בתפיסה לאורך זמן?
-                    2. ניתוח הפער בין ביצוע להבנה: כיצד הפרשנות שלך מסבירה את התוצאות הסטטיסטיות {stats}?
-                    3. כתיבת ממצאים: נסח פסקה אקדמית המנתחת את התקדמות הסטודנט, תוך שימוש במושגים מהתחום (כמו רוטציה מנטלית, עומס קוגניטיבי, ייצוגים מופשטים).
-                    
-                    הנתונים לניתוח:
-                    {obs_data}
-                    """
-                    
-                    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    analysis_text = model.generate_content(prompt).text
-                    
-                    if svc:
-                        try:
-                            f_name = f"ניתוח_עומק_אישי_{sel_s}_{date.today()}.txt"
-                            meta = {'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
-                            media = MediaIoBaseUpload(io.BytesIO(analysis_text.encode('utf-8')), mimetype='text/plain')
-                            res = svc.files().create(body=meta, media_body=media, fields='webViewLink', supportsAllDrives=True).execute()
-                            st.success(f"✅ ניתוח העומק נשמר בדרייב")
-                            st.info(analysis_text)
-                        except: st.error("שגיאה בשמירה")
-# --- סוף הקוד ---
-
-
+        # כפתור ג'ימיני לניתוח עומק
+        if st.button(f"✨ הפק ניתוח עומק אקדמי עבור {sel_s}"):
+            with st.spinner("מנתח נתונים..."):
+                genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                prompt = f"בצע ניתוח עומק מחקרי עבור הסטודנט {sel_s} על בסיס הנתונים: {sd.to_string()}"
+                analysis = model.generate_content(prompt).text
+                if svc:
+                    meta = {'name': f"Research_Analysis_{sel_s}.txt", 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
+                    media = MediaIoBaseUpload(io.BytesIO(analysis.encode('utf-8')), mimetype='text/plain')
+                    svc.files().create(body=meta, media_body=media, supportsAllDrives=True).execute()
+                    st.success("הניתוח נשמר בדרייב!"); st.info(analysis)
