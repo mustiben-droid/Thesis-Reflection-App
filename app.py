@@ -5,8 +5,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from datetime import date, datetime
 
-# --- 1. הגדרות בסיסיות ---
-st.set_page_config(page_title="מערכת תיעוד מחקר איכותני", layout="wide")
+# --- 1. הגדרות דף ---
+st.set_page_config(page_title="מערכת תיעוד מחקר - גרסה מלאה", layout="wide")
 
 MASTER_FILENAME = st.secrets.get("MASTER_FILENAME", "All_Observations_Master.xlsx")
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID", "")
@@ -16,151 +16,146 @@ DATA_FILE = "local_data.json"
 @st.cache_resource
 def get_drive_service():
     try:
-        if "GDRIVE_SERVICE_ACCOUNT_B64" in st.secrets:
-            b64 = st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]
-            # ניקוי תווים בלתי נראים
-            clean_b64 = "".join(b64.split()).strip()
-            js = base64.b64decode(clean_b64).decode("utf-8")
-            info = json.loads(js)
-            creds = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive"])
-            return build("drive", "v3", credentials=creds)
-    except Exception as e:
-        st.error(f"שגיאה בחיבור לדרייב: {e}")
-    return None
+        b64 = st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]
+        js = base64.b64decode("".join(b64.split())).decode("utf-8")
+        info = json.loads(js)
+        creds = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive"])
+        return build("drive", "v3", credentials=creds)
+    except: return None
 
 svc = get_drive_service()
 
-# --- 3. טעינת נתונים מהדרייב ---
+# --- 3. טעינת נתונים ---
 @st.cache_data(ttl=300)
-def load_master_data():
+def load_data():
     if svc is None: return pd.DataFrame()
     try:
-        query = f"name = '{MASTER_FILENAME}' and trashed = false"
-        res = svc.files().list(q=query, supportsAllDrives=True).execute().get('files', [])
+        res = svc.files().list(q=f"name='{MASTER_FILENAME}'", supportsAllDrives=True).execute().get('files', [])
         if not res: return pd.DataFrame()
-        
-        request = svc.files().get_media(fileId=res[0]['id'])
+        req = svc.files().get_media(fileId=res[0]['id'])
         fh = io.BytesIO()
-        downloader = MediaIoBaseDownload(fh, request)
+        downloader = MediaIoBaseDownload(fh, req)
         done = False
-        while not done:
-            _, done = downloader.next_chunk()
+        while not done: _, done = downloader.next_chunk()
         fh.seek(0)
         return pd.read_excel(fh)
-    except Exception as e:
-        st.sidebar.warning(f"קובץ המאסטר לא נטען: {e}")
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
-full_df = load_master_data()
+full_df = load_data()
 
-# --- 4. ממשק הטאבים ---
-tab1, tab2, tab3 = st.tabs(["📝 תיעוד", "🔄 סנכרון", "📊 ניתוח מחקרי"])
+# --- 4. ממשק המשתמש ---
+tab1, tab2, tab3 = st.tabs(["📝 תיעוד תצפית", "🔄 סנכרון", "📊 ניתוח ומגמות"])
 
-# --- Tab 1: תיעוד תצפית ---
 with tab1:
-    st.header("📝 תיעוד תצפית חדשה")
+    st.header("📝 תיעוד תצפית וצילום")
+    
+    # שליפת רשימת סטודנטים קיימת מהאקסל
+    student_list = sorted(full_df['student_name'].unique().tolist()) if not full_df.empty else []
+    
     col1, col2 = st.columns(2)
     with col1:
-        s_name = st.text_input("שם הסטודנט:")
+        # זיהוי סטודנט - בחירה מרשימה או הוספה
+        mode = st.radio("סטודנט:", ["בחר קיים", "הוסף חדש"], horizontal=True)
+        if mode == "בחר קיים" and student_list:
+            s_name = st.selectbox("שם הסטודנט:", student_list)
+        else:
+            s_name = st.text_input("שם סטודנט חדש:")
+            
         obs_date = st.date_input("תאריך:", date.today())
-    with col2:
-        challenge = st.text_area("תיאור התצפית (Challenge):")
-        insight_text = st.text_area("פרשנות מחקרית (Insight):")
+        
+        # סליידרים של דירוג (הוחזרו)
+        st.write("---")
+        level = st.slider("רמת תפקוד / הצלחה (1-10):", 1, 10, 5)
+        difficulty = st.slider("רמת קושי של המשימה:", 1, 10, 5)
 
-    if st.button("💾 שמור תצפית מקומית"):
+    with col2:
+        challenge = st.text_area("תיאור התצפית (Challenge):", placeholder="מה קרה?")
+        insight = st.text_area("תובנה מחקרית (Insight):", placeholder="מה זה אומר?")
+        tags = st.multiselect("תגיות נושאיות:", ["קוגניטיבי", "רגשי", "חברתי", "טכני", "אחר"])
+
+    # העלאת תמונות (הוחזר)
+    st.write("---")
+    img_file = st.camera_input("📷 צלם תוצר/תצפית") or st.file_uploader("📂 העלאת תמונה", type=['png', 'jpg', 'jpeg'])
+
+    if st.button("💾 שמור תצפית (מקומית)"):
         if s_name and challenge:
-            new_data = {
+            img_b64 = ""
+            if img_file:
+                img_b64 = base64.b64encode(img_file.read()).decode()
+            
+            new_entry = {
                 "student_name": s_name,
                 "date": str(obs_date),
                 "challenge": challenge,
-                "insight": insight_text,
+                "insight": insight,
+                "level": level,
+                "difficulty": difficulty,
+                "tags": ", ".join(tags),
+                "image": img_b64,
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             with open(DATA_FILE, "a", encoding="utf-8") as f:
-                f.write(json.dumps(new_data, ensure_ascii=False) + "\n")
-            st.success(f"התצפית נשמרה. עבור לטאב 'סנכרון' כדי להעלות לדרייב.")
+                f.write(json.dumps(new_entry, ensure_ascii=False) + "\n")
+            st.success("התצפית נשמרה בהצלחה! עברי לטאב סנכרון.")
         else:
-            st.warning("נא למלא שם ותיאור תצפית.")
+            st.error("חובה למלא שם סטודנט ותיאור תצפית.")
 
-# --- Tab 2: סנכרון לדרייב ---
 with tab2:
-    st.header("🔄 סנכרון נתונים")
-    if st.button("🚀 בצע סנכרון עכשיו"):
-        if svc is None:
-            st.error("אין חיבור לדרייב. בדוק את ה-Secrets.")
-        elif os.path.exists(DATA_FILE):
+    st.header("🔄 סנכרון לדרייב")
+    if st.button("🚀 בצע סנכרון מלא"):
+        if os.path.exists(DATA_FILE):
             try:
-                with st.spinner("מעלה נתונים לדרייב..."):
+                with st.spinner("מעלה נתונים ותמונות..."):
                     with open(DATA_FILE, "r", encoding="utf-8") as f:
-                        local_entries = [json.loads(line) for line in f if line.strip()]
+                        lines = [json.loads(line) for line in f if line.strip()]
                     
-                    new_df = pd.DataFrame(local_entries)
-                    updated_df = pd.concat([full_df, new_df], ignore_index=True).drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
+                    for entry in lines:
+                        # שמירת תמונה לדרייב אם קיימת
+                        img_id = ""
+                        if entry.get("image") and svc:
+                            img_data = base64.b64decode(entry["image"])
+                            media = MediaIoBaseUpload(io.BytesIO(img_data), mimetype='image/jpeg')
+                            file_meta = {
+                                'name': f"img_{entry['student_name']}_{entry['timestamp']}.jpg",
+                                'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []
+                            }
+                            f_obj = svc.files().create(body=file_meta, media_body=media, supportsAllDrives=True).execute()
+                            img_id = f_obj.get('id')
+                        
+                        entry['image_link'] = f"https://drive.google.com/uc?id={img_id}" if img_id else ""
+                        entry.pop('image', None) # מוחק את ה-b64 הכבד
 
+                    new_df = pd.DataFrame(lines)
+                    final_df = pd.concat([full_df, new_df], ignore_index=True).drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
+                    
                     buf = io.BytesIO()
                     with pd.ExcelWriter(buf, engine='openpyxl') as w:
-                        updated_df.to_excel(w, index=False)
+                        final_df.to_excel(w, index=False)
                     buf.seek(0)
-
-                    res = svc.files().list(q=f"name = '{MASTER_FILENAME}'", supportsAllDrives=True).execute().get('files', [])
+                    
+                    res = svc.files().list(q=f"name='{MASTER_FILENAME}'", supportsAllDrives=True).execute().get('files', [])
                     media = MediaIoBaseUpload(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
                     if res:
                         svc.files().update(fileId=res[0]['id'], media_body=media, supportsAllDrives=True).execute()
-                    else:
-                        meta = {'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
-                        svc.files().create(body=meta, media_body=media, supportsAllDrives=True).execute()
-
+                    
                     os.remove(DATA_FILE)
-                    st.success("✅ סונכרן בהצלחה!")
-                    time.sleep(1)
+                    st.success("הסנכרון הסתיים!")
                     st.rerun()
-            except Exception as e:
-                st.error(f"שגיאה בסנכרון: {e}")
-        else:
-            st.info("אין נתונים חדשים לסנכרון.")
+            except Exception as e: st.error(f"שגיאה: {e}")
+        else: st.info("אין נתונים לסנכרון.")
 
-# --- Tab 3: ניתוח מחקרי ---
 with tab3:
-    if full_df.empty:
-        st.info("אין נתונים לניתוח. בצע סנכרון קודם.")
-    else:
-        st.header("🧠 ניתוח תמות (AI)")
-        df_an = full_df.copy()
-        df_an['date'] = pd.to_datetime(df_an['date'], errors='coerce')
-        df_an = df_an.dropna(subset=['date'])
-        df_an['week'] = df_an['date'].dt.strftime('%Y - שבוע %U')
+    st.header("📊 ניתוח מגמות ו-AI")
+    if not full_df.empty:
+        # פילטרים מהירים (הוחזר)
+        selected_student = st.selectbox("בחר סטודנט למעקב:", ["כולם"] + student_list)
+        view_df = full_df if selected_student == "כולם" else full_df[full_df['student_name'] == selected_student]
         
-        weeks = sorted(df_an['week'].unique(), reverse=True)
-        sel_week = st.selectbox("בחר שבוע לניתוח:", weeks)
-        w_df = df_an[df_an['week'] == sel_week]
+        st.dataframe(view_df)
         
-        st.dataframe(w_df[['student_name', 'challenge', 'insight']] if 'insight' in w_df.columns else w_df)
-
-        if st.button("✨ הפק ניתוח איכותני ושמור לדרייב"):
-            with st.spinner("ג'ימיני מנתח..."):
-                research_text = ""
-                for _, row in w_df.iterrows():
-                    research_text += f"סטודנט: {row.get('student_name','')} | תצפית: {row.get('challenge','')} | תובנה: {row.get('insight','')}\n---\n"
-
-                try:
-                    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    res = model.generate_content(f"אתה חוקר אקדמי. נתח תמות בשבוע {sel_week}: {research_text}").text
-                    
-                    st.markdown("### תוצאות הניתוח:")
-                    st.info(res)
-                    
-                    if svc:
-                        f_name = f"ניתוח_{sel_week.replace(' ', '_')}.txt"
-                        media = MediaIoBaseUpload(io.BytesIO(res.encode('utf-8')), mimetype='text/plain')
-                        svc.files().create(body={'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
-                        st.success(f"הניתוח נשמר בדרייב בשם {f_name}")
-                except Exception as e:
-                    st.error(f"שגיאה בניתוח: {e}")
-
-# --- Sidebar ---
-st.sidebar.markdown("---")
-st.sidebar.write("מצב חיבור לדרייב:", "✅ מחובר" if svc else "❌ לא מחובר")
-if not full_df.empty:
-    st.sidebar.write(f"📊 שורות במאסטר: {len(full_df)}")
+        if st.button("🧠 הפק ניתוח איכותני עמוק"):
+            genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            context = view_df.tail(5).to_string()
+            res = model.generate_content(f"נתח את המגמות של הסטודנט {selected_student} על בסיס הנתונים הבאים בעברית אקדמית: {context}").text
+            st.info(res)
