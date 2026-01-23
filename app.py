@@ -51,28 +51,37 @@ def map_research_cols(df):
 @st.cache_resource
 def get_drive_service():
     try:
-        # בדיקה אם ה-Secret קיים בכלל
-        if "GOOGLE_SERVICE_ACCOUNT" in st.secrets:
-            # טעינה ישירה של ה-JSON (ללא Base64)
-            secret_data = st.secrets["GOOGLE_SERVICE_ACCOUNT"]
-            
-            # אם זה סטרינג, נהפוך לדיקשנרי. אם זה כבר דיקשנרי, נשתמש בו.
-            if isinstance(secret_data, str):
-                info = json.loads(secret_data)
-            else:
-                info = dict(secret_data)
-                
-            creds = Credentials.from_service_account_info(
-                info, 
-                scopes=["https://www.googleapis.com/auth/drive"]
-            )
-            return build("drive", "v3", credentials=creds)
-        else:
-            st.error("❌ ה-Secret בשם GOOGLE_SERVICE_ACCOUNT לא נמצא ב-Streamlit Settings.")
+        # 1. שליפת התוכן מה-Secret שיש לך
+        raw_data = st.secrets.get("GDRIVE_SERVICE_ACCOUNT_B64") or st.secrets.get("GOOGLE_SERVICE_ACCOUNT")
+        
+        if not raw_data:
+            st.error("❌ לא נמצא Secret עבור חיבור לדרייב.")
             return None
+
+        # 2. זיהוי האם התוכן הוא JSON רגיל או Base64
+        # אם הטקסט מתחיל ב-{, זה JSON רגיל
+        if isinstance(raw_data, str) and raw_data.strip().startswith("{"):
+            info = json.loads(raw_data)
+        elif isinstance(raw_data, dict):
+            info = dict(raw_data)
+        else:
+            # אם זה לא נראה כמו JSON, ננסה לפענח כ-Base64
+            import base64
+            info = json.loads(base64.b64decode(raw_data).decode("utf-8"))
+            
+        # 3. יצירת החיבור
+        creds = Credentials.from_service_account_info(
+            info, 
+            scopes=["https://www.googleapis.com/auth/drive"]
+        )
+        return build("drive", "v3", credentials=creds)
+    
     except Exception as e:
-        st.error(f"❌ שגיאה בפיענוח ה-Secrets: {e}")
+        st.error(f"❌ שגיאה בחיבור לדרייב: {e}")
         return None
+
+# הפעלה גלובלית
+svc = get_drive_service()
 
 # הפעלה גלובלית
 svc = get_drive_service()
@@ -355,6 +364,7 @@ else:
                         st.error(f"שגיאה בהפקת הניתוח: {str(e)}")
 
 # --- סוף הקוד ---
+
 
 
 
