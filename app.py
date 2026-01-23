@@ -165,76 +165,79 @@ with tab2:
             else: svc.files().create(body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
             os.remove(DATA_FILE); st.success("סונכרן בהצלחה!"); st.rerun()
 
-# --- Tab 3: ניתוח איכותני כיתתי (רוחב) ---
-# --- Tab 3: ניתוח איכותני כיתתי (רוחב) - גרסה סופית וחסינה ---
+# --- Tab 3: ניתוח איכותני כיתתי (רוחב) - גרסת "זיהוי עמוק" ---
 with tab3:
     if full_df.empty:
         st.info("אין נתונים לניתוח. וודא שביצעת סנכרון בטאב 2.")
     else:
         st.header("🧠 ניתוח מחקר איכותני - רוחב כיתתי")
         
-        # 1. ניקוי כותרות העמודות מרווחים ותווים נסתרים
+        # 1. יצירת עותק עבודה וניקוי כותרות בסיסי
         df_an = full_df.copy()
-        df_an.columns = [str(c).strip().lower() for c in df_an.columns]
         
-        # 2. מיפוי שמות עמודות (עכשיו הכל ב-Lower Case)
-        col_map = {
-            'date': ['date', 'תאריך'],
-            'student_name': ['student', 'name', 'סטודנט', 'שם'],
-            'challenge': ['challenge', 'תצפית', 'תיאור', 'ch'],
-            'interpretation': ['interpretation', 'פרשנות', 'int']
-        }
+        # הדפסת עמודות לדיבגינג פנימי (יופיע רק בלוגים אם צריך)
+        actual_columns = df_an.columns.tolist()
         
-        found_all = True
-        mapped_df = pd.DataFrame()
-        
-        for final_name, keywords in col_map.items():
-            # חיפוש העמודה המתאימה ביותר
-            actual_col = next((c for c in df_an.columns if any(k in c for k in keywords)), None)
-            
-            if actual_col:
-                mapped_df[final_name] = df_an[actual_col]
-            else:
-                st.error(f"❌ לא נמצאה עמודה עבור: **{final_name}**. וודאי שהיא קיימת באקסל.")
-                found_all = False
+        # 2. פונקציית חיפוש גמישה ביותר
+        def get_best_column(keys, available_cols):
+            for k in keys:
+                for col in available_cols:
+                    if k.lower() in str(col).lower().strip():
+                        return col
+            return None
 
-        if found_all:
-            # עיבוד תאריכים ושבועות
-            mapped_df['date'] = pd.to_datetime(mapped_df['date'], errors='coerce')
-            mapped_df = mapped_df.dropna(subset=['date'])
-            mapped_df['week'] = mapped_df['date'].dt.strftime('%Y - שבוע %U')
+        # מיפוי העמודות מחדש לפי מה שקיים בפועל באקסל
+        target_cols = {
+            'date': get_best_column(['date', 'תאריך', 'day'], actual_columns),
+            'student_name': get_best_column(['student', 'name', 'סטודנט', 'שם'], actual_columns),
+            'challenge': get_best_column(['challenge', 'תצפית', 'תיאור', 'ch'], actual_columns),
+            'interpretation': get_best_column(['interpretation', 'פרשנות', 'int'], actual_columns)
+        }
+
+        # בדיקה אם חסר משהו קריטי
+        missing_critical = [k for k, v in target_cols.items() if v is None]
+        
+        if missing_critical:
+            st.error(f"❌ המערכת לא זיהתה את העמודות: {missing_critical}")
+            st.write("העמודות הקיימות באקסל שלך הן:", actual_columns)
+        else:
+            # בניית דאטה-פרים נקי לתצוגה וניתוח
+            final_df = pd.DataFrame()
+            for key, original_name in target_cols.items():
+                final_df[key] = df_an[original_name]
             
-            weeks = sorted(mapped_df['week'].unique(), reverse=True)
+            # עיבוד תאריכים ושבועות
+            final_df['date'] = pd.to_datetime(final_df['date'], errors='coerce')
+            final_df = final_df.dropna(subset=['date'])
+            final_df['week'] = final_df['date'].dt.strftime('%Y - שבוע %U')
+            
+            weeks = sorted(final_df['week'].unique(), reverse=True)
             sel_week = st.selectbox("בחר שבוע לניתוח רוחב:", weeks)
             
-            w_df = mapped_df[mapped_df['week'] == sel_week]
+            w_df = final_df[final_df['week'] == sel_week]
             
             if w_df.empty:
                 st.warning("לא נמצאו תצפיות בשבוע שנבחר.")
             else:
-                st.subheader(f"📋 ריכוז נתונים לשבוע: {sel_week}")
+                st.subheader(f"📋 תצפיות שנמצאו ({len(w_df)})")
                 st.dataframe(w_df)
 
-                if st.button(f"✨ הפק ניתוח איכותני כולל לשבוע זה"):
-                    with st.spinner("ג'ימיני מנתח תמות מכלל התצפיות..."):
-                        # בניית הקשר מחקרי ל-AI
-                        research_context = ""
+                if st.button(f"✨ הפק ניתוח איכותני שבועי (Gemini)"):
+                    with st.spinner("ג'ימיני מנתח את התמות..."):
+                        # בניית הטקסט לניתוח
+                        research_text = ""
                         for _, row in w_df.iterrows():
-                            # וידוא שאין ערכים ריקים בטקסט
-                            s_name = str(row['student_name'])
-                            s_ch = str(row['challenge'])
-                            s_int = str(row['interpretation'])
-                            
-                            research_context += f"סטודנט: {s_name}\nתצפית: {s_ch}\nפרשנות חוקרת: {s_int}\n--- \n"
+                            research_text += f"סטודנט: {row['student_name']}\n"
+                            research_text += f"תצפית: {row['challenge']}\n"
+                            research_text += f"פרשנות: {row['interpretation']}\n"
+                            research_text += "--- \n"
 
                         prompt = f"""
-                        אתה חוקר אקדמי בכיר. בצע ניתוח תמטי (Thematic Analysis) על נתוני שבוע {sel_week}.
-                        חלץ תמות מרכזיות מהתצפיות ומהפרשנות המחקרית המצורפת.
-                        התייחס לקשיים קוגניטיביים ולתהליכי למידה העולים מהשטח.
-                        נסח פסקה אקדמית לממצאים בעברית רהוטה.
-                        
-                        הנתונים:
-                        {research_context}
+                        אתה חוקר אקדמי בכיר. בצע ניתוח תמטי (Thematic Analysis) על נתוני השבוע {sel_week}.
+                        זהה קשרים בין התצפיות לפרשנויות של החוקרת וחלץ תובנות מרכזיות למחקר.
+                        נסח פסקה אקדמית לממצאים בעברית.
+                        נתונים:
+                        {research_text}
                         """
 
                         try:
@@ -243,17 +246,16 @@ with tab3:
                             res = model.generate_content(prompt).text
                             
                             st.markdown("---")
-                            st.markdown("### 📝 תוצאות הניתוח:")
                             st.info(res)
                             
                             if svc:
-                                f_name = f"ניתוח_איכותני_{sel_week.replace(' ', '_')}.txt"
-                                meta = {'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
+                                f_name = f"ניתוח_שבועי_{sel_week.replace(' ', '_')}.txt"
                                 media = MediaIoBaseUpload(io.BytesIO(res.encode('utf-8')), mimetype='text/plain')
-                                svc.files().create(body=meta, media_body=media, supportsAllDrives=True).execute()
-                                st.success("✅ הניתוח נשמר בדרייב")
+                                svc.files().create(body={'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
+                                st.success("✅ נשמר בדרייב")
                         except Exception as e:
-                            st.error(f"שגיאה בתהליך הניתוח: {e}")
+                            st.error(f"שגיאה: {e}")
 # --- סוף הקוד ---
+
 
 
