@@ -51,35 +51,37 @@ def map_research_cols(df):
 @st.cache_resource
 def get_drive_service():
     try:
-        # 1. שליפת התוכן מה-Secret שיש לך
         raw_data = st.secrets.get("GDRIVE_SERVICE_ACCOUNT_B64") or st.secrets.get("GOOGLE_SERVICE_ACCOUNT")
         
         if not raw_data:
             st.error("❌ לא נמצא Secret עבור חיבור לדרייב.")
             return None
 
-        # 2. זיהוי האם התוכן הוא JSON רגיל או Base64
-        # אם הטקסט מתחיל ב-{, זה JSON רגיל
-        if isinstance(raw_data, str) and raw_data.strip().startswith("{"):
-            info = json.loads(raw_data)
-        elif isinstance(raw_data, dict):
-            info = dict(raw_data)
+        # ניקוי תווים בלתי נראים שעלולים לשבור את ה-JSON
+        if isinstance(raw_data, str):
+            clean_data = raw_data.strip()
+            # תיקון נפוץ: אם בטעות הועתק עם גרשיים בודדים חיצוניים
+            if clean_data.startswith("'") and clean_data.endswith("'"):
+                clean_data = clean_data[1:-1]
+            info = json.loads(clean_data)
         else:
-            # אם זה לא נראה כמו JSON, ננסה לפענח כ-Base64
-            import base64
-            info = json.loads(base64.b64decode(raw_data).decode("utf-8"))
+            info = dict(raw_data)
             
-        # 3. יצירת החיבור
         creds = Credentials.from_service_account_info(
             info, 
             scopes=["https://www.googleapis.com/auth/drive"]
         )
         return build("drive", "v3", credentials=creds)
     
+    except json.JSONDecodeError as je:
+        st.error(f"❌ שגיאת פורמט ב-JSON: ודאי שהשתמשת בגרשיים כפולים (\"). שגיאה: {je}")
+        return None
     except Exception as e:
         st.error(f"❌ שגיאה בחיבור לדרייב: {e}")
         return None
 
+# הפעלה גלובלית
+svc = get_drive_service()
 # הפעלה גלובלית
 svc = get_drive_service()
 
@@ -364,6 +366,7 @@ else:
                         st.error(f"שגיאה בהפקת הניתוח: {str(e)}")
 
 # --- סוף הקוד ---
+
 
 
 
