@@ -23,7 +23,7 @@ GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 TAGS_OPTIONS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="מערכת תצפית - גרסה 33.1", layout="wide")
+st.set_page_config(page_title="מערכת תצפית - גרסה 33.2", layout="wide")
 
 st.markdown("""
     <style>
@@ -128,7 +128,7 @@ if "current_obs_timestamp" not in st.session_state: st.session_state.current_obs
 if "last_selected_student" not in st.session_state: st.session_state.last_selected_student = ""
 
 svc = get_drive_service()
-st.title("🎓 מנחה מחקר חכם - גרסה 33.1")
+st.title("🎓 מנחה מחקר חכם - גרסה 33.2")
 tab1, tab2, tab3 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "🤖 ניתוח מגמות"])
 
 with tab1:
@@ -141,7 +141,6 @@ with tab1:
                 name_sel = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"n_{it}")
                 student_name = st.text_input("שם חופשי:", key=f"fn_{it}") if name_sel == "תלמיד אחר..." else name_sel
                 
-                # מנגנון טעינה עם אישור ירוק
                 if student_name != st.session_state.last_selected_student:
                     st.session_state.chat_history = []
                     with st.spinner(f"טוען היסטוריה עבור {student_name}..."):
@@ -194,51 +193,45 @@ with tab1:
                         "cat_proj_trans": int(cat_proj_trans), "cat_3d_support": int(cat_3d_support), "cat_self_efficacy": int(cat_self_efficacy),
                         "tags": tags, "file_links": [l for l in links if l], "timestamp": st.session_state.current_obs_timestamp
                     }
-                    # שמירה בטוחה
                     line = json.dumps(entry, ensure_ascii=False) + "\n"
                     with open(DATA_FILE, "a", encoding="utf-8") as f:
                         f.write(line); f.flush(); os.fsync(f.fileno())
                     
                     client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-                    prompt = f"מנחה תזה: בדוק אם התיאור '{challenge}' מספק עבור {student_name} ברמת קושי {exercise_diff}. תן 2 שורות משוב."
+                    prompt = f"מנחה תזה: בדוק את התיאור '{challenge}' עבור {student_name}. תן 2 שורות משוב."
                     res = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
                     st.session_state.last_obs_feedback = res.text
-                    st.success("נשמר מקומית. קרא את המשוב למעלה.")
+                    st.success("נשמר מקומית.")
                     st.rerun()
 
             if st.button("✅ סיימתי עם הסטודנט - נקה טופס"):
                 st.session_state.last_obs_feedback = ""; st.session_state.current_obs_timestamp = ""; st.session_state.it += 1; st.rerun()
 
-   with col_chat:
+    with col_chat:
         st.subheader(f"🤖 יועץ פדגוגי: {student_name}")
         chat_cont = st.container(height=400)
         for q, a in st.session_state.chat_history:
-            with chat_cont: 
+            with chat_cont:
                 st.chat_message("user").write(q)
                 st.chat_message("assistant").write(a)
         
         user_q = st.chat_input("שאל על מגמות הסטודנט...")
         if user_q:
             client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-            
-            # בניית פרומפט שכולל את המידע מהדרייב שהאפליקציה כבר משכה
             context_prompt = f"""
-            אתה עוזר מחקר פדגוגי המלווה תצפיות בכיתה. 
-            להלן היסטוריית התצפיות של הסטודנט {student_name} כפי שנשמרו בדרייב:
+            אתה עוזר מחקר פדגוגי. להלן היסטוריית התצפיות של הסטודנט {student_name} מהדרייב:
             ---
-            {st.session_state.student_context if st.session_state.student_context else "אין מידע קודם על סטודנט זה."}
+            {st.session_state.student_context if st.session_state.student_context else "אין מידע קודם."}
             ---
-            בהתבסס על המידע הזה בלבד, ענה על השאלה: {user_q}
-            חשוב: אל תגיד שאין לך גישה למידע - המידע הרלוונטי נמצא ממש כאן למעלה בתוך הפרומפט.
+            בהתבסס על המידע הזה, ענה על השאלה: {user_q}
+            חשוב: אל תגיד שאין לך גישה למידע - המידע נמצא כאן בפרומפט.
             """
-            
             try:
                 res = client.models.generate_content(model="gemini-2.0-flash", contents=context_prompt)
                 st.session_state.chat_history.append((user_q, res.text))
                 st.rerun()
             except Exception as e:
-                logger.exception("Chat generation failed.")
-                st.error("שגיאה ביצירת תשובה. וודא ש-API Key תקין.")
+                st.error("שגיאה ביצירת תשובה.")
 
 with tab2:
     st.header("🔄 סנכרון לדרייב")
@@ -259,8 +252,7 @@ with tab3:
                     for col in score_cols: df[col] = pd.to_numeric(df[col], errors='coerce')
                     stats_text = df.groupby(['work_method', 'exercise_difficulty'])[score_cols].mean().round(2).to_string()
                     client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-                    prompt = f"אתה מנחה תזה. נתח רמת מאקרו (ממוצעים): {stats_text} ורמת מיקרו (לפי תלמיד): {df.to_string()}. בנה פרופיל לכל סטודנט ובדוק עקביות."
+                    prompt = f"אתה מנחה תזה. נתח מאקרו: {stats_text} ומיקרו (לפי תלמיד): {df.to_string()}. בנה פרופילים ובדוק עקביות."
                     response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
                     st.markdown(response.text)
                     save_summary_to_drive(f"ניתוח {datetime.now().strftime('%d/%m/%Y')}\n\n{response.text}", svc)
-
