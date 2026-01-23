@@ -234,7 +234,7 @@ with tab3:
 
         else:
             # ניתוח אישי - מסונכרן עם הבחירה בטאב 1
-            cur_s = st.session_state.get('last_selected', '')
+            cur_s = st.session_state.get('last_selected_student', '')
             v_names = sorted(df_an['student_name'].unique())
             idx = v_names.index(cur_s) if cur_s in v_names else 0
             
@@ -254,7 +254,20 @@ with tab3:
                     stats = sd[metrics].mean().to_dict()
                     obs = sd[q_cols].to_string()
                     
-                    prompt = f"נתח את הסטודנט {sel_s} למחקר תזה על סמך:\nסטטיסטיקה: {stats}\nתצפיות: {obs}"
+                    prompt = f"""
+                    אתה עוזר מחקר אקדמי. בצע ניתוח מעמיק לסטודנט {sel_s} עבור פרק הממצאים בתזה.
+                    
+                    נתונים כמותיים (ממוצעים): {stats}
+                    
+                    היסטוריית תצפיות:
+                    {obs}
+                    
+                    אנא בצע:
+                    1. ניתוח מגמות סטטיסטי של ציוני המיומנות לאורך זמן.
+                    2. ניתוח איכותני של קשיים חוזרים ודפוסי התנהגות.
+                    3. תובנה מחקרית על התקדמות הסטודנט והמלצות פדגוגיות.
+                    ענה בעברית אקדמית מקצועית.
+                    """
                     
                     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
                     model = genai.GenerativeModel('gemini-1.5-flash')
@@ -262,11 +275,14 @@ with tab3:
                     
                     if svc:
                         try:
-                            f_name = f"ניתוח_אישי_{sel_s}_{date.today()}.txt"
+                            f_name = f"ניתוח_אישי_{sel_s}_{date.today().strftime('%Y%m%d')}.txt"
                             meta = {'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
                             media = MediaIoBaseUpload(io.BytesIO(analysis_text.encode('utf-8')), mimetype='text/plain')
-                            svc.files().create(body=meta, media_body=media, supportsAllDrives=True).execute()
+                            res = svc.files().create(body=meta, media_body=media, fields='webViewLink', supportsAllDrives=True).execute()
                             st.success(f"✅ הניתוח של {sel_s} נשמר בדרייב")
                             st.info(analysis_text)
+                            st.markdown(f"[🔗 פתח את הקובץ בדרייב]({res.get('webViewLink')})")
                         except Exception as e:
                             st.error(f"שגיאה בשמירה לדרייב: {e}")
+# --- סוף הקוד ---
+
