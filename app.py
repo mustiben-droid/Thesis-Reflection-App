@@ -11,7 +11,7 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 
-# Logging setup - מעקב אחרי שגיאות בשרת
+# Logging setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 TAGS_OPTIONS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="מערכת תצפית - גרסה 33.0", layout="wide")
+st.set_page_config(page_title="מערכת תצפית - גרסה 33.1", layout="wide")
 
 st.markdown("""
     <style>
@@ -36,7 +36,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. פונקציות Google Drive (עם טיפול בשגיאות משופר) ---
+# --- 2. פונקציות Google Drive ---
 def get_drive_service():
     try:
         b64 = st.secrets.get("GDRIVE_SERVICE_ACCOUNT_B64")
@@ -65,12 +65,10 @@ def load_master_from_drive_internal(svc, force_reload=False):
         if not svc: return None, None
         if not force_reload and "master_df" in st.session_state:
             return st.session_state["master_df"], st.session_state.get("master_file_id")
-
         query = f"name = '{MASTER_FILENAME}' and trashed = false"
         res = svc.files().list(q=query, spaces='drive', supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
         target = next((f for f in res if f['name'] == MASTER_FILENAME), None)
         if not target: return None, None
-        
         request = svc.files().get_media(fileId=target['id'])
         fh = io.BytesIO()
         downloader = MediaIoBaseDownload(fh, request)
@@ -88,15 +86,13 @@ def load_master_from_drive_internal(svc, force_reload=False):
 def update_master_in_drive(new_data_df, svc):
     try:
         if not svc: return False
-        existing_df, file_id = load_master_from_drive_internal(svc)
+        existing_df, file_id = load_master_from_drive_internal(svc, force_reload=True)
         df = pd.concat([existing_df, new_data_df], ignore_index=True).drop_duplicates(subset=['student_name', 'timestamp'], keep='last') if existing_df is not None else new_data_df
-        
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False)
         output.seek(0)
         media = MediaIoBaseUpload(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        
         if file_id: svc.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
         else:
             meta = {'name': MASTER_FILENAME}
@@ -108,28 +104,31 @@ def update_master_in_drive(new_data_df, svc):
         logger.exception("Update master failed.")
         return False
 
-# --- 3. מנגנון כתיבה בטוחה (Flush & Fsync) ---
-def append_jsonl_safe(path, entry):
+def fetch_history_from_drive(student_name, svc):
     try:
-        line = json.dumps(entry, ensure_ascii=False) + "\n"
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(line)
-            f.flush()
-            os.fsync(f.fileno())
-        return True
-    except Exception:
-        logger.exception("Safe write failed.")
-        return False
+        if not svc: return ""
+        df, _ = load_master_from_drive_internal(svc)
+        if df is None: return ""
+        target = str(student_name).strip()
+        df['student_name'] = df['student_name'].astype(str).str.strip()
+        student_data = df[df['student_name'].str.contains(target, na=False, case=False)]
+        if student_data.empty: return ""
+        hist = ""
+        for _, row in student_data.tail(5).fillna("").iterrows():
+            hist += f"תאריך: {row.get('date')} | קושי: {row.get('exercise_difficulty')} | תצפית: {row.get('challenge')}\n"
+        return hist
+    except: return ""
 
-# --- 4. ממשק המשתמש ---
+# --- 3. ממשק המשתמש ---
 if "it" not in st.session_state: st.session_state.it = 0
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
+if "student_context" not in st.session_state: st.session_state.student_context = ""
 if "last_obs_feedback" not in st.session_state: st.session_state.last_obs_feedback = ""
 if "current_obs_timestamp" not in st.session_state: st.session_state.current_obs_timestamp = ""
 if "last_selected_student" not in st.session_state: st.session_state.last_selected_student = ""
 
 svc = get_drive_service()
-st.title("🎓 מנחה מחקר חכם - גרסה 33.0")
+st.title("🎓 מנחה מחקר חכם - גרסה 33.1")
 tab1, tab2, tab3 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "🤖 ניתוח מגמות"])
 
 with tab1:
@@ -141,10 +140,20 @@ with tab1:
             with c1:
                 name_sel = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"n_{it}")
                 student_name = st.text_input("שם חופשי:", key=f"fn_{it}") if name_sel == "תלמיד אחר..." else name_sel
+                
+                # מנגנון טעינה עם אישור ירוק
                 if student_name != st.session_state.last_selected_student:
                     st.session_state.chat_history = []
+                    with st.spinner(f"טוען היסטוריה עבור {student_name}..."):
+                        st.session_state.student_context = fetch_history_from_drive(student_name, svc) if (student_name and svc) else ""
+                    
+                    if st.session_state.student_context:
+                        st.success(f"✅ נתוני העבר של {student_name} נטענו.")
+                    else:
+                        st.info(f"🔍 לא נמצאה היסטוריה עבור {student_name}.")
                     st.session_state.last_selected_student = student_name
                     st.session_state.last_obs_feedback = ""
+
             with c2:
                 work_method = st.radio("🛠️ סוג תרגול:", ["🧊 בעזרת גוף מודפס", "🎨 ללא גוף (דמיון)"], key=f"wm_{it}", horizontal=True)
                 exercise_diff = st.select_slider("📉 רמת קושי:", options=["קל", "בינוני", "קשה"], value="בינוני", key=f"ed_{it}")
@@ -185,13 +194,17 @@ with tab1:
                         "cat_proj_trans": int(cat_proj_trans), "cat_3d_support": int(cat_3d_support), "cat_self_efficacy": int(cat_self_efficacy),
                         "tags": tags, "file_links": [l for l in links if l], "timestamp": st.session_state.current_obs_timestamp
                     }
-                    if append_jsonl_safe(DATA_FILE, entry):
-                        client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-                        prompt = f"מנחה תזה: בדוק אם התיאור '{challenge}' מספק עבור התגיות {tags} ברמת קושי {exercise_diff}. תן 2 שורות משוב בונה."
-                        res = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-                        st.session_state.last_obs_feedback = res.text
-                        st.success("נשמר מקומית. ניתן לתקן או לסיים.")
-                        st.rerun()
+                    # שמירה בטוחה
+                    line = json.dumps(entry, ensure_ascii=False) + "\n"
+                    with open(DATA_FILE, "a", encoding="utf-8") as f:
+                        f.write(line); f.flush(); os.fsync(f.fileno())
+                    
+                    client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+                    prompt = f"מנחה תזה: בדוק אם התיאור '{challenge}' מספק עבור {student_name} ברמת קושי {exercise_diff}. תן 2 שורות משוב."
+                    res = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+                    st.session_state.last_obs_feedback = res.text
+                    st.success("נשמר מקומית. קרא את המשוב למעלה.")
+                    st.rerun()
 
             if st.button("✅ סיימתי עם הסטודנט - נקה טופס"):
                 st.session_state.last_obs_feedback = ""; st.session_state.current_obs_timestamp = ""; st.session_state.it += 1; st.rerun()
