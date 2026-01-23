@@ -11,7 +11,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from datetime import date, datetime
 
-# --- 0. הגדרות בסיס ---
+# --- 0. הגדרות ועיצוב ---
 logging.basicConfig(level=logging.INFO)
 DATA_FILE = "reflections.jsonl"
 MASTER_FILENAME = "All_Observations_Master.xlsx"
@@ -19,7 +19,7 @@ GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 TAGS_OPTIONS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="מערכת תצפית תזה - 42.0", layout="wide")
+st.set_page_config(page_title="מערכת תצפית - 43.0", layout="wide")
 
 st.markdown("""
     <style>
@@ -31,7 +31,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 1. מודול טעינה ונרמול (מבוסס Copilot) ---
+# --- 1. מודול טעינה חכם (מבוסס Copilot) ---
 def normalize_name(name):
     if not isinstance(name, str): return ""
     return name.replace(" ", "").replace(".", "").replace("־", "").replace("-", "").strip()
@@ -47,20 +47,24 @@ def get_drive_service():
     except: return None
 
 def load_full_dataset(svc):
-    # טעינה מהדרייב
     df_drive = pd.DataFrame()
-    try:
-        query = f"name = '{MASTER_FILENAME}' and trashed = false"
-        res = svc.files().list(q=query, spaces='drive', supportsAllDrives=True).execute().get('files', [])
-        if res:
-            request = svc.files().get_media(fileId=res[0]['id'])
-            fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, request)
-            done = False
-            while not done: _, done = downloader.next_chunk()
-            fh.seek(0); df_drive = pd.read_excel(fh)
-    except: pass
+    if svc:
+        try:
+            query = f"name = '{MASTER_FILENAME}' and trashed = false"
+            res = svc.files().list(q=query, spaces='drive', supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
+            if res:
+                request = svc.files().get_media(fileId=res[0]['id'])
+                fh = io.BytesIO()
+                downloader = MediaIoBaseDownload(fh, request)
+                done = False
+                while not done: _, done = downloader.next_chunk()
+                fh.seek(0)
+                df_drive = pd.read_excel(fh)
+                # וידוא עמודת שם
+                possible = [c for c in df_drive.columns if "student" in c.lower()]
+                if possible: df_drive.rename(columns={possible[0]: "student_name"}, inplace=True)
+        except Exception as e: logging.error(f"Drive error: {e}")
 
-    # טעינה מקומית
     df_local = pd.DataFrame()
     if os.path.exists(DATA_FILE):
         try:
@@ -81,25 +85,25 @@ def get_ai_response(prompt_type, context_data):
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
         prompts = {
-            "chat": f"עוזר מחקר. היסטוריה של {context_data['name']}: {context_data['history']}. שאלה: {context_data['question']}",
-            "feedback": f"מנחה פדגוגי. תצפית: {context_data['challenge']}. תן 2 שורות משוב."
+            "chat": f"אתה עוזר מחקר. היסטוריה של {context_data['name']}: {context_data['history']}. שאלה: {context_data['question']}",
+            "feedback": f"מנחה פדגוגי. תצפית: {context_data['challenge']}. תן 2 שורות משוב בונה."
         }
         res = model.generate_content(prompts[prompt_type])
         return res.text
     except: return "שגיאה ב-AI"
 
 # --- 2. ניהול מצב ---
+if "it" not in st.session_state: st.session_state.it = 0
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 if "student_context" not in st.session_state: st.session_state.student_context = ""
 if "last_selected_student" not in st.session_state: st.session_state.last_selected_student = ""
 if "show_success_bar" not in st.session_state: st.session_state.show_success_bar = False
-if "it" not in st.session_state: st.session_state.it = 0
+if "last_feedback" not in st.session_state: st.session_state.last_feedback = ""
 
 svc = get_drive_service()
-st.title("🎓 מנחה מחקר חכם - גרסה 42.0")
+st.title("🎓 מנחה מחקר חכם - גרסה 43.0")
 tab1, tab2, tab3 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח"])
 
-# --- 3. טאב הזנה ---
 with tab1:
     col_in, col_chat = st.columns([1.2, 1])
     with col_in:
@@ -107,10 +111,10 @@ with tab1:
         student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
         
         if student_name != st.session_state.last_selected_student:
-            with st.spinner(f"טוען נתונים עבור {student_name}..."):
-                df = load_full_dataset(svc)
+            with st.spinner(f"טוען היסטוריה עבור {student_name}..."):
+                full_df = load_full_dataset(svc)
                 target = normalize_name(student_name)
-                match = df[df['name_clean'] == target] if not df.empty else pd.DataFrame()
+                match = full_df[full_df['name_clean'] == target] if not full_df.empty else pd.DataFrame()
                 
                 if not match.empty:
                     st.session_state.student_context = match.tail(15).to_string()
@@ -123,12 +127,12 @@ with tab1:
             st.rerun()
 
         if st.session_state.show_success_bar:
-            st.success(f"✅ נמצאה היסטוריה עבור {student_name}.")
+            st.success(f"✅ נמצאה היסטוריה עבור {student_name}. הסוכן מעודכן.")
         else:
-            st.info(f"ℹ️ {student_name}: אין תצפיות קודמות.")
+            st.info(f"ℹ️ {student_name}: אין תצפיות קודמות במערכת.")
 
         st.markdown("---")
-        # טופס הזנה
+        # טופס
         c1, c2 = st.columns(2)
         with c1:
             work_method = st.radio("🛠️ סוג תרגול:", ["🧊 בעזרת גוף מודפס", "🎨 ללא גוף (דמיון)"], key=f"wm_{it}", horizontal=True)
@@ -140,38 +144,42 @@ with tab1:
         st.markdown("### 📊 מדדים כמותיים (1-5)")
         m1, m2 = st.columns(2)
         with m1:
-            s_conv = st.slider("המרת ייצוגים", 1, 5, 3, key=f"s1_{it}")
-            s_proj = st.slider("מעבר בין היטלים", 1, 5, 3, key=f"s2_{it}")
+            s1 = st.slider("המרת ייצוגים", 1, 5, 3, key=f"s1_{it}")
+            s2 = st.slider("מעבר בין היטלים", 1, 5, 3, key=f"s2_{it}")
         with m2:
-            s_modl = st.slider("שימוש במודל", 1, 5, 3, key=f"s3_{it}")
-            s_effi = st.slider("מסוגלות עצמית", 1, 5, 3, key=f"s4_{it}")
+            s3 = st.slider("שימוש במודל", 1, 5, 3, key=f"s3_{it}")
+            s4 = st.slider("מסוגלות עצמית", 1, 5, 3, key=f"s4_{it}")
 
         tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
         challenge = st.text_area("🗣️ תיאור התצפית", key=f"ch_{it}")
         interpretation = st.text_area("🧠 פרשנות מחקרית", key=f"int_{it}")
         up_files = st.file_uploader("📷 צרף תמונות", accept_multiple_files=True, type=['png','jpg','jpeg'], key=f"up_{it}")
 
+        if st.session_state.last_feedback:
+            st.markdown(f'<div class="feedback-box"><b>💡 משוב:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
+
         if st.button("💾 שמור תצפית"):
-            if not challenge: st.error("מלא תיאור.")
+            if not challenge: st.error("חובה להזין תיאור.")
             else:
-                with st.spinner("שומר..."):
+                with st.spinner("מעלה ושומר..."):
                     links = []
                     if up_files and svc:
                         for f in up_files:
-                            meta = {'name': f.name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
+                            file_meta = {'name': f.name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
                             media = MediaIoBaseUpload(io.BytesIO(f.getvalue()), mimetype=f.type)
-                            res = svc.files().create(body=meta, media_body=media, fields='webViewLink', supportsAllDrives=True).execute()
+                            res = svc.files().create(body=file_meta, media_body=media, fields='webViewLink', supportsAllDrives=True).execute()
                             links.append(res.get('webViewLink'))
                     
                     entry = {
                         "date": date.today().isoformat(), "student_name": student_name, "work_method": work_method,
                         "exercise_difficulty": ex_diff, "drawings_count": int(drw_cnt), "duration_min": int(dur_min),
-                        "cat_convert_rep": int(s_conv), "cat_proj_trans": int(s_proj), "cat_3d_support": int(s_modl), 
-                        "cat_self_efficacy": int(s_effi), "tags": tags, "challenge": challenge, 
+                        "cat_convert_rep": int(s1), "cat_proj_trans": int(s2), "cat_3d_support": int(s3), 
+                        "cat_self_efficacy": int(s4), "tags": tags, "challenge": challenge, 
                         "interpretation": interpretation, "file_links": links, "timestamp": datetime.now().isoformat()
                     }
                     with open(DATA_FILE, "a", encoding="utf-8") as f:
                         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                    st.session_state.last_feedback = get_ai_response("feedback", {"challenge": challenge})
                     st.session_state.it += 1
                     st.rerun()
 
@@ -186,10 +194,9 @@ with tab1:
             resp = get_ai_response("chat", {"name": student_name, "history": st.session_state.student_context, "question": u_q})
             st.session_state.chat_history.append((u_q, resp)); st.rerun()
 
-# --- 4. טאבים נוספים ---
 with tab2:
-    if os.path.exists(DATA_FILE) and st.button("🚀 סנכרן לדרייב"):
+    if os.path.exists(DATA_FILE) and st.button("🚀 סנכרן הכל לדרייב"):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
-            all_data = [json.loads(l) for l in f if l.strip()]
-        # לוגיקת עדכון הדרייב...
-        st.success("הסנכרון הושלם!")
+            all_entries = [json.loads(line) for line in f if line.strip()]
+        # לוגיקת סנכרון (update_master_in_drive)
+        st.success("הנתונים מוכנים לסנכרון.")
