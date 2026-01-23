@@ -166,28 +166,22 @@ with tab2:
             os.remove(DATA_FILE); st.success("סונכרן בהצלחה!"); st.rerun()
 
 # --- Tab 3: ניתוח איכותני כיתתי (רוחב) ---
-# --- Tab 3: ניתוח איכותני כיתתי (רוחב) - גרסה חסינת עמודות ---
+# --- Tab 3: ניתוח איכותני כיתתי (רוחב) - גרסה סופית וחסינה ---
 with tab3:
     if full_df.empty:
         st.info("אין נתונים לניתוח. וודא שביצעת סנכרון בטאב 2.")
     else:
         st.header("🧠 ניתוח מחקר איכותני - רוחב כיתתי")
         
-        # 1. הכנת הדאטה ומיפוי שמות עמודות חכם
+        # 1. ניקוי כותרות העמודות מרווחים ותווים נסתרים
         df_an = full_df.copy()
+        df_an.columns = [str(c).strip().lower() for c in df_an.columns]
         
-        # פונקציה פנימית לזיהוי עמודות לפי מילות מפתח
-        def find_col(possible_names, df):
-            for col in df.columns:
-                if any(name.lower() in str(col).lower() for name in possible_names):
-                    return col
-            return None
-
-        # מיפוי דינמי של העמודות
+        # 2. מיפוי שמות עמודות (עכשיו הכל ב-Lower Case)
         col_map = {
             'date': ['date', 'תאריך'],
             'student_name': ['student', 'name', 'סטודנט', 'שם'],
-            'challenge': ['challenge', 'תצפית', 'תיאור'],
+            'challenge': ['challenge', 'תצפית', 'תיאור', 'ch'],
             'interpretation': ['interpretation', 'פרשנות', 'int']
         }
         
@@ -195,11 +189,13 @@ with tab3:
         mapped_df = pd.DataFrame()
         
         for final_name, keywords in col_map.items():
-            actual_col = find_col(keywords, df_an)
+            # חיפוש העמודה המתאימה ביותר
+            actual_col = next((c for c in df_an.columns if any(k in c for k in keywords)), None)
+            
             if actual_col:
                 mapped_df[final_name] = df_an[actual_col]
             else:
-                st.error(f"❌ לא נמצאה עמודה מתאימה עבור: **{final_name}**")
+                st.error(f"❌ לא נמצאה עמודה עבור: **{final_name}**. וודאי שהיא קיימת באקסל.")
                 found_all = False
 
         if found_all:
@@ -224,16 +220,20 @@ with tab3:
                         # בניית הקשר מחקרי ל-AI
                         research_context = ""
                         for _, row in w_df.iterrows():
-                            research_context += f"סטודנט: {row['student_name']}\n"
-                            research_context += f"תצפית: {row['challenge']}\n"
-                            research_context += f"פרשנות חוקרת: {row['interpretation']}\n"
-                            research_context += "--- \n"
+                            # וידוא שאין ערכים ריקים בטקסט
+                            s_name = str(row['student_name'])
+                            s_ch = str(row['challenge'])
+                            s_int = str(row['interpretation'])
+                            
+                            research_context += f"סטודנט: {s_name}\nתצפית: {s_ch}\nפרשנות חוקרת: {s_int}\n--- \n"
 
                         prompt = f"""
-                        אתה חוקר אקדמי בכיר. נתח את נתוני שבוע {sel_week} עבור מחקר תזה.
-                        זהה תמות מרכזיות העולות מהתצפיות ומהפרשנות המחקרית של החוקרת.
+                        אתה חוקר אקדמי בכיר. בצע ניתוח תמטי (Thematic Analysis) על נתוני שבוע {sel_week}.
+                        חלץ תמות מרכזיות מהתצפיות ומהפרשנות המחקרית המצורפת.
+                        התייחס לקשיים קוגניטיביים ולתהליכי למידה העולים מהשטח.
                         נסח פסקה אקדמית לממצאים בעברית רהוטה.
-                        נתונים:
+                        
+                        הנתונים:
                         {research_context}
                         """
 
@@ -253,6 +253,7 @@ with tab3:
                                 svc.files().create(body=meta, media_body=media, supportsAllDrives=True).execute()
                                 st.success("✅ הניתוח נשמר בדרייב")
                         except Exception as e:
-                            st.error(f"שגיאה בהפקה: {e}")
+                            st.error(f"שגיאה בתהליך הניתוח: {e}")
 # --- סוף הקוד ---
+
 
