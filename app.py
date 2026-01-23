@@ -16,7 +16,7 @@ DATA_FILE = "reflections.jsonl"
 MASTER_FILENAME = "All_Observations_Master.xlsx"
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 
-st.set_page_config(page_title="מערכת תצפית - גרסה 58.0", layout="wide")
+st.set_page_config(page_title="מערכת תצפית - 59.0", layout="wide")
 
 st.markdown("""
     <style>
@@ -27,23 +27,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 1. בדיקת תקינות המערכת ---
-def check_setup():
-    missing = [k for k in ["GOOGLE_API_KEY", "GDRIVE_SERVICE_ACCOUNT_B64"] if not st.secrets.get(k)]
-    if missing:
-        st.error(f"⚠️ חסרים הגדרות במערכת (Secrets): {', '.join(missing)}")
-        st.stop()
-
-check_setup()
-
-# --- 2. פונקציות הגנה על הנתונים (הפתרון לבאגים) ---
-def clean_dataframe(df):
-    """מנקה עמודות כפולות ומאפס אינדקסים למניעת InvalidIndexError"""
+# --- 1. פונקציות הגנה (מניעת InvalidIndexError) ---
+def safe_clean(df):
+    """מנקה עמודות כפולות ומאפס אינדקסים למניעת קריסה"""
     if df is None or df.empty:
         return pd.DataFrame()
-    # הסרת עמודות כפולות (למשל challenge ו-challenge.1)
+    # הסרת עמודות כפולות לפי שם
     df = df.loc[:, ~df.columns.duplicated()].copy()
-    # איפוס אינדקס מוחלט - קריטי למניעת קריסות ב-Python 3.13
+    # איפוס אינדקס מוחלט - הפתרון לבאג ב-Python 3.13
     df = df.reset_index(drop=True)
     return df
 
@@ -51,18 +42,17 @@ def clean_dataframe(df):
 def get_drive_service():
     try:
         b64 = st.secrets.get("GDRIVE_SERVICE_ACCOUNT_B64")
+        if not b64: return None
         json_str = base64.b64decode(b64).decode("utf-8")
         creds = Credentials.from_service_account_info(json.loads(json_str), scopes=["https://www.googleapis.com/auth/drive"])
         return build("drive", "v3", credentials=creds)
-    except Exception as e:
-        st.error(f"שגיאה בחיבור לדרייב: {e}")
-        return None
+    except: return None
 
-def load_data(svc):
+def load_dataset(svc):
     df_drive = pd.DataFrame()
     if svc:
         try:
-            res = svc.files().list(q=f"name = '{MASTER_FILENAME}' and trashed = false", supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get('files', [])
+            res = svc.files().list(q=f"name = '{MASTER_FILENAME}' and trashed = false", supportsAllDrives=True).execute().get('files', [])
             if res:
                 fh = io.BytesIO()
                 downloader = MediaIoBaseDownload(fh, svc.files().get_media(fileId=res[0]['id']))
@@ -70,7 +60,7 @@ def load_data(svc):
                 while not done: _, done = downloader.next_chunk()
                 fh.seek(0)
                 df_drive = pd.read_excel(fh)
-                df_drive = clean_dataframe(df_drive)
+                df_drive = safe_clean(df_drive)
                 # מיפוי שמות עמודות
                 mapping = {'score_conv': 'cat_convert_rep', 'score_proj': 'cat_proj_trans', 'score_efficacy': 'cat_self_efficacy'}
                 df_drive = df_drive.rename(columns={k: v for k, v in mapping.items() if k in df_drive.columns})
@@ -81,44 +71,37 @@ def load_data(svc):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 df_local = pd.DataFrame([json.loads(l) for l in f if l.strip()])
-                df_local = clean_dataframe(df_local)
+                df_local = safe_clean(df_local)
         except: pass
 
     if df_drive.empty: return df_local
     if df_local.empty: return df_drive
     
-    # איחוד בטוח עם איפוס אינדקסים
     try:
+        # איחוד בטוח עם איפוס אינדקסים (כאן הייתה הקריסה)
         combined = pd.concat([df_drive, df_local], axis=0, ignore_index=True, sort=False)
-        return clean_dataframe(combined)
+        return safe_clean(combined)
     except:
         return df_drive
 
-# --- 3. מנגנון AI מהיר ---
+# --- 2. מנגנון AI מהיר ---
 def get_ai_insight(prompt_type, context):
     try:
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
         model = genai.GenerativeModel('gemini-1.5-flash')
-        
-        if prompt_type == "chat":
-            p = f"נתח את {context['name']} עפ\"י ההיסטוריה:\n{context['history']}\nשאלה: {context['question']}"
-        else: # ניתוח יומי
-            p = f"נתח מגמות רוחביות ליום זה (כמותי ואיכותני):\n{context['history']}"
-            
-        return model.generate_content(p).text
+        prompt = f"נתח את {context.get('name', 'הכיתה')}:\n{str(context.get('history'))[:3500]}\nשאלה/בקשה: {context.get('question', 'סכם מגמות')}"
+        return model.generate_content(prompt).text
     except Exception as e:
         return f"שגיאת AI: {str(e)[:50]}"
 
-# --- 4. ממשק המערכת ---
+# --- 3. ממשק משתמש ---
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
-if "daily_analysis" not in st.session_state: st.session_state.daily_analysis = ""
 
 svc = get_drive_service()
-full_df = load_data(svc)
+full_df = load_dataset(svc)
 
-tab1, tab2, tab3 = st.tabs(["📝 הזנה", "🔄 סנכרון", "📊 ניתוח ומגמות"])
+tab1, tab2, tab3 = st.tabs(["📝 הזנה", "🔄 סנכרון", "📊 ניתוח"])
 
-# --- Tab 1: הזנה ---
 with tab1:
     col_in, col_chat = st.columns([1.2, 1])
     with col_in:
@@ -132,7 +115,7 @@ with tab1:
             method = st.radio("🛠️ תרגול:", ["🧊 גוף מודפס", "🎨 דמיון"])
         
         challenge = st.text_area("🗣️ תיאור התצפית")
-        if st.button("💾 שמור"):
+        if st.button("💾 שמור תצפית"):
             if challenge:
                 entry = {"date": date.today().isoformat(), "student_name": name, "challenge": challenge, "cat_convert_rep": s1, "cat_proj_trans": s2, "cat_self_efficacy": s4, "timestamp": datetime.now().isoformat()}
                 with open(DATA_FILE, "a", encoding="utf-8") as f:
@@ -150,10 +133,9 @@ with tab1:
             ans = get_ai_insight("chat", {"name": name, "history": match.tail(10).to_string(), "question": u_q})
             st.session_state.chat_history.append((u_q, ans)); st.rerun()
 
-# --- Tab 2: סנכרון ---
 with tab2:
-    st.header("🔄 סנכרון מאגר")
-    if st.button("🚀 סנכרן לדרייב"):
+    st.header("🔄 סנכרון לדרייב")
+    if st.button("🚀 סנכרן הכל"):
         if os.path.exists(DATA_FILE):
             try:
                 with st.spinner("מעלה נתונים..."):
@@ -170,11 +152,10 @@ with tab2:
                     os.remove(DATA_FILE); st.success("סונכרן!"); time.sleep(1); st.rerun()
             except Exception as e: st.error(f"שגיאה: {e}")
 
-# --- Tab 3: ניתוח משולב ---
 with tab3:
     st.header("📊 ניתוח מחקרי")
     if not full_df.empty:
-        mode = st.radio("רמת ניתוח:", ["אישי", "יומי"], horizontal=True)
+        mode = st.radio("סוג ניתוח:", ["אישי", "יומי"], horizontal=True)
         if mode == "אישי":
             sel = st.selectbox("סטודנט", full_df['student_name'].unique())
             sd = full_df[full_df['student_name'] == sel].sort_values('timestamp')
@@ -184,7 +165,7 @@ with tab3:
                 with st.spinner("מנתח..."):
                     res = get_ai_insight("chat", {"name": sel, "history": sd.to_string(), "question": q_ai if q_ai else "סכם מגמות"})
                     st.info(res)
-                    st.download_button("📥 הורד", res, file_name=f"{sel}.txt")
+                    st.download_button("📥 הורד ניתוח", res, file_name=f"Analysis_{sel}.txt")
         else:
             day = st.selectbox("תאריך", sorted(full_df['date'].unique(), reverse=True))
             day_d = full_df[full_df['date'] == day]
