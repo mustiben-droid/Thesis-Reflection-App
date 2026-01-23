@@ -150,76 +150,87 @@ with tab1:
             resp = model.generate_content(prompt).text
             st.session_state.chat_history.append((p, resp)); st.rerun()
 
-# --- Tab 2: סנכרון ---
+# --- Tab 2: סנכרון נתונים (תיקון חיבור לדרייב) ---
 with tab2:
+    st.header("🔄 סנכרון מאגר הנתונים")
+    st.write("פעולה זו מאחדת את התצפיות החדשות עם קובץ האקסל המרכזי ב-Google Drive.")
 
-    # יצירת חיבור ל-Google Drive
-    try:
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
-
-        creds = service_account.Credentials.from_service_account_info(
-            st.secrets["GOOGLE_SERVICE_ACCOUNT"],
-            scopes=["https://www.googleapis.com/auth/drive"]
-        )
-
-        svc = build("drive", "v3", credentials=creds)
-
-    except Exception as e:
-        st.error(f"❌ שגיאה בהתחברות ל-Google Drive: {e}")
-        svc = None
-
-    if st.button("🚀 סנכרן נתונים לדרייב"):
-
+    # שימוש בחיבור הקיים שכבר הוגדר בתחילת הקוד
+    # ודאי שבתחילת הקובץ מופיע: svc = get_drive_service()
+    
+    if st.button("🚀 סנכרן נתונים עכשיו"):
         if svc is None:
-            st.error("❌ לא ניתן לסנכרן — אין חיבור ל-Google Drive.")
+            st.error("❌ לא נמצא חיבור תקין ל-Google Drive. בדקי את ה-Secrets ב-Streamlit.")
+            st.info("ודאי שקיים Secret בשם GDRIVE_SERVICE_ACCOUNT_B64 או GOOGLE_SERVICE_ACCOUNT.")
             st.stop()
 
-        if os.path.exists(DATA_FILE):
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                l_ = [json.loads(line) for line in f if line.strip()]
+        if not os.path.exists(DATA_FILE):
+            st.warning("אין נתונים חדשים לסנכרון (הקובץ המקומי ריק).")
+        else:
+            with st.spinner("מבצע איחוד נתונים והעלאה לדרייב..."):
+                try:
+                    # 1. קריאת הנתונים המקומיים החדשים
+                    with open(DATA_FILE, "r", encoding="utf-8") as f:
+                        new_entries = [json.loads(line) for line in f if line.strip()]
+                    
+                    new_df = pd.DataFrame(new_entries)
 
-            final = pd.concat(
-                [full_df, pd.DataFrame(l_)],
-                ignore_index=True
-            ).drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
+                    # 2. איחוד עם הדאטה הקיים (full_df נטען בראש הקובץ)
+                    if not full_df.empty:
+                        updated_df = pd.concat([full_df, new_df], ignore_index=True)
+                    else:
+                        updated_df = new_df
+                    
+                    # הסרת כפילויות לפי שם סטודנט וחותמת זמן
+                    updated_df = updated_df.drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
 
-            buf = io.BytesIO()
-            with pd.ExcelWriter(buf, engine='openpyxl') as w:
-                final.to_excel(w, index=False)
-            buf.seek(0)
+                    # 3. יצירת קובץ אקסל בזיכרון
+                    buf = io.BytesIO()
+                    with pd.ExcelWriter(buf, engine='openpyxl') as w:
+                        updated_df.to_excel(w, index=False)
+                    buf.seek(0)
 
-            # בדיקה אם הקובץ כבר קיים בדרייב
-            res = svc.files().list(
-                q=f"name = '{MASTER_FILENAME}'",
-                supportsAllDrives=True
-            ).execute().get('files', [])
+                    # 4. עדכון/יצירה ב-Google Drive
+                    # חיפוש הקובץ הקיים
+                    res = svc.files().list(
+                        q=f"name = '{MASTER_FILENAME}'",
+                        supportsAllDrives=True,
+                        includeItemsFromAllDrives=True
+                    ).execute().get('files', [])
 
-            media = MediaIoBaseUpload(
-                buf,
-                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+                    media = MediaIoBaseUpload(
+                        buf, 
+                        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        resumable=True
+                    )
 
-            if res:
-                svc.files().update(
-                    fileId=res[0]['id'],
-                    media_body=media,
-                    supportsAllDrives=True
-                ).execute()
-            else:
-                svc.files().create(
-                    body={
-                        'name': MASTER_FILENAME,
-                        'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []
-                    },
-                    media_body=media,
-                    supportsAllDrives=True
-                ).execute()
+                    if res:
+                        # עדכון קובץ קיים
+                        svc.files().update(
+                            fileId=res[0]['id'],
+                            media_body=media,
+                            supportsAllDrives=True
+                        ).execute()
+                    else:
+                        # יצירת קובץ חדש
+                        file_metadata = {
+                            'name': MASTER_FILENAME,
+                            'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []
+                        }
+                        svc.files().create(
+                            body=file_metadata,
+                            media_body=media,
+                            supportsAllDrives=True
+                        ).execute()
 
-            os.remove(DATA_FILE)
-            st.success("סונכרן בהצלחה!")
-            st.rerun()
-
+                    # 5. ניקוי וסיום
+                    os.remove(DATA_FILE)
+                    st.success("✅ הסנכרון הושלם בהצלחה! הקובץ בדרייב מעודכן.")
+                    time.sleep(1)
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"❌ תקלה במהלך הסנכרון: {e}")
 
 # --- Tab 3: ניתוח מחקרי איכותני שבועי (גרסה סופית ומתוקנת) ---
 
@@ -324,6 +335,7 @@ else:
                         st.error(f"שגיאה בהפקת הניתוח: {str(e)}")
 
 # --- סוף הקוד ---
+
 
 
 
