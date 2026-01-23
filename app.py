@@ -180,72 +180,80 @@ with tab3:
     if full_df.empty:
         st.info("אין נתונים להצגת ניתוח.")
     else:
-        st.header("📊 ניתוח מחקרי ותובנות AI")
+        st.header("📊 ניתוח מחקרי - רוחב ועומק")
         
-        valid_names = [n for n in full_df['student_name'].unique() if pd.notna(n)]
-        sel = st.selectbox("בחר סטודנט לניתוח:", valid_names)
-        sd = full_df[full_df['student_name'] == sel].sort_values('date')
+        # בחירת סוג הניתוח
+        analysis_mode = st.radio("בחר רמת ניתוח:", ["ניתוח שבועי כיתתי (רוחב)", "ניתוח סטודנט (אורך)"], horizontal=True)
 
-        # 1. תצוגת מגמות (בדיקת עמודות בטוחה)
-        metrics = [c for c in ['cat_convert_rep', 'cat_proj_trans', 'cat_self_efficacy', 'cat_3d_support'] if c in sd.columns]
-        if metrics and sd[metrics].notna().any().any():
-            st.subheader(f"📈 מגמות התקדמות עבור {sel}")
-            st.line_chart(sd.set_index('date')[metrics])
-
-        st.markdown("---")
+        # הכנת נתוני תאריכים ושבועות
+        df_analysis = full_df.copy()
+        df_analysis['date'] = pd.to_datetime(df_analysis['date'], errors='coerce')
+        df_analysis = df_analysis.dropna(subset=['date'])
+        # הוספת עמודת שבוע (מספר שבוע ושנה)
+        df_analysis['week'] = df_analysis['date'].dt.strftime('%Y - Week %U')
         
-        # 2. כפתור הניתוח והשמירה לדרייב
-        if st.button(f"✨ הפק ניתוח ושמור בדרייב עבור {sel}"):
-            with st.spinner("ג'ימיני מנתח ושומר ב-Google Drive..."):
-                # הכנת הנתונים
-                stats = sd[metrics].mean().to_dict() if metrics else "אין נתונים כמותיים"
-                text_data = sd[['date', 'challenge', 'interpretation']].dropna(subset=['challenge']).to_string() if 'challenge' in sd.columns else "אין תיאורים"
-                
-                prompt = f"""
-                נתח את הסטודנט {sel} עבור פרק הממצאים בתזה.
-                ממוצעים סטטיסטיים: {stats}
-                תיאורי תצפית:
-                {text_data}
-                
-                אנא בצע ניתוח מגמות סטטיסטי ואיכותני מלא בעברית אקדמית.
-                """
-                
-                # הפעלת AI
-                genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                analysis_result = model.generate_content(prompt).text
-                
-                # שמירה ישירות ל-Google Drive
-                if svc:
-                    try:
-                        file_name = f"ניתוח_מחקרי_{sel}_{date.today().strftime('%Y-%m-%d')}.txt"
-                        file_metadata = {
-                            'name': file_name,
-                            'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []
-                        }
-                        
-                        # הפיכת הטקסט לזרם נתונים להעלאה
-                        text_stream = io.BytesIO(analysis_result.encode('utf-8'))
-                        media = MediaIoBaseUpload(text_stream, mimetype='text/plain')
-                        
-                        # ביצוע ההעלאה
-                        uploaded_file = svc.files().create(
-                            body=file_metadata,
-                            media_body=media,
-                            fields='id, webViewLink',
-                            supportsAllDrives=True
-                        ).execute()
-                        
-                        st.success(f"✅ הניתוח נשמר בהצלחה בדרייב!")
-                        st.markdown(f"[🔗 צפה בקובץ בדרייב]({uploaded_file.get('webViewLink')})")
-                    except Exception as e:
-                        st.error(f"שגיאה בשמירה לדרייב: {e}")
-                
-                # הצגת התוצאה גם במסך לשימוש מיידי
-                st.markdown("### 📝 סיכום הניתוח:")
-                st.info(analysis_result)
+        if analysis_mode == "ניתוח שבועי כיתתי (רוחב)":
+            weeks = sorted(df_analysis['week'].unique(), reverse=True)
+            sel_week = st.selectbox("בחר שבוע לניתוח:", weeks)
+            
+            week_df = df_analysis[df_analysis['week'] == sel_week]
+            
+            st.subheader(f"📈 ממוצעים כיתתיים לשבוע: {sel_week}")
+            # בחירת מדדי 1-5
+            metrics = [c for c in ['cat_convert_rep', 'cat_proj_trans', 'cat_self_efficacy', 'cat_3d_support'] if c in week_df.columns]
+            for m in metrics:
+                week_df[m] = pd.to_numeric(week_df[m], errors='coerce')
+            
+            # הצגת ממוצעים בטבלה יפה
+            avg_stats = week_df[metrics].mean()
+            if not avg_stats.empty:
+                st.dataframe(avg_stats.to_frame().T.rename(index={0: 'ממוצע כיתתי'}))
+            
+            st.subheader("📋 ריכוז תצפיות שבועי")
+            disp_cols = [c for c in ['date', 'student_name', 'challenge', 'interpretation'] if c in week_df.columns]
+            st.dataframe(week_df[disp_cols].sort_values('date'))
 
-        # 3. נתונים גולמיים
-        st.subheader("📋 נתונים גולמיים")
-        safe_cols = [c for c in ['date', 'work_method', 'exercise_difficulty', 'challenge', 'interpretation'] if c in sd.columns]
-        st.dataframe(sd[safe_cols])
+            # כפתור ג'ימיני לניתוח שבועי ושמירה בדרייב
+            if st.button(f"✨ הפק ניתוח שבועי לדרייב ({sel_week})"):
+                with st.spinner("ג'ימיני מנתח את ביצועי הכיתה השבועיים..."):
+                    context_text = f"שבוע: {sel_week}\n"
+                    context_text += f"ממוצעים: {avg_stats.to_dict()}\n"
+                    context_text += "תצפיות שבועיות:\n"
+                    for _, row in week_df.iterrows():
+                        context_text += f"- {row['student_name']}: {row.get('challenge', '')}\n"
+
+                    prompt = f"""
+                    אתה עוזר מחקר אקדמי. נתח את ביצועי הכיתה בשבוע {sel_week} עבור התזה.
+                    התייחס למדדים הכמותיים ולאופי הקשיים האיכותניים שעלו בתצפיות.
+                    זהה האם יש נושא (כמו קווים נסתרים או הטלים) שהיה קשה במיוחד לרוב הסטודנטים בשבוע זה.
+                    ענה בעברית אקדמית.
+                    """
+                    
+                    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    analysis_text = model.generate_content(prompt).text
+                    
+                    if svc:
+                        try:
+                            f_name = f"ניתוח_שבועי_{sel_week.replace(' ', '_')}.txt"
+                            meta = {'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
+                            media = MediaIoBaseUpload(io.BytesIO(analysis_text.encode('utf-8')), mimetype='text/plain')
+                            res = svc.files().create(body=meta, media_body=media, fields='webViewLink', supportsAllDrives=True).execute()
+                            st.success("✅ הניתוח השבועי נשמר בדרייב!")
+                            st.info(analysis_text)
+                            st.markdown(f"[🔗 פתח בדרייב]({res.get('webViewLink')})")
+                        except Exception as e:
+                            st.error(f"שגיאה בשמירה: {e}")
+
+        else:
+            # ניתוח אישי (הקוד הקודם שייצבנו)
+            valid_names = sorted(df_analysis['student_name'].unique())
+            sel_student = st.selectbox("בחר סטודנט:", valid_names)
+            sd = df_analysis[df_analysis['student_name'] == sel_student].sort_values('date')
+            
+            st.subheader(f"📈 מגמות התקדמות: {sel_student}")
+            metrics = [c for c in ['cat_convert_rep', 'cat_proj_trans', 'cat_self_efficacy'] if c in sd.columns]
+            if metrics:
+                st.line_chart(sd.set_index('date')[metrics])
+            
+            st.dataframe(sd[[c for c in ['date', 'challenge', 'interpretation'] if c in sd.columns]])
