@@ -81,15 +81,16 @@ def load_full_dataset(svc):
 def get_ai_response(prompt_type, context_data):
     api_key = st.secrets.get("GOOGLE_API_KEY")
     if not api_key: 
-        return "שגיאה: מפתח ה-AI (API KEY) לא מוגדר ב-Secrets."
+        return "שגיאה: מפתח ה-AI לא מוגדר ב-Secrets."
     
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
         
-        # המרת ההיסטוריה לטקסט נקי ובטוח
+        # שינוי שם המודל לגרסה היציבה ביותר (gemini-1.5-flash-latest)
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        
         history_str = str(context_data.get('history', ""))
-        clean_history = history_str[:5000] # הגבלת אורך כדי לא לחרוג מהמכסה
+        clean_history = history_str[:5000]
         
         if prompt_type == "chat":
             full_prompt = (
@@ -97,20 +98,25 @@ def get_ai_response(prompt_type, context_data):
                 f"להלן נתוני העבר של הסטודנט {context_data['name']}:\n"
                 f"{clean_history}\n\n"
                 f"השאלה של המשתמש: {context_data['question']}\n"
-                f"ענה בצורה מקצועית וממוקדת על סמך נתוני התצפיות."
+                f"ענה בצורה מקצועית וממוקדת."
             )
-        else: # feedback
+        else:
             full_prompt = (
-                f"תן משוב פדגוגי קצר (עד 3 שורות) על התצפית הבאה: {context_data['challenge']}. "
-                f"התמקד בהיבטים של הבנה מרחבית ושרטוט טכני."
+                f"תן משוב פדגוגי קצר על התצפית: {context_data['challenge']}. "
+                f"התמקד בהבנה מרחבית."
             )
             
         res = model.generate_content(full_prompt)
         return res.text
         
     except Exception as e:
-        # במקום logger שגורם לקריסה, אנחנו מחזירים את השגיאה כטקסט
-        return f"שגיאה בחיבור ל-AI: {str(e)[:100]}"
+        # אם gemini-1.5-flash-latest עדיין עושה בעיות, ננסה את הגרסה הישירה
+        try:
+            model = genai.GenerativeModel('gemini-pro')
+            res = model.generate_content(full_prompt)
+            return res.text
+        except:
+            return f"שגיאה בחיבור ל-AI: {str(e)[:100]}"
 
 # --- 2. ניהול מצב ---
 if "it" not in st.session_state: st.session_state.it = 0
@@ -220,5 +226,6 @@ with tab2:
             all_entries = [json.loads(line) for line in f if line.strip()]
         # לוגיקת סנכרון (update_master_in_drive)
         st.success("הנתונים מוכנים לסנכרון.")
+
 
 
