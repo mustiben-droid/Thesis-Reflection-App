@@ -170,4 +170,23 @@ with tab2:
             buf = io.BytesIO()
             with pd.ExcelWriter(buf, engine='openpyxl') as w: final.to_excel(w, index=False)
             buf.seek(0)
-            res = svc.files().list(q=
+            res = svc.files().list(q=f"name = '{MASTER_FILENAME}'", supportsAllDrives=True).execute().get('files', [])
+            media = MediaIoBaseUpload(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            if res: svc.files().update(fileId=res[0]['id'], media_body=media, supportsAllDrives=True).execute()
+            else: svc.files().create(body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
+            os.remove(DATA_FILE); st.success("סונכרן!"); st.rerun()
+
+with tab3:
+    if full_df.empty: st.info("אין נתונים.")
+    else:
+        st.header("📊 ניתוח מגמות")
+        sel = st.selectbox("בחר סטודנט", full_df['student_name'].unique())
+        sd = full_df[full_df['student_name'] == sel].sort_values('date')
+        
+        # בחירה בטוחה של עמודות קיימות למניעת KeyError
+        metrics = [c for c in ['cat_convert_rep', 'cat_proj_trans', 'cat_self_efficacy'] if c in sd.columns]
+        if metrics and sd[metrics].notna().any().any():
+            st.line_chart(sd.set_index('date')[metrics])
+            
+        qual_cols = [c for c in ['date', 'exercise_difficulty', 'challenge', 'interpretation'] if c in sd.columns]
+        st.dataframe(sd[qual_cols])
