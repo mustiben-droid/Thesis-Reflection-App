@@ -228,6 +228,45 @@ with tab2:
             all_entries = [json.loads(line) for line in f if line.strip()]
         # לוגיקת סנכרון (update_master_in_drive)
         st.success("הנתונים מוכנים לסנכרון.")
+# --- Tab 3: ניתוח מחקרי ---
+with tab3:
+    if full_df.empty:
+        st.info("אין נתונים לניתוח. בצעי סנכרון בטאב 2.")
+    else:
+        st.header("🧠 ניתוח תמות AI")
+        df_an = full_df.copy()
+        df_an['date'] = pd.to_datetime(df_an['date'], errors='coerce')
+        df_an['week'] = df_an['date'].dt.strftime('%Y - שבוע %U')
+        
+        weeks = sorted(df_an['week'].unique(), reverse=True)
+        sel_week = st.selectbox("בחר שבוע:", weeks)
+        w_df = df_an[df_an['week'] == sel_week]
+        
+        st.dataframe(w_df)
+
+        if st.button("✨ הפק ניתוח ושמור לדרייב"):
+            with st.spinner("ג'ימיני מנתח..."):
+                txt = ""
+                for _, r in w_df.iterrows():
+                    txt += f"סטודנט: {r.get('student_name','')} | תצפית: {r.get('challenge','')} | תובנה: {r.get('insight','')}\n---\n"
+
+                try:
+                    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    response = model.generate_content(f"נתח תמות אקדמיות בעברית לשבוע {sel_week}: {txt}").text
+                    
+                    st.info(response)
+                    
+                    if svc:
+                        f_name = f"ניתוח_{sel_week}.txt"
+                        media = MediaIoBaseUpload(io.BytesIO(response.encode('utf-8')), mimetype='text/plain')
+                        svc.files().create(body={'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
+                        st.success(f"נשמר בדרייב בשם {f_name}")
+                except Exception as e:
+                    st.error(f"שגיאה בניתוח: {e}")
+
+# --- Sidebar ---
+st.sidebar.write("מצב חיבור:", "✅ מחובר" if svc else "❌ לא מחובר")
 
 
 
