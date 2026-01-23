@@ -86,8 +86,8 @@ def get_ai_response(prompt_type, context_data):
     try:
         genai.configure(api_key=api_key)
         
-        # שינוי שם המודל לגרסה היציבה ביותר (gemini-1.5-flash-latest)
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        # שימוש בשם המודל הבסיסי ביותר - תואם לכל הגרסאות
+        model = genai.GenerativeModel('gemini-pro')
         
         history_str = str(context_data.get('history', ""))
         clean_history = history_str[:5000]
@@ -100,23 +100,17 @@ def get_ai_response(prompt_type, context_data):
                 f"השאלה של המשתמש: {context_data['question']}\n"
                 f"ענה בצורה מקצועית וממוקדת."
             )
-        else:
+        else: # feedback
             full_prompt = (
                 f"תן משוב פדגוגי קצר על התצפית: {context_data['challenge']}. "
-                f"התמקד בהבנה מרחבית."
+                f"התמקד בהיבטים של הבנה מרחבית."
             )
             
         res = model.generate_content(full_prompt)
         return res.text
         
     except Exception as e:
-        # אם gemini-1.5-flash-latest עדיין עושה בעיות, ננסה את הגרסה הישירה
-        try:
-            model = genai.GenerativeModel('gemini-pro')
-            res = model.generate_content(full_prompt)
-            return res.text
-        except:
-            return f"שגיאה בחיבור ל-AI: {str(e)[:100]}"
+        return f"שגיאה בחיבור ל-AI: {str(e)[:100]}"
 
 # --- 2. ניהול מצב ---
 if "it" not in st.session_state: st.session_state.it = 0
@@ -226,6 +220,7 @@ with tab2:
             all_entries = [json.loads(line) for line in f if line.strip()]
         # לוגיקת סנכרון (update_master_in_drive)
         st.success("הנתונים מוכנים לסנכרון.")
+
 
 
 
