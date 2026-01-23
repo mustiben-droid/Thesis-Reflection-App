@@ -11,7 +11,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from datetime import date, datetime
 
-# --- 1. הגדרות תשתית ולוגים ---
+# --- 1. הגדרות תשתית ---
 logging.basicConfig(level=logging.INFO)
 DATA_FILE = "reflections.jsonl"
 MASTER_FILENAME = "All_Observations_Master.xlsx"
@@ -19,9 +19,9 @@ GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 TAGS_OPTIONS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="מערכת תצפית תזה - 40.0", layout="wide")
+st.set_page_config(page_title="מערכת תצפית תזה - 41.0", layout="wide")
 
-# RTL ועיצוב
+# עיצוב RTL וסגנון
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
@@ -32,7 +32,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. פונקציות Drive ו-AI ---
+# --- 2. פונקציות עזר ---
 @st.cache_resource
 def get_drive_service():
     try:
@@ -41,15 +41,6 @@ def get_drive_service():
         json_str = base64.b64decode(b64).decode("utf-8")
         creds = Credentials.from_service_account_info(json.loads(json_str), scopes=["https://www.googleapis.com/auth/drive"])
         return build("drive", "v3", credentials=creds)
-    except: return None
-
-def upload_file_to_drive(uploaded_file, svc):
-    try:
-        if not svc or uploaded_file is None: return None
-        file_metadata = {'name': uploaded_file.name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
-        media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
-        file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink', supportsAllDrives=True).execute()
-        return file.get('webViewLink')
     except: return None
 
 @st.cache_data(ttl=60)
@@ -82,23 +73,22 @@ def update_master_in_drive(new_data_df, svc):
         else:
             meta = {'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
             svc.files().create(body=meta, media_body=media, supportsAllDrives=True).execute()
-        st.cache_data.clear()
         return True
     except: return False
 
 def get_ai_response(prompt_type, context_data):
     api_key = st.secrets.get("GOOGLE_API_KEY")
-    if not api_key: return "שגיאת API Key"
+    if not api_key: return "שגיאת API"
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
         prompts = {
-            "chat": f"אתה עוזר מחקר אקדמי. היסטוריה של {context_data['name']}: {context_data['history']}. שאלה: {context_data['question']}",
-            "feedback": f"מנחה פדגוגי. תצפית: {context_data['challenge']}. תן 2 שורות משוב בונה."
+            "chat": f"אתה עוזר מחקר. היסטוריה של {context_data['name']}: {context_data['history']}. שאלה: {context_data['question']}",
+            "feedback": f"מנחה פדגוגי. תצפית: {context_data['challenge']}. תן 2 שורות משוב."
         }
         res = model.generate_content(prompts[prompt_type])
         return res.text
-    except: return "שגיאה בתקשורת עם ה-AI"
+    except: return "שגיאה ב-AI"
 
 # --- 3. ניהול מצב (Session State) ---
 if "it" not in st.session_state: st.session_state.it = 0
@@ -109,10 +99,10 @@ if "show_success_bar" not in st.session_state: st.session_state.show_success_bar
 if "last_feedback" not in st.session_state: st.session_state.last_feedback = ""
 
 svc = get_drive_service()
-st.title("🎓 מערכת תצפית חכמה - גרסה 40.0")
+st.title("🎓 מנחה מחקר חכם - גרסה 41.0")
 tab1, tab2, tab3 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח"])
 
-# --- 4. טאב הזנה ומשוב ---
+# --- 4. טאב הזנה ---
 with tab1:
     col_in, col_chat = st.columns([1.2, 1])
     
@@ -120,13 +110,14 @@ with tab1:
         it = st.session_state.it
         student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
         
-        # לוגיקת טעינה (מיושרת בדיוק)
+        # לוגיקת טעינה יציבה ומותאמת לאקסל שלך
         if student_name != st.session_state.last_selected_student:
             st.session_state.chat_history = []
             st.session_state.show_success_bar = False
             st.session_state.student_context = ""
             
-            with st.spinner(f"סורק היסטוריה עבור {student_name}..."):
+            with st.spinner(f"סורק נתונים עבור {student_name}..."):
+                # טעינה משולבת
                 df_hist, _ = load_master_from_drive(id(svc))
                 df_local = pd.DataFrame()
                 if os.path.exists(DATA_FILE):
@@ -137,24 +128,25 @@ with tab1:
                 
                 full_data = pd.concat([df_hist, df_local], ignore_index=True) if df_hist is not None else df_local
                 
-                if not full_data.empty and 'student_name' in full_data.columns:
-                    full_data = full_data.dropna(subset=['student_name'])
-                    full_data['name_clean'] = full_data['student_name'].astype(str).str.strip()
-                    target_name = str(student_name).strip()
-                    match = full_data[full_data['name_clean'] == target_name]
-                    
-                    if not match.empty:
-                        st.session_state.student_context = match.tail(15).to_string()
-                        st.session_state.show_success_bar = True
+                if not full_data.empty:
+                    # ניקוי עמודת השמות וחיפוש
+                    if 'student_name' in full_data.columns:
+                        full_data = full_data.dropna(subset=['student_name'])
+                        full_data['name_clean'] = full_data['student_name'].astype(str).str.strip()
+                        match = full_data[full_data['name_clean'] == student_name.strip()]
+                        
+                        if not match.empty:
+                            st.session_state.student_context = match.tail(15).to_string()
+                            st.session_state.show_success_bar = True
             
             st.session_state.last_selected_student = student_name
             st.rerun()
 
-        # הצגת הודעה
+        # סטריפ הצלחה
         if st.session_state.show_success_bar:
-            st.success(f"✅ נמצאה היסטוריה עבור {student_name}.")
+            st.success(f"✅ נמצאה היסטוריה עבור {student_name}. הסוכן מעודכן.")
         else:
-            st.info(f"ℹ️ {student_name}: אין תצפיות קודמות.")
+            st.info(f"ℹ️ {student_name}: אין תצפיות קודמות (בדרייב או מקומית).")
 
         st.markdown("---")
         
@@ -182,18 +174,28 @@ with tab1:
         up_files = st.file_uploader("📷 צרף תמונות", accept_multiple_files=True, type=['png','jpg','jpeg'], key=f"up_{it}")
 
         if st.session_state.last_feedback:
-            st.markdown(f'<div class="feedback-box"><b>💡 משוב:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="feedback-box"><b>💡 משוב AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
 
         if st.button("💾 שמור תצפית"):
-            if not challenge: st.error("חובה להזין תיאור תצפית.")
+            if not challenge: st.error("חובה להזין תיאור.")
             else:
-                with st.spinner("מעלה ושומר..."):
-                    links = [upload_file_to_drive(f, svc) for f in up_files] if up_files and svc else []
+                with st.spinner("שומר..."):
+                    # העלאה לדרייב
+                    links = []
+                    if up_files and svc:
+                        for f in up_files:
+                            link = svc.files().create(body={'name': f.name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, 
+                                                     media_body=MediaIoBaseUpload(io.BytesIO(f.getvalue()), mimetype=f.type), 
+                                                     supportsAllDrives=True).execute().get('webViewLink')
+                            if link: links.append(link)
+
+                    # בניית רשומה התואמת לאקסל שלך
                     entry = {
                         "date": date.today().isoformat(), "student_name": student_name, "work_method": work_method,
                         "exercise_difficulty": ex_diff, "drawings_count": int(drw_cnt), "duration_min": int(dur_min),
-                        "s1": int(s_conv), "s2": int(s_proj), "s3": int(s_modl), "s4": int(s_effi), "tags": tags,
-                        "challenge": challenge, "interpretation": interpretation, "file_links": [l for l in links if l],
+                        "cat_convert_rep": int(s_conv), "cat_proj_trans": int(s_proj), 
+                        "cat_3d_support": int(s_modl), "cat_self_efficacy": int(s_effi), "tags": tags,
+                        "challenge": challenge, "interpretation": interpretation, "file_links": links,
                         "timestamp": datetime.now().isoformat()
                     }
                     with open(DATA_FILE, "a", encoding="utf-8") as f:
@@ -210,7 +212,7 @@ with tab1:
             with chat_cont:
                 st.chat_message("user").write(q)
                 st.chat_message("assistant").write(a)
-        u_q = st.chat_input("שאל את היועץ על מגמות הסטודנט...")
+        u_q = st.chat_input("שאל את הסוכן...")
         if u_q:
             resp = get_ai_response("chat", {"name": student_name, "history": st.session_state.student_context, "question": u_q})
             st.session_state.chat_history.append((u_q, resp))
@@ -219,21 +221,17 @@ with tab1:
 # --- 5. טאב סנכרון ---
 with tab2:
     if os.path.exists(DATA_FILE):
-        if st.button("🚀 סנכרן הכל לדרייב (Master)"):
+        if st.button("🚀 סנכרן הכל לדרייב"):
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 all_entries = [json.loads(line) for line in f if line.strip()]
             if update_master_in_drive(pd.DataFrame(all_entries), svc):
-                st.success("הנתונים סונכרנו בהצלחה לקובץ ה-Master!")
+                st.success("הסנכרון הושלם!")
 
-# --- 6. טאב ניתוח מגמות ---
+# --- 6. טאב ניתוח ---
 with tab3:
-    st.header("📊 ניתוח מגמות AI")
-    if st.button("✨ ייצר ניתוח כיתתי"):
+    st.header("📊 ניתוח כיתתי")
+    if st.button("✨ בצע ניתוח מגמות"):
         df, _ = load_master_from_drive(id(svc))
         if df is not None:
-            stats = df.groupby(['student_name'])[['s1', 's2', 's3', 's4']].mean().to_string()
-            st.write(get_ai_response("chat", {"name": "כיתה", "history": stats, "question": "נתח את הביצועים הממוצעים של הכיתה וציין חולשות משותפות."}))
-
-
-
-
+            stats = df.groupby(['student_name'])[['cat_convert_rep', 'cat_proj_trans']].mean().to_string()
+            st.write(get_ai_response("chat", {"name": "כיתה", "history": stats, "question": "נתח את המגמות הכלליות."}))
