@@ -151,39 +151,51 @@ if student_name != st.session_state.last_selected_student:
 tab1, tab2, tab3 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח"])
 
 with tab1:
-    if st.session_state.show_success_bar:
-        st.success(f"✅ נמצאה היסטוריה עבור {student_name}.")
-    else:
-        st.info(f"ℹ️ {student_name}: אין תצפיות קודמות.")
+    # 1. בחירת הסטודנט (החלק הכי חשוב)
+    it = st.session_state.it
+    student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
+    
+    # 2. לוגיקת החיפוש והטעינה (מבוצעת רק כשהשם משתנה)
+    if student_name != st.session_state.last_selected_student:
+        st.session_state.chat_history = []
+        st.session_state.show_success_bar = False
+        st.session_state.student_context = "" 
         
+        with st.spinner(f"סורק היסטוריה עבור {student_name}..."):
+            # טעינה מהדרייב ומהקובץ המקומי
+            df_hist, _ = load_master_from_drive(id(svc))
+            df_local = pd.DataFrame([json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")] if os.path.exists(DATA_FILE) else [])
+            
+            # איחוד מקורות
+            full_data = pd.concat([df_hist, df_local], ignore_index=True) if df_hist is not None else df_local
+            
+            if not full_data.empty and 'student_name' in full_data.columns:
+                # ניקוי רווחים לחיפוש מדויק
+                full_data['student_name_clean'] = full_data['student_name'].astype(str).str.strip()
+                search_term = student_name.strip()
+                
+                match = full_data[full_data['student_name_clean'] == search_term]
+                
+                if not match.empty:
+                    st.session_state.student_context = match.tail(15).to_string()
+                    st.session_state.show_success_bar = True
+                else:
+                    st.session_state.show_success_bar = False
+            
+        st.session_state.last_selected_student = student_name
+        st.rerun()
+
+    # 3. הצגת הודעת סטטוס (ירוק/כחול) - פעם אחת בלבד
+    if st.session_state.show_success_bar:
+        st.success(f"✅ נמצאה היסטוריה עבור {student_name}. הסוכן מעודכן.")
+    else:
+        st.info(f"ℹ️ {student_name}: אין תצפיות קודמות (בדרייב או מקומית).")
+
+    # 4. פתיחת העמודות לשאר הטופס והצ'אט
     col_in, col_chat = st.columns([1.2, 1])
     with col_in:
-        # כאן ממשיך הטופס שלך...
-                
-                # איחוד מקורות
-                full_data = pd.concat([df_hist, df_local], ignore_index=True) if df_hist is not None else df_local
-                
-                if not full_data.empty and 'student_name' in full_data.columns:
-                    # ניקוי רווחים משני הצדדים לפני ההשוואה
-                    full_data['student_name_clean'] = full_data['student_name'].astype(str).str.strip()
-                    search_term = student_name.strip()
-                    
-                    match = full_data[full_data['student_name_clean'] == search_term]
-                    
-                    if not match.empty:
-                        st.session_state.student_context = match.tail(15).to_string()
-                        st.session_state.show_success_bar = True
-                    else:
-                        st.session_state.show_success_bar = False
-                
-            st.session_state.last_selected_student = student_name
-            st.rerun()
-
-        # הצגת הסטריפ (מחוץ לבלוק ה-if כדי שיישאר יציב ברינדור)
-        if st.session_state.show_success_bar:
-            st.success(f"✅ נמצאה היסטוריה עבור {student_name}. הסוכן מעודכן.")
-        else:
-            st.info(f"ℹ️ {student_name}: אין תצפיות קודמות (בדרייב או מקומית).")
+        # כאן ממשיכים שאר שדות הטופס שלך (רמת קושי, סליידרים וכו')
+        pass # תמשיך מכאן עם שאר הקוד המקורי שלך
 
         # טופס מלא
         c1, c2 = st.columns(2)
@@ -255,5 +267,6 @@ with tab3:
         if df is not None:
             stats = df.groupby(['student_name'])[['s1', 's2', 's3', 's4']].mean().to_string()
             st.markdown(get_ai_response("chat", {"name": "מערכת", "history": stats, "question": "נתח את המגמות הכלליות של הכיתה"}))
+
 
 
