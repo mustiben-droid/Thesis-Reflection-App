@@ -177,16 +177,75 @@ with tab2:
             os.remove(DATA_FILE); st.success("סונכרן!"); st.rerun()
 
 with tab3:
-    if full_df.empty: st.info("אין נתונים.")
+    if full_df.empty:
+        st.info("אין נתונים להצגת ניתוח.")
     else:
-        st.header("📊 ניתוח מגמות")
-        sel = st.selectbox("בחר סטודנט", full_df['student_name'].unique())
-        sd = full_df[full_df['student_name'] == sel].sort_values('date')
+        st.header("📊 ניתוח מחקרי ותובנות AI")
         
-        # בחירה בטוחה של עמודות קיימות למניעת KeyError
-        metrics = [c for c in ['cat_convert_rep', 'cat_proj_trans', 'cat_self_efficacy'] if c in sd.columns]
+        valid_names = [n for n in full_df['student_name'].unique() if pd.notna(n)]
+        sel = st.selectbox("בחר סטודנט לניתוח:", valid_names)
+        sd = full_df[full_df['student_name'] == sel].sort_values('date')
+
+        # 1. תצוגת מגמות (בדיקת עמודות בטוחה)
+        metrics = [c for c in ['cat_convert_rep', 'cat_proj_trans', 'cat_self_efficacy', 'cat_3d_support'] if c in sd.columns]
         if metrics and sd[metrics].notna().any().any():
+            st.subheader(f"📈 מגמות התקדמות עבור {sel}")
             st.line_chart(sd.set_index('date')[metrics])
-            
-        qual_cols = [c for c in ['date', 'exercise_difficulty', 'challenge', 'interpretation'] if c in sd.columns]
-        st.dataframe(sd[qual_cols])
+
+        st.markdown("---")
+        
+        # 2. כפתור הניתוח והשמירה לדרייב
+        if st.button(f"✨ הפק ניתוח ושמור בדרייב עבור {sel}"):
+            with st.spinner("ג'ימיני מנתח ושומר ב-Google Drive..."):
+                # הכנת הנתונים
+                stats = sd[metrics].mean().to_dict() if metrics else "אין נתונים כמותיים"
+                text_data = sd[['date', 'challenge', 'interpretation']].dropna(subset=['challenge']).to_string() if 'challenge' in sd.columns else "אין תיאורים"
+                
+                prompt = f"""
+                נתח את הסטודנט {sel} עבור פרק הממצאים בתזה.
+                ממוצעים סטטיסטיים: {stats}
+                תיאורי תצפית:
+                {text_data}
+                
+                אנא בצע ניתוח מגמות סטטיסטי ואיכותני מלא בעברית אקדמית.
+                """
+                
+                # הפעלת AI
+                genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                analysis_result = model.generate_content(prompt).text
+                
+                # שמירה ישירות ל-Google Drive
+                if svc:
+                    try:
+                        file_name = f"ניתוח_מחקרי_{sel}_{date.today().strftime('%Y-%m-%d')}.txt"
+                        file_metadata = {
+                            'name': file_name,
+                            'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []
+                        }
+                        
+                        # הפיכת הטקסט לזרם נתונים להעלאה
+                        text_stream = io.BytesIO(analysis_result.encode('utf-8'))
+                        media = MediaIoBaseUpload(text_stream, mimetype='text/plain')
+                        
+                        # ביצוע ההעלאה
+                        uploaded_file = svc.files().create(
+                            body=file_metadata,
+                            media_body=media,
+                            fields='id, webViewLink',
+                            supportsAllDrives=True
+                        ).execute()
+                        
+                        st.success(f"✅ הניתוח נשמר בהצלחה בדרייב!")
+                        st.markdown(f"[🔗 צפה בקובץ בדרייב]({uploaded_file.get('webViewLink')})")
+                    except Exception as e:
+                        st.error(f"שגיאה בשמירה לדרייב: {e}")
+                
+                # הצגת התוצאה גם במסך לשימוש מיידי
+                st.markdown("### 📝 סיכום הניתוח:")
+                st.info(analysis_result)
+
+        # 3. נתונים גולמיים
+        st.subheader("📋 נתונים גולמיים")
+        safe_cols = [c for c in ['date', 'work_method', 'exercise_difficulty', 'challenge', 'interpretation'] if c in sd.columns]
+        st.dataframe(sd[safe_cols])
