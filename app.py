@@ -11,7 +11,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from datetime import date, datetime
 
-# --- 1. הגדרות תשתית ---
+# --- 1. הגדרות תשתית ולוגים ---
 logging.basicConfig(level=logging.INFO)
 DATA_FILE = "reflections.jsonl"
 MASTER_FILENAME = "All_Observations_Master.xlsx"
@@ -19,9 +19,9 @@ GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 TAGS_OPTIONS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="מערכת תצפית תזה - 38.0", layout="wide")
+st.set_page_config(page_title="מערכת תצפית תזה - 40.0", layout="wide")
 
-# RTL Styling
+# RTL ועיצוב
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
@@ -32,7 +32,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. פונקציות עזר (Drive & AI) ---
+# --- 2. פונקציות Drive ו-AI ---
 @st.cache_resource
 def get_drive_service():
     try:
@@ -41,7 +41,7 @@ def get_drive_service():
         json_str = base64.b64decode(b64).decode("utf-8")
         creds = Credentials.from_service_account_info(json.loads(json_str), scopes=["https://www.googleapis.com/auth/drive"])
         return build("drive", "v3", credentials=creds)
-    except Exception as e: return None
+    except: return None
 
 def upload_file_to_drive(uploaded_file, svc):
     try:
@@ -88,17 +88,17 @@ def update_master_in_drive(new_data_df, svc):
 
 def get_ai_response(prompt_type, context_data):
     api_key = st.secrets.get("GOOGLE_API_KEY")
-    if not api_key: return "שגיאת API"
+    if not api_key: return "שגיאת API Key"
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
         prompts = {
-            "chat": f"אתה עוזר מחקר. היסטוריה של {context_data['name']}: {context_data['history']}. שאלה: {context_data['question']}",
-            "feedback": f"תצפית: {context_data['challenge']}. תן 2 שורות משוב פדגוגי בונה."
+            "chat": f"אתה עוזר מחקר אקדמי. היסטוריה של {context_data['name']}: {context_data['history']}. שאלה: {context_data['question']}",
+            "feedback": f"מנחה פדגוגי. תצפית: {context_data['challenge']}. תן 2 שורות משוב בונה."
         }
         res = model.generate_content(prompts[prompt_type])
         return res.text
-    except: return "שגיאה ב-AI"
+    except: return "שגיאה בתקשורת עם ה-AI"
 
 # --- 3. ניהול מצב (Session State) ---
 if "it" not in st.session_state: st.session_state.it = 0
@@ -109,95 +109,55 @@ if "show_success_bar" not in st.session_state: st.session_state.show_success_bar
 if "last_feedback" not in st.session_state: st.session_state.last_feedback = ""
 
 svc = get_drive_service()
-st.title("🎓 מערכת תצפית חכמה - גרסה 38.0")
-
-# --- לוגיקת טעינה מרכזית (מחוץ לטאבים) ---
-if "last_selected_student" not in st.session_state: st.session_state.last_selected_student = ""
-
-# בחירת הסטודנט קורית כאן כדי שהמידע ייטען מיד
-student_name = st.sidebar.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key="global_student_sel")
-
-if student_name != st.session_state.last_selected_student:
-    st.session_state.show_success_bar = False
-    st.session_state.student_context = ""
-    
-    with st.spinner(f"טוען נתונים: {student_name}..."):
-        # טעינה מהדרייב
-        df_hist, _ = load_master_from_drive(id(svc))
-        
-        # טעינה מקומית - עם טיפול בשגיאות למקרה שהקובץ חסר
-        df_local = pd.DataFrame()
-        if os.path.exists(DATA_FILE):
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                df_local = pd.DataFrame([json.loads(l) for l in f if l.strip()])
-        
-        # איחוד וחיפוש
-        full_data = pd.concat([df_hist, df_local], ignore_index=True) if df_hist is not None else df_local
-        
-        if not full_data.empty and 'student_name' in full_data.columns:
-            # ניקוי אגרסיבי של רווחים
-            full_data['student_name_clean'] = full_data['student_name'].astype(str).str.strip()
-            match = full_data[full_data['student_name_clean'] == student_name.strip()]
-            
-            if not match.empty:
-                st.session_state.student_context = match.tail(15).to_string()
-                st.session_state.show_success_bar = True
-
-    st.session_state.last_selected_student = student_name
-    st.session_state.chat_history = []
-    st.rerun()
-
-# --- בניית הטאבים ---
+st.title("🎓 מערכת תצפית חכמה - גרסה 40.0")
 tab1, tab2, tab3 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח"])
 
+# --- 4. טאב הזנה ומשוב ---
 with tab1:
-    # 1. בחירת הסטודנט (החלק הכי חשוב)
-    it = st.session_state.it
-    student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
-    
-    # 2. לוגיקת החיפוש והטעינה (מבוצעת רק כשהשם משתנה)
-    if student_name != st.session_state.last_selected_student:
-        st.session_state.chat_history = []
-        st.session_state.show_success_bar = False
-        st.session_state.student_context = "" 
-        
-        with st.spinner(f"סורק היסטוריה עבור {student_name}..."):
-            # טעינה מהדרייב ומהקובץ המקומי
-            df_hist, _ = load_master_from_drive(id(svc))
-            df_local = pd.DataFrame([json.loads(l) for l in open(DATA_FILE, "r", encoding="utf-8")] if os.path.exists(DATA_FILE) else [])
-            
-            # איחוד מקורות
-            full_data = pd.concat([df_hist, df_local], ignore_index=True) if df_hist is not None else df_local
-            
-            if not full_data.empty and 'student_name' in full_data.columns:
-                # ניקוי רווחים לחיפוש מדויק
-                full_data['student_name_clean'] = full_data['student_name'].astype(str).str.strip()
-                search_term = student_name.strip()
-                
-                match = full_data[full_data['student_name_clean'] == search_term]
-                
-                if not match.empty:
-                    st.session_state.student_context = match.tail(15).to_string()
-                    st.session_state.show_success_bar = True
-                else:
-                    st.session_state.show_success_bar = False
-            
-        st.session_state.last_selected_student = student_name
-        st.rerun()
-
-    # 3. הצגת הודעת סטטוס (ירוק/כחול) - פעם אחת בלבד
-    if st.session_state.show_success_bar:
-        st.success(f"✅ נמצאה היסטוריה עבור {student_name}. הסוכן מעודכן.")
-    else:
-        st.info(f"ℹ️ {student_name}: אין תצפיות קודמות (בדרייב או מקומית).")
-
-    # 4. פתיחת העמודות לשאר הטופס והצ'אט
     col_in, col_chat = st.columns([1.2, 1])
+    
     with col_in:
-        # כאן ממשיכים שאר שדות הטופס שלך (רמת קושי, סליידרים וכו')
-        pass # תמשיך מכאן עם שאר הקוד המקורי שלך
+        it = st.session_state.it
+        student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
+        
+        # לוגיקת טעינה (החלק שסידרנו)
+        if student_name != st.session_state.last_selected_student:
+            st.session_state.chat_history = []
+            st.session_state.show_success_bar = False
+            st.session_state.student_context = ""
+            
+            with st.spinner(f"טוען נתונים עבור {student_name}..."):
+                # טעינה משולבת
+                df_hist, _ = load_master_from_drive(id(svc))
+                df_local = pd.DataFrame()
+                if os.path.exists(DATA_FILE):
+                    try:
+                        with open(DATA_FILE, "r", encoding="utf-8") as f:
+                            df_local = pd.DataFrame([json.loads(l) for l in f if l.strip()])
+                    except: pass
+                
+                full_data = pd.concat([df_hist, df_local], ignore_index=True) if df_hist is not None else df_local
+                
+                if not full_data.empty and 'student_name' in full_data.columns:
+                    full_data['name_clean'] = full_data['student_name'].astype(str).str.strip()
+                    match = full_data[full_data['name_clean'] == student_name.strip()]
+                    
+                    if not match.empty:
+                        st.session_state.student_context = match.tail(15).to_string()
+                        st.session_state.show_success_bar = True
+            
+            st.session_state.last_selected_student = student_name
+            st.rerun()
 
-        # טופס מלא
+        # הצגת הסטריפ הירוק/כחול
+        if st.session_state.show_success_bar:
+            st.success(f"✅ נמצאה היסטוריה עבור {student_name}. הסוכן מוכן.")
+        else:
+            st.info(f"ℹ️ {student_name}: אין תצפיות קודמות.")
+
+        st.markdown("---")
+        
+        # שדות הטופס
         c1, c2 = st.columns(2)
         with c1:
             work_method = st.radio("🛠️ סוג תרגול:", ["🧊 בעזרת גוף מודפס", "🎨 ללא גוף (דמיון)"], key=f"wm_{it}", horizontal=True)
@@ -224,21 +184,22 @@ with tab1:
             st.markdown(f'<div class="feedback-box"><b>💡 משוב:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
 
         if st.button("💾 שמור תצפית"):
-            if not challenge: st.error("מלא תיאור.")
+            if not challenge: st.error("חובה להזין תיאור תצפית.")
             else:
-                with st.spinner("שומר..."):
-                    links = [upload_file_to_drive(f, svc) for f in up_files] if up_files else []
+                with st.spinner("מעלה ושומר..."):
+                    links = [upload_file_to_drive(f, svc) for f in up_files] if up_files and svc else []
                     entry = {
                         "date": date.today().isoformat(), "student_name": student_name, "work_method": work_method,
                         "exercise_difficulty": ex_diff, "drawings_count": int(drw_cnt), "duration_min": int(dur_min),
-                        "s1": s_conv, "s2": s_proj, "s3": s_modl, "s4": s_effi, "tags": tags,
+                        "s1": int(s_conv), "s2": int(s_proj), "s3": int(s_modl), "s4": int(s_effi), "tags": tags,
                         "challenge": challenge, "interpretation": interpretation, "file_links": [l for l in links if l],
                         "timestamp": datetime.now().isoformat()
                     }
                     with open(DATA_FILE, "a", encoding="utf-8") as f:
                         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                    
                     st.session_state.last_feedback = get_ai_response("feedback", {"challenge": challenge})
-                    st.session_state.show_success_bar = False
+                    st.session_state.it += 1
                     st.rerun()
 
     with col_chat:
@@ -248,25 +209,26 @@ with tab1:
             with chat_cont:
                 st.chat_message("user").write(q)
                 st.chat_message("assistant").write(a)
-        u_q = st.chat_input("שאל את היועץ...")
+        u_q = st.chat_input("שאל את היועץ על מגמות הסטודנט...")
         if u_q:
-            r = get_ai_response("chat", {"name": student_name, "history": st.session_state.student_context, "question": u_q})
-            st.session_state.chat_history.append((u_q, r))
+            resp = get_ai_response("chat", {"name": student_name, "history": st.session_state.student_context, "question": u_q})
+            st.session_state.chat_history.append((u_q, resp))
             st.rerun()
 
+# --- 5. טאב סנכרון ---
 with tab2:
     if os.path.exists(DATA_FILE):
-        if st.button("🚀 סנכרן הכל לדרייב"):
-            with open(DATA_FILE, "r", encoding="utf-8") as fh: all_entries = [json.loads(l) for l in fh if l.strip()]
-            if update_master_in_drive(pd.DataFrame(all_entries), svc): st.success("סונכרן!")
+        if st.button("🚀 סנכרן הכל לדרייב (Master)"):
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                all_entries = [json.loads(line) for line in f if line.strip()]
+            if update_master_in_drive(pd.DataFrame(all_entries), svc):
+                st.success("הנתונים סונכרנו בהצלחה לקובץ ה-Master!")
 
+# --- 6. טאב ניתוח מגמות ---
 with tab3:
-    st.header("📊 ניתוח נתונים")
-    if st.button("✨ בצע ניתוח מגמות AI"):
+    st.header("📊 ניתוח מגמות AI")
+    if st.button("✨ ייצר ניתוח כיתתי"):
         df, _ = load_master_from_drive(id(svc))
         if df is not None:
             stats = df.groupby(['student_name'])[['s1', 's2', 's3', 's4']].mean().to_string()
-            st.markdown(get_ai_response("chat", {"name": "מערכת", "history": stats, "question": "נתח את המגמות הכלליות של הכיתה"}))
-
-
-
+            st.write(get_ai_response("chat", {"name": "כיתה", "history": stats, "question": "נתח את הביצועים הממוצעים של הכיתה וציין חולשות משותפות."}))
