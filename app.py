@@ -165,10 +165,92 @@ with tab2:
             else: svc.files().create(body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
             os.remove(DATA_FILE); st.success("סונכרן בהצלחה!"); st.rerun()
 
-except Exception as e:
-                        st.error(f"שגיאה בהפקת הניתוח: {e}")
-                else:
-                    st.warning("לא נמצאו תצפיות לשבוע הנבחר, לכן לא ניתן לבצע ניתוח.")
+# --- Tab 3: ניתוח איכותני כיתתי (רוחב) ---
+with tab3:
+    if full_df.empty:
+        st.info("אין נתונים לניתוח. וודא שביצעת סנכרון בטאב 2.")
+    else:
+        st.header("🧠 ניתוח מחקר איכותני - רוחב כיתתי")
+        st.write("מנוע Gemini לניתוח תמות והצלבת תצפיות מכלל הסטודנטים.")
 
-# --- סוף הקובץ ---
-# הערה: וודאי שכל ההזחות (Indentation) מיושרות לפי הבלוקים של Streamlit.
+        # 1. הכנת הדאטה וסינון שבועי
+        df_an = full_df.copy()
+        
+        # מיפוי שמות עמודות גמיש למניעת KeyError
+        col_map = {
+            'date': ['date', 'Date', 'תאריך'],
+            'student_name': ['student_name', 'Student Name', 'שם סטודנט', 'name'],
+            'challenge': ['challenge', 'Challenge', 'תיאור התצפית', 'ch'],
+            'interpretation': ['interpretation', 'Interpretation', 'פרשנות מחקרית', 'int']
+        }
+        
+        for final_name, options in col_map.items():
+            for opt in options:
+                if opt in df_an.columns and final_name not in df_an.columns:
+                    df_an[final_name] = df_an[opt]
+
+        # וידוא עמודות קריטיות לפני תצוגה
+        req_cols = ['date', 'student_name', 'challenge', 'interpretation']
+        missing = [c for c in req_cols if c not in df_an.columns]
+        
+        if missing:
+            st.error(f"חסרות עמודות קריטיות בקובץ המאסטר: {missing}")
+        else:
+            # עיבוד תאריכים ושבועות
+            df_an['date'] = pd.to_datetime(df_an['date'], errors='coerce')
+            df_an = df_an.dropna(subset=['date'])
+            df_an['week'] = df_an['date'].dt.strftime('%Y - שבוע %U')
+            
+            weeks = sorted(df_an['week'].unique(), reverse=True)
+            sel_week = st.selectbox("בחר שבוע לניתוח רוחב:", weeks)
+            
+            # סינון לשבוע הנבחר
+            w_df = df_an[df_an['week'] == sel_week]
+            
+            if w_df.empty:
+                st.warning("לא נמצאו תצפיות בשבוע שנבחר.")
+            else:
+                st.subheader(f"📋 ריכוז נתונים לשבוע: {sel_week}")
+                st.dataframe(w_df[['date', 'student_name', 'challenge', 'interpretation']])
+
+                if st.button(f"✨ הפק ניתוח איכותני כולל לשבוע זה"):
+                    with st.spinner("ג'ימיני מנתח תמות מכלל התצפיות..."):
+                        
+                        # בניית הקשר מחקרי ל-AI
+                        research_context = ""
+                        for _, row in w_df.iterrows():
+                            research_context += f"סטודנט: {row['student_name']}\n"
+                            research_context += f"תצפית: {row['challenge']}\n"
+                            research_context += f"פרשנות חוקרת: {row['interpretation']}\n"
+                            research_context += "--- \n"
+
+                        prompt = f"""
+                        אתה חוקר אקדמי בכיר. נתח את נתוני שבוע {sel_week} עבור מחקר תזה.
+                        זהה תמות מרכזיות העולות מהתצפיות ומהפרשנות המחקרית של החוקרת.
+                        נסח פסקה אקדמית לממצאים בעברית רהוטה.
+                        
+                        נתונים:
+                        {research_context}
+                        """
+
+                        try:
+                            genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
+                            model = genai.GenerativeModel('gemini-1.5-flash')
+                            res = model.generate_content(prompt).text
+                            
+                            st.markdown("---")
+                            st.markdown("### 📝 תוצאות הניתוח:")
+                            st.info(res)
+                            
+                            # שמירה לדרייב
+                            if svc:
+                                f_name = f"ניתוח_איכותני_{sel_week.replace(' ', '_')}.txt"
+                                meta = {'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
+                                media = MediaIoBaseUpload(io.BytesIO(res.encode('utf-8')), mimetype='text/plain')
+                                svc.files().create(body=meta, media_body=media, supportsAllDrives=True).execute()
+                                st.success("✅ הניתוח נשמר בדרייב בהצלחה")
+                                
+                        except Exception as e:
+                            st.error(f"שגיאה בתהליך הניתוח: {e}")
+
+# --- סוף הקוד ---
