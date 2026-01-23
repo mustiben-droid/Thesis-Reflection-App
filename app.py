@@ -11,20 +11,17 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 
-# --- הגדרות לוגים ---
+# --- 1. הגדרות תשתית ---
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# --- הגדרות קבועות ---
 DATA_FILE = "reflections.jsonl"
 MASTER_FILENAME = "All_Observations_Master.xlsx"
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 TAGS_OPTIONS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="מערכת תצפית - גרסה 35.5", layout="wide")
+st.set_page_config(page_title="מערכת תצפית - גרסה 35.8", layout="wide")
 
-# --- RTL Styling ---
+# עיצוב RTL
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
@@ -36,8 +33,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- פונקציות תשתית (Drive & Cache) ---
-
+# --- 2. פונקציות עזר (Drive & AI) ---
 @st.cache_resource
 def get_drive_service():
     try:
@@ -46,7 +42,7 @@ def get_drive_service():
         json_str = base64.b64decode(b64).decode("utf-8")
         creds = Credentials.from_service_account_info(json.loads(json_str), scopes=["https://www.googleapis.com/auth/drive"])
         return build("drive", "v3", credentials=creds)
-    except Exception: return None
+    except: return None
 
 def upload_file_to_drive(uploaded_file, svc):
     try:
@@ -55,7 +51,7 @@ def upload_file_to_drive(uploaded_file, svc):
         media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
         file = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink', supportsAllDrives=True).execute()
         return file.get('webViewLink')
-    except Exception: return None
+    except: return None
 
 @st.cache_data(ttl=300)
 def load_master_from_drive(svc_id):
@@ -72,7 +68,7 @@ def load_master_from_drive(svc_id):
         while not done: _, done = downloader.next_chunk()
         fh.seek(0)
         return pd.read_excel(fh), target['id']
-    except Exception: return None, None
+    except: return None, None
 
 def update_master_in_drive(new_data_df, svc):
     try:
@@ -89,11 +85,11 @@ def update_master_in_drive(new_data_df, svc):
             svc.files().create(body=meta, media_body=media, supportsAllDrives=True).execute()
         st.cache_data.clear()
         return True
-    except Exception: return False
+    except: return False
 
 def get_ai_response(prompt_type, context_data):
     api_key = st.secrets.get("GOOGLE_API_KEY")
-    if not api_key: return "חסר מפתח API."
+    if not api_key: return "שגיאת API"
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
@@ -104,9 +100,9 @@ def get_ai_response(prompt_type, context_data):
         }
         res = model.generate_content(prompts[prompt_type])
         return res.text
-    except Exception: return "שגיאה ב-AI."
+    except: return "שגיאה ב-AI"
 
-# --- ניהול מצב (Session State) ---
+# --- 3. ניהול מצב (Session State) ---
 if "it" not in st.session_state: st.session_state.it = 0
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 if "student_context" not in st.session_state: st.session_state.student_context = ""
@@ -115,9 +111,10 @@ if "show_success_bar" not in st.session_state: st.session_state.show_success_bar
 if "last_obs_feedback" not in st.session_state: st.session_state.last_obs_feedback = ""
 
 svc = get_drive_service()
-st.title("🎓 מנחה מחקר חכם - 35.5")
+st.title("🎓 מנחה מחקר חכם - 35.8")
 tab1, tab2, tab3 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "🤖 ניתוח מגמות"])
 
+# --- 4. טאב הזנה ומשוב ---
 with tab1:
     col_in, col_chat = st.columns([1.2, 1])
     with col_in:
@@ -153,13 +150,13 @@ with tab1:
             with q2: duration_min = st.number_input("זמן עבודה (דק')", min_value=0, step=5, key=f"dm_{it}")
 
             st.markdown("### 📊 מדדים כמותיים (1-5)")
-            m1, m2 = st.columns(2)
-            with m1:
-                cat_convert_rep = st.slider("המרת ייצוגים", 1, 5, 3, key=f"s1_{it}")
-                cat_proj_trans = st.slider("מעבר בין היטלים", 1, 5, 3, key=f"s2_{it}")
-            with m2:
-                cat_3d_support = st.slider("שימוש במודל", 1, 5, 3, key=f"s3_{it}")
-                cat_self_efficacy = st.slider("מסוגלות עצמית", 1, 5, 3, key=f"s4_{it}")
+            col_m1, col_m2 = st.columns(2)
+            with col_m1:
+                s_conv = st.slider("המרת ייצוגים", 1, 5, 3, key=f"s1_{it}")
+                s_proj = st.slider("מעבר בין היטלים", 1, 5, 3, key=f"s2_{it}")
+            with col_m2:
+                s_modl = st.slider("שימוש במודל", 1, 5, 3, key=f"s3_{it}")
+                s_effi = st.slider("מסוגלות עצמית", 1, 5, 3, key=f"s4_{it}")
 
             tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
             challenge = st.text_area("🗣️ תיאור ותצפית", key=f"ch_{it}")
@@ -172,20 +169,20 @@ with tab1:
             if st.button("💾 שמור תצפית"):
                 if not challenge: st.error("מלא תיאור.")
                 else:
-                    links = [upload_file_to_drive(f, svc) for f in uploaded_files] if uploaded_files and svc else []
-                    entry = {
-                        "date": date.today().isoformat(), "student_name": student_name, "work_method": work_method,
-                        "exercise_difficulty": exercise_diff, "drawings_count": int(drawings_count), "duration_min": int(duration_min),
-                        "cat_convert_rep": int(cat_convert_rep), "cat_proj_trans": int(cat_proj_trans),
-                        "cat_3d_support": int(cat_3d_support), "cat_self_efficacy": int(cat_self_efficacy),
-                        "challenge": challenge, "interpretation": interpretation, "tags": tags, 
-                        "file_links": [l for l in links if l], "timestamp": datetime.now().isoformat()
-                    }
-                    with open(DATA_FILE, "a", encoding="utf-8") as f:
-                        f.write(json.dumps(entry, ensure_ascii=False) + "\n"); f.flush(); os.fsync(f.fileno())
-                    st.session_state.last_obs_feedback = get_ai_response("feedback", {"challenge": challenge, "tags": tags})
-                    st.session_state.show_success_bar = False
-                    st.rerun()
+                    with st.spinner("מעלה תמונות ושומר..."):
+                        links = [upload_file_to_drive(f, svc) for f in uploaded_files] if uploaded_files and svc else []
+                        entry = {
+                            "date": date.today().isoformat(), "student_name": student_name, "work_method": work_method,
+                            "exercise_difficulty": exercise_diff, "drawings_count": int(drawings_count), "duration_min": int(duration_min),
+                            "cat_convert_rep": int(s_conv), "cat_proj_trans": int(s_proj), "cat_3d_support": int(s_modl), "cat_self_efficacy": int(s_effi),
+                            "challenge": challenge, "interpretation": interpretation, "tags": tags, 
+                            "file_links": [l for l in links if l], "timestamp": datetime.now().isoformat()
+                        }
+                        with open(DATA_FILE, "a", encoding="utf-8") as f:
+                            f.write(json.dumps(entry, ensure_ascii=False) + "\n"); f.flush(); os.fsync(f.fileno())
+                        st.session_state.last_obs_feedback = get_ai_response("feedback", {"challenge": challenge, "tags": tags})
+                        st.session_state.show_success_bar = False
+                        st.rerun()
 
     with col_chat:
         st.subheader(f"🤖 יועץ: {student_name}")
@@ -197,17 +194,18 @@ with tab1:
             resp = get_ai_response("chat", {"name": student_name, "history": st.session_state.student_context, "question": user_q})
             st.session_state.chat_history.append((user_q, resp)); st.rerun()
 
+# --- 5. טאב סנכרון ---
 with tab2:
     if os.path.exists(DATA_FILE):
         if st.button("🚀 סנכרן לדרייב"):
             with open(DATA_FILE, "r", encoding="utf-8") as fh: all_entries = [json.loads(l) for l in fh if l.strip()]
-            if update_master_in_drive(pd.DataFrame(all_entries), svc): st.success("סונכרן!")
+            if update_master_in_drive(pd.DataFrame(all_entries), svc): st.success("סונכרן בהצלחה!")
 
+# --- 6. טאב ניתוח מגמות ---
 with tab3:
     st.header("🤖 ניתוח מגמות")
-    if st.button("✨ ייצר ניתוח עומק"):
+    if st.button("✨ ייצר ניתוח"):
         df, _ = load_master_from_drive(id(svc))
         if df is not None:
-            score_cols = ['cat_convert_rep', 'cat_proj_trans', 'cat_3d_support', 'cat_self_efficacy']
-            stats = df.groupby(['work_method'])[score_cols].mean().round(2).to_string()
+            stats = df.groupby(['work_method'])[['cat_convert_rep', 'cat_proj_trans']].mean().round(2).to_string()
             st.markdown(get_ai_response("analysis", {"stats": stats, "raw": df.tail(10).to_string()}))
