@@ -13,13 +13,15 @@ MASTER_FILENAME = st.secrets.get("MASTER_FILENAME", "All_Observations_Master.xls
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID", "")
 DATA_FILE = "local_data.json"
 
-# --- חיבור ל-Google Drive (שחזור גרסה יציבה) ---
+# --- פונקציית חיבור ל-Google Drive ---
 @st.cache_resource
 def get_drive_service():
     try:
         if "GDRIVE_SERVICE_ACCOUNT_B64" in st.secrets:
             b64 = st.secrets["GDRIVE_SERVICE_ACCOUNT_B64"]
-            js = base64.b64decode(b64).decode("utf-8")
+            # ניקוי תווים מיותרים לפני הפענוח
+            clean_b64 = "".join(b64.split()).strip()
+            js = base64.b64decode(clean_b64).decode("utf-8")
             info = json.loads(js)
             creds = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive"])
             return build("drive", "v3", credentials=creds)
@@ -97,17 +99,19 @@ with tab2:
                     
                     new_df = pd.DataFrame(local_entries)
                     
-                    # איחוד עם הדאטה הקיים והסרת כפילויות
-                    updated_df = pd.concat([full_df, new_df], ignore_index=True)
+                    # איחוד עם הדאטה הקיים
+                    if not full_df.empty:
+                        updated_df = pd.concat([full_df, new_df], ignore_index=True)
+                    else:
+                        updated_df = new_df
+                        
                     updated_df = updated_df.drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
 
-                    # יצירת קובץ אקסל בזיכרון
                     buf = io.BytesIO()
                     with pd.ExcelWriter(buf, engine='openpyxl') as w:
                         updated_df.to_excel(w, index=False)
                     buf.seek(0)
 
-                    # חיפוש הקובץ בדרייב לעדכון
                     res = svc.files().list(q=f"name = '{MASTER_FILENAME}'", supportsAllDrives=True).execute().get('files', [])
                     media = MediaIoBaseUpload(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
@@ -133,7 +137,6 @@ with tab3:
     else:
         st.header("🧠 ניתוח תמות כיתתי")
         
-        # עיבוד תאריכים ושבועות
         df_an = full_df.copy()
         df_an['date'] = pd.to_datetime(df_an['date'], errors='coerce')
         df_an = df_an.dropna(subset=['date'])
@@ -144,33 +147,22 @@ with tab3:
         
         w_df = df_an[df_an['week'] == sel_week]
         
-        # הצגת נתונים לווידוא
         st.subheader(f"📋 תצפיות שנמצאו לשבוע {sel_week}")
-        # וידוא עמודות קיימות בטבלה
-        cols_to_show = [c for c in ['student_name', 'challenge', 'insight'] if c in w_df.columns]
-        st.dataframe(w_df[cols_to_show])
+        # הצגת עמודות קיימות בבטחה
+        cols = [c for c in ['student_name', 'challenge', 'insight'] if c in w_df.columns]
+        st.dataframe(w_df[cols])
 
         if st.button("✨ הפק ניתוח איכותני (Gemini) ושמור לדרייב"):
-            if 'insight' not in w_df.columns:
-                st.error("לא נמצאה עמודת 'insight' באקסל. וודא שהנתונים נשמרו נכון.")
+            # וידוא עמודות קריטיות לניתוח
+            if 'challenge' not in w_df.columns or 'insight' not in w_df.columns:
+                st.error("חסרות עמודות 'challenge' או 'insight' באקסל.")
             else:
-                with st.spinner("מנתח תמות וקשרים..."):
-                    # בניית ההקשר ל-AI
+                with st.spinner("מנתח תמות..."):
                     research_text = ""
                     for _, row in w_df.iterrows():
-                        research_text += f"סטודנט: {row['student_name']}\n"
-                        research_text += f"תצפית: {row['challenge']}\n"
-                        research_text += f"תובנה: {row['insight']}\n"
-                        research_text += "--- \n"
+                        research_text += f"סטודנט: {row['student_name']}\nתצפית: {row['challenge']}\nתובנה: {row['insight']}\n---\n"
 
-                    prompt = f"""
-                    אתה חוקר אקדמי בכיר. בצע ניתוח תמטי (Thematic Analysis) על נתוני שבוע {sel_week}.
-                    זהה דפוסי למידה וקשיים קוגניטיביים שחזרו אצל מספר סטודנטים.
-                    נסח פסקה אקדמית לפרק הממצאים בעברית רהוטה ומקצועית.
-                    
-                    נתונים:
-                    {research_text}
-                    """
+                    prompt = f"אתה חוקר אקדמי. בצע ניתוח תמטי לשבוע {sel_week}. נתונים: {research_text}"
 
                     try:
                         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
@@ -178,27 +170,24 @@ with tab3:
                         res = model.generate_content(prompt).text
                         
                         st.markdown("---")
-                        st.markdown("### 📝 תוצאות הניתוח:")
                         st.info(res)
                         
-                        # שמירה לדרייב כקובץ טקסט
                         if svc:
-                            f_name = f"ניתוח_איכותני_{sel_week.replace(' ', '_')}.txt"
+                            f_name = f"ניתוח_שבועי_{sel_week.replace(' ', '_')}.txt"
                             media = MediaIoBaseUpload(io.BytesIO(res.encode('utf-8')), mimetype='text/plain')
                             svc.files().create(
                                 body={'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []},
                                 media_body=media,
                                 supportsAllDrives=True
                             ).execute()
-                            st.success(f"✅ הניתוח נשמר בדרייב בשם: {f_name}")
+                            st.success(f"הניתוח נשמר בדרייב")
                     except Exception as e:
-                        st.error(f"שגיאה בהפקת הניתוח: {e}")
+                        st.error(f"שגיאה בניתוח: {e}")
 
-# --- שורת מצב תחתונה ---
+# --- סרגל צד למעקב ---
 st.sidebar.markdown("---")
 if svc:
     st.sidebar.success("✅ מחובר ל-Google Drive")
-    st.sidebar.write(f"📂 מאסטר: {MASTER_FILENAME}")
-    st.sidebar.write(f"📊 שורות במאגר: {len(full_df)}")
+    st.sidebar.write(f"📊 שורות במאסטר: {len(full_df)}")
 else:
     st.sidebar.error("❌ לא מחובר לדרייב")
