@@ -152,18 +152,74 @@ with tab1:
 
 # --- Tab 2: סנכרון ---
 with tab2:
+
+    # יצירת חיבור ל-Google Drive
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+
+        creds = service_account.Credentials.from_service_account_info(
+            st.secrets["GOOGLE_SERVICE_ACCOUNT"],
+            scopes=["https://www.googleapis.com/auth/drive"]
+        )
+
+        svc = build("drive", "v3", credentials=creds)
+
+    except Exception as e:
+        st.error(f"❌ שגיאה בהתחברות ל-Google Drive: {e}")
+        svc = None
+
     if st.button("🚀 סנכרן נתונים לדרייב"):
+
+        if svc is None:
+            st.error("❌ לא ניתן לסנכרן — אין חיבור ל-Google Drive.")
+            st.stop()
+
         if os.path.exists(DATA_FILE):
-            with open(DATA_FILE, "r", encoding="utf-8") as f: l_ = [json.loads(line) for line in f if line.strip()]
-            final = pd.concat([full_df, pd.DataFrame(l_)], ignore_index=True).drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                l_ = [json.loads(line) for line in f if line.strip()]
+
+            final = pd.concat(
+                [full_df, pd.DataFrame(l_)],
+                ignore_index=True
+            ).drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
+
             buf = io.BytesIO()
-            with pd.ExcelWriter(buf, engine='openpyxl') as w: final.to_excel(w, index=False)
+            with pd.ExcelWriter(buf, engine='openpyxl') as w:
+                final.to_excel(w, index=False)
             buf.seek(0)
-            res = svc.files().list(q=f"name = '{MASTER_FILENAME}'", supportsAllDrives=True).execute().get('files', [])
-            media = MediaIoBaseUpload(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            if res: svc.files().update(fileId=res[0]['id'], media_body=media, supportsAllDrives=True).execute()
-            else: svc.files().create(body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
-            os.remove(DATA_FILE); st.success("סונכרן בהצלחה!"); st.rerun()
+
+            # בדיקה אם הקובץ כבר קיים בדרייב
+            res = svc.files().list(
+                q=f"name = '{MASTER_FILENAME}'",
+                supportsAllDrives=True
+            ).execute().get('files', [])
+
+            media = MediaIoBaseUpload(
+                buf,
+                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+            if res:
+                svc.files().update(
+                    fileId=res[0]['id'],
+                    media_body=media,
+                    supportsAllDrives=True
+                ).execute()
+            else:
+                svc.files().create(
+                    body={
+                        'name': MASTER_FILENAME,
+                        'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []
+                    },
+                    media_body=media,
+                    supportsAllDrives=True
+                ).execute()
+
+            os.remove(DATA_FILE)
+            st.success("סונכרן בהצלחה!")
+            st.rerun()
+
 
 # --- Tab 3: ניתוח מחקרי איכותני שבועי (גרסה סופית ומתוקנת) ---
 
@@ -268,6 +324,7 @@ else:
                         st.error(f"שגיאה בהפקת הניתוח: {str(e)}")
 
 # --- סוף הקוד ---
+
 
 
 
