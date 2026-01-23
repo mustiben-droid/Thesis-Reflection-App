@@ -84,38 +84,42 @@ def get_ai_response(prompt_type, context_data):
         return "שגיאה: מפתח ה-AI לא מוגדר ב-Secrets."
     
     try:
-        # פקודה להכרחת שימוש בגרסה היציבה v1 במקום v1beta
-        os.environ["GOOGLE_GENERATIVE_AI_2_API_VERSION"] = "v1"
-        
+        # 1. הכרחת גרסת API יציבה דרך סביבת המערכת
+        os.environ["GOOGLE_API_USE_MTLS"] = "never" 
         genai.configure(api_key=api_key)
-        
-        # שימוש במודל gemini-1.5-flash (הכי עדכן כרגע)
-        model = genai.GenerativeModel('gemini-1.5-flash')
         
         history_str = str(context_data.get('history', ""))
         clean_history = history_str[:5000]
         
         if prompt_type == "chat":
             full_prompt = (
-                f"אתה עוזר מחקר אקדמי המנתח תצפיות של סטודנטים בחינוך גרפי. "
-                f"להלן נתוני העבר של הסטודנט {context_data['name']}:\n"
-                f"{clean_history}\n\n"
-                f"השאלה של המשתמש: {context_data['question']}\n"
-                f"ענה בצורה מקצועית וממוקדת בעברית."
+                f"נתח את נתוני הסטודנט {context_data['name']}:\n{clean_history}\n"
+                f"שאלה: {context_data['question']}"
             )
         else:
-            full_prompt = f"תן משוב פדגוגי קצר על התצפית: {context_data['challenge']}"
-            
-        response = model.generate_content(full_prompt)
+            full_prompt = f"תן משוב פדגוגי קצר: {context_data['challenge']}"
+
+        # 2. ניסיון חיבור מדורג - פותר את שגיאת ה-404
+        try:
+            # ניסיון א': הנתיב המלא והרשמי
+            model = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
+            response = model.generate_content(full_prompt)
+        except:
+            try:
+                # ניסיון ב': המודל היציב הקלאסי
+                model = genai.GenerativeModel(model_name='gemini-1.5-flash')
+                response = model.generate_content(full_prompt)
+            except:
+                # ניסיון ג': מודל ה-Pro (גיבוי אחרון)
+                model = genai.GenerativeModel(model_name='models/gemini-pro')
+                response = model.generate_content(full_prompt)
+        
         return response.text
             
     except Exception as e:
-        # אם עדיין יש 404, ננסה "לעקוף" את הבעיה עם מודל בסיסי יותר
-        try:
-            model = genai.GenerativeModel('models/gemini-1.5-flash')
-            return model.generate_content(full_prompt).text
-        except:
-            return f"שגיאה בחיבור ל-AI: {str(e)[:150]}"
+        # הצגת השגיאה הספציפית במידה והכל נכשל
+        return f"שגיאה טכנית ב-AI: {str(e)[:100]}"
+        
 # --- 2. ניהול מצב ---
 if "it" not in st.session_state: st.session_state.it = 0
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
@@ -224,6 +228,7 @@ with tab2:
             all_entries = [json.loads(line) for line in f if line.strip()]
         # לוגיקת סנכרון (update_master_in_drive)
         st.success("הנתונים מוכנים לסנכרון.")
+
 
 
 
