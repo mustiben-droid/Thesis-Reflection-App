@@ -12,7 +12,7 @@ CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "ג�
 TAGS_OPTIONS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 
-st.set_page_config(page_title="מערכת תצפית - 76.0", layout="wide")
+st.set_page_config(page_title="מערכת תצפית - 77.0", layout="wide")
 
 st.markdown("""
     <style>
@@ -24,12 +24,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 1. מודול טעינה ומיפוי ---
+# --- 1. מודול טעינה חסין שגיאות ---
 def normalize_name(name):
     if not isinstance(name, str): return ""
     return name.replace(" ", "").replace(".", "").replace("־", "").replace("-", "").strip()
 
-def robust_map_columns(df):
+def map_research_cols(df):
     if df is None or df.empty: return pd.DataFrame()
     df.columns = [str(c).strip() for c in df.columns]
     mapping = {
@@ -69,19 +69,20 @@ def load_full_dataset(svc):
                 done = False
                 while not done: _, done = downloader.next_chunk()
                 fh.seek(0)
-                all_dfs.append(robust_map_columns(pd.read_excel(fh)))
+                all_dfs.append(map_research_cols(pd.read_excel(fh)))
         except: pass
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
-                all_dfs.append(robust_map_columns(pd.DataFrame([json.loads(l) for l in f if l.strip()])))
+                all_dfs.append(map_research_cols(pd.DataFrame([json.loads(l) for l in f if l.strip()])))
         except: pass
     if not all_dfs: return pd.DataFrame()
     df = pd.concat(all_dfs, ignore_index=True, sort=False)
-    if 'student_name' in df.columns: df['name_clean'] = df['student_name'].apply(normalize_name)
+    if 'student_name' in df.columns:
+        df['name_clean'] = df['student_name'].apply(normalize_name)
     return df
 
-# --- 2. ניהול מצב (מבוסס גרסה 43) ---
+# --- 2. ניהול מצב (Session State) ---
 if "it" not in st.session_state: st.session_state.it = 0
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 if "student_context" not in st.session_state: st.session_state.student_context = ""
@@ -99,6 +100,7 @@ with tab1:
         it = st.session_state.it
         student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
         
+        # לוגיקת הסטריפ הירוק
         if student_name != st.session_state.last_selected_student:
             target = normalize_name(student_name)
             match = full_df[full_df['name_clean'] == target] if not full_df.empty else pd.DataFrame()
@@ -113,25 +115,38 @@ with tab1:
             st.rerun()
 
         if st.session_state.show_success_bar:
-            st.success(f"✅ נמצאה היסטוריה עבור {student_name}. הסוכן מעודכן.")
+            st.success(f"✅ נמצאה היסטוריה עבור {student_name}.")
 
         c1, c2 = st.columns(2)
         with c1:
             meth = st.radio("🛠️ תרגול:", ["🧊 גוף מודפס", "🎨 דמיון"], key=f"wm_{it}")
             diff = st.select_slider("📉 קושי:", ["קל", "בינוני", "קשה"], key=f"ed_{it}")
+            img_files = st.file_uploader("📸 העלאת תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"img_{it}")
         with c2:
             s1 = st.slider("המרה", 1, 5, 3, key=f"s1_{it}")
             s2 = st.slider("היטלים", 1, 5, 3, key=f"s2_{it}")
-            s3 = st.slider("מודל", 1, 5, 3, key=f"s3_{it}")
             s4 = st.slider("מסוגלות", 1, 5, 3, key=f"s4_{it}")
 
         tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
         challenge = st.text_area("🗣️ תיאור התצפית", key=f"ch_{it}")
         interp = st.text_area("🧠 פרשנות מחקרית", key=f"int_{it}")
 
-        if st.button("💾 שמור תצפית"):
+        if st.button("💾 שמור"):
             if challenge:
-                entry = {"date": str(date.today()), "student_name": student_name, "work_method": meth, "exercise_difficulty": diff, "cat_convert_rep": s1, "cat_proj_trans": s2, "cat_3d_support": s3, "cat_self_efficacy": s4, "tags": tags, "challenge": challenge, "interpretation": interp, "timestamp": datetime.now().isoformat()}
+                links = []
+                if img_files and svc:
+                    for f in img_files:
+                        f_meta = {'name': f.name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
+                        media = MediaIoBaseUpload(io.BytesIO(f.getvalue()), mimetype=f.type)
+                        res = svc.files().create(body=f_meta, media_body=media, fields='webViewLink', supportsAllDrives=True).execute()
+                        links.append(res.get('webViewLink'))
+
+                entry = {
+                    "date": str(date.today()), "student_name": student_name, "work_method": meth, 
+                    "exercise_difficulty": diff, "cat_convert_rep": s1, "cat_proj_trans": s2, 
+                    "cat_self_efficacy": s4, "challenge": challenge, "interpretation": interp,
+                    "tags": tags, "file_links": links, "timestamp": datetime.now().isoformat()
+                }
                 with open(DATA_FILE, "a", encoding="utf-8") as f: f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                 st.session_state.it += 1
                 st.rerun()
@@ -144,37 +159,15 @@ with tab1:
         if p := st.chat_input("שאל את הסוכן..."):
             genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
             model = genai.GenerativeModel('gemini-1.5-flash')
-            resp = model.generate_content(f"Analyze student {student_name}. History:\n{st.session_state.student_context}\nQuestion: {p}").text
+            resp = model.generate_content(f"Student: {student_name}. History:\n{st.session_state.student_context}\nQuestion: {p}").text
             st.session_state.chat_history.append((p, resp)); st.rerun()
 
 with tab2:
-    if st.button("🚀 סנכרן הכל לדרייב"):
+    if st.button("🚀 סנכרן"):
         if os.path.exists(DATA_FILE):
             with open(DATA_FILE, "r", encoding="utf-8") as f: l_ = [json.loads(line) for line in f if line.strip()]
             final = pd.concat([full_df, pd.DataFrame(l_)], ignore_index=True).drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
             buf = io.BytesIO()
             with pd.ExcelWriter(buf, engine='openpyxl') as w: final.to_excel(w, index=False)
             buf.seek(0)
-            res = svc.files().list(q=f"name = '{MASTER_FILENAME}'", supportsAllDrives=True).execute().get('files', [])
-            media = MediaIoBaseUpload(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            if res: svc.files().update(fileId=res[0]['id'], media_body=media, supportsAllDrives=True).execute()
-            else: svc.files().create(body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
-            os.remove(DATA_FILE); st.success("סונכרן!"); st.rerun()
-
-with tab3:
-    if full_df.empty: st.info("אין נתונים.")
-    else:
-        st.header("📊 ניתוח מגמות")
-        m = st.radio("סוג ניתוח", ["אישי", "כיתתי"], horizontal=True)
-        if m == "אישי":
-            valid_names = [n for n in full_df['student_name'].unique() if pd.notna(n)]
-            sel = st.selectbox("בחר סטודנט", valid_names)
-            sd = full_df[full_df['student_name'] == sel].sort_values('date')
-            metrics = ['cat_convert_rep', 'cat_proj_trans', 'cat_3d_support', 'cat_self_efficacy']
-            available = [c for c in metrics if c in sd.columns and sd[c].notna().any()]
-            if available: st.line_chart(sd.set_index('date')[available])
-            st.dataframe(sd[['date', 'exercise_difficulty', 'challenge', 'interpretation']])
-        else:
-            d = st.selectbox("תאריך", sorted(full_df['date'].unique(), reverse=True))
-            day_df = full_df[full_df['date'] == d]
-            st.dataframe(day_df.mean(numeric_only=True))
+            res = svc.files().list(q=
