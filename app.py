@@ -166,49 +166,79 @@ with tab2:
             os.remove(DATA_FILE); st.success("סונכרן בהצלחה!"); st.rerun()
 
 # --- Tab 3: ניתוח מחקרי (תיקון הבאג) ---
+# --- Tab 3: ניתוח איכותני כיתתי (רוחב) ---
 with tab3:
-    if full_df.empty: st.info("אין נתונים לניתוח.")
+    if full_df.empty:
+        st.info("אין נתונים לניתוח.")
     else:
-        st.header("📊 ניתוח מגמות מחקרי")
-        mode = st.radio("בחר סוג ניתוח:", ["מגמה כיתתית כללית", "ניתוח סטודנט ספציפי"], horizontal=True)
-        
+        st.header("🧠 ניתוח מחקר איכותני - רוחב כיתתי")
+        st.write("בחר שבוע כדי להפיק ניתוח תמטי של כלל הסטודנטים שנצפו.")
+
+        # הכנת הדאטה וסינון שבועי
         df_an = full_df.copy()
         df_an['date'] = pd.to_datetime(df_an['date'], errors='coerce')
         df_an = df_an.dropna(subset=['date', 'student_name'])
-        df_an['student_name'] = df_an['student_name'].astype(str).str.strip()
-        metrics = [c for c in ['cat_convert_rep', 'cat_proportions', 'cat_model_usage', 'cat_self_efficacy', 'cat_model_difficulty'] if c in df_an.columns]
-        for m in metrics: df_an[m] = pd.to_numeric(df_an[m], errors='coerce')
+        df_an['week'] = df_an['date'].dt.strftime('%Y - שבוע %U')
+        
+        weeks = sorted(df_an['week'].unique(), reverse=True)
+        sel_week = st.selectbox("בחר שבוע לניתוח:", weeks)
+        
+        # סינון התצפיות לשבוע הנבחר
+        w_df = df_an[df_an['week'] == sel_week]
+        
+        st.subheader(f"📋 תצפיות גולמיות לשבוע הנבחר ({len(w_df)} תצפיות)")
+        st.dataframe(w_df[['date', 'student_name', 'challenge', 'interpretation']])
 
-        if mode == "מגמה כיתתית כללית":
-            st.subheader("📈 גרף התקדמות כיתתי ממוצע")
-            class_trend = df_an.groupby('date')[metrics].mean()
-            st.line_chart(class_trend)
-        else:
-            v_names = sorted(df_an['student_name'].unique())
-            cur_s = st.session_state.get('last_selected_student', v_names[0])
-            idx = v_names.index(cur_s) if cur_s in v_names else 0
-            sel_s = st.selectbox("בחר סטודנט לניתוח:", v_names, index=idx)
-            sd = df_an[df_an['student_name'] == sel_s].sort_values('date')
-            
-            st.subheader(f"📈 התקדמות אישית: {sel_s}")
-            st.line_chart(sd.set_index('date')[metrics])
-            
-            if st.button(f"✨ הפק ניתוח עומק איכותני לדרייב עבור {sel_s}"):
-                with st.spinner("מבצע ניתוח איכותני מעמיק..."):
-                    obs_data = sd[['date', 'challenge', 'interpretation']].to_string()
-                    prompt = f"""
-                    בצע ניתוח עומק איכותני כחוקר אקדמי עבור הסטודנט {sel_s}. 
-                    התבסס על התצפיות והפרשנויות הבאות:
-                    {obs_data}
+        if st.button(f"✨ הפק ניתוח איכותני כולל לשבוע זה (Gemini)"):
+            with st.spinner("ג'ימיני מנתח את כלל התצפיות והפרשנויות כחוקר איכותני..."):
+                
+                # הכנת הקשר מפורט לג'ימיני: כל תלמיד, מה הוא עשה ומה הייתה הפרשנות שלך
+                research_context = ""
+                for _, row in w_df.iterrows():
+                    research_context += f"סטודנט: {row['student_name']}\n"
+                    research_context += f"תצפית (Challenge): {row['challenge']}\n"
+                    research_context += f"פרשנות מחקרית (Interpretation): {row['interpretation']}\n"
+                    research_context += "--- \n"
+
+                prompt = f"""
+                אתה עוזר מחקר אקדמי בכיר המומחה בניתוח איכותני בשיטת 'Grounded Theory'.
+                לפניך ריכוז תצפיות שבועיות ({sel_week}) של כיתת שרטוט וייצוג מרחבי.
+                
+                המשימה שלך:
+                נתח את כלל הנתונים וחלץ תמות (Themes) מרכזיות שעלו מהשטח בשבוע זה.
+                
+                אנא התייחס בתוך הניתוח לנקודות הבאות:
+                1. דפוסים חוזרים: אילו קשיים קוגניטיביים או טכניים חזרו אצל מספר תלמידים?
+                2. ניתוח הפרשנויות: מה ניתן ללמוד מה'פרשנות המחקרית' שנכתבה על ידי החוקרת לגבי רמת ההבנה של הכיתה?
+                3. חלוקה לקטגוריות: סווג את הממצאים (למשל: תפיסה מרחבית, עבודה עם מודל פיזי, יכולת המרה).
+                4. פסקה לסיכום הממצאים: נסח פסקה אקדמית רהוטה שמתאימה לפרק הממצאים בתזה.
+                
+                הנתונים הגולמיים לניתוח:
+                {research_context}
+                """
+
+                # הפעלת Gemini
+                genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                
+                try:
+                    response = model.generate_content(prompt)
+                    analysis_result = response.text
                     
-                    זהה דפוסי פעולה, קשיים קוגניטיביים ותובנות העולות מתוך הפרשנויות המחקריות.
-                    נסח את הממצאים בעברית אקדמית רהוטה.
-                    """
-                    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    analysis_text = model.generate_content(prompt).text
+                    # הצגת התוצאה
+                    st.markdown("### 📝 תוצאות הניתוח האיכותני:")
+                    st.info(analysis_result)
+                    
+                    # שמירה בדרייב
                     if svc:
-                        f_name = f"ניתוח_עומק_{sel_s}_{date.today()}.txt"
+                        file_name = f"ניתוח_איכותני_כיתתי_{sel_week.replace(' ', '_')}.txt"
                         media = MediaIoBaseUpload(io.BytesIO(analysis_text.encode('utf-8')), mimetype='text/plain')
-                        svc.files().create(body={'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
-                        st.success("✅ הניתוח נשמר בדרייב"); st.info(analysis_text)
+                        svc.files().create(
+                            body={'name': file_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []},
+                            media_body=media,
+                            supportsAllDrives=True
+                        ).execute()
+                        st.success(f"✅ הניתוח נשמר בדרייב בשם: {file_name}")
+                        
+                except Exception as e:
+                    st.error(f"שגיאה בהפקת הניתוח: {e}")
