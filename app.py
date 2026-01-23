@@ -51,11 +51,31 @@ def map_research_cols(df):
 @st.cache_resource
 def get_drive_service():
     try:
-        b64 = st.secrets.get("GDRIVE_SERVICE_ACCOUNT_B64")
-        js = base64.b64decode(b64).decode("utf-8")
-        creds = Credentials.from_service_account_info(json.loads(js), scopes=["https://www.googleapis.com/auth/drive"])
-        return build("drive", "v3", credentials=creds)
-    except: return None
+        # בדיקה אם ה-Secret קיים בכלל
+        if "GOOGLE_SERVICE_ACCOUNT" in st.secrets:
+            # טעינה ישירה של ה-JSON (ללא Base64)
+            secret_data = st.secrets["GOOGLE_SERVICE_ACCOUNT"]
+            
+            # אם זה סטרינג, נהפוך לדיקשנרי. אם זה כבר דיקשנרי, נשתמש בו.
+            if isinstance(secret_data, str):
+                info = json.loads(secret_data)
+            else:
+                info = dict(secret_data)
+                
+            creds = Credentials.from_service_account_info(
+                info, 
+                scopes=["https://www.googleapis.com/auth/drive"]
+            )
+            return build("drive", "v3", credentials=creds)
+        else:
+            st.error("❌ ה-Secret בשם GOOGLE_SERVICE_ACCOUNT לא נמצא ב-Streamlit Settings.")
+            return None
+    except Exception as e:
+        st.error(f"❌ שגיאה בפיענוח ה-Secrets: {e}")
+        return None
+
+# הפעלה גלובלית
+svc = get_drive_service()
 
 def load_full_dataset(svc):
     all_dfs = []
@@ -335,6 +355,7 @@ else:
                         st.error(f"שגיאה בהפקת הניתוח: {str(e)}")
 
 # --- סוף הקוד ---
+
 
 
 
