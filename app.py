@@ -198,27 +198,33 @@ def render_tab_entry(svc, full_df):
             s_diff = st.slider("📉 רמת קושי התרגיל", 1, 5, 3, key=f"sd_{it}")
             s4 = st.slider("📏 פרופורציות ומימדים", 1, 5, 3, key=f"s4_{it}")
 
+      # 1. תגיות אבחון
         tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
+        
+        # 2. תצפית שדה
         ch_text = st.text_area("🗣️ תצפית שדה (Challenge):", height=150, key="field_obs_input")
         
-        ins = st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key=f"ins_{it}")
+        # 3. תובנה/פרשנות - כאן שינינו ל-Key קבוע כדי שה-AI יזהה את הטקסט
+        ins = st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key="insight_input")
+        
         up_files = st.file_uploader("📷 צרף תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{it}")
 
         # כפתורי פעולה
         c_btns = st.columns(2)
         with c_btns[0]:
-            if st.button("🔍 בקש רפלקציה (AI)"):
-                # משיכה ישירה מה-Session State
-                raw_text = st.session_state.get("field_obs_input", "")
-                if raw_text.strip():
-                    with st.spinner("היועץ מנתח..."):
-                        # פנייה בלשון זכר
-                        prompt = f"פנה אלי בלשון זכר. נתח תצפית עבור {student_name}: {raw_text}"
+            if st.button("🔍 בקש רפלקציה (AI)", key=f"ai_btn_{it}"):
+                # שינינו את המקור ל-insight_input
+                raw_insight = st.session_state.get("insight_input", "")
+                
+                if raw_insight.strip():
+                    with st.spinner("היועץ מנתח את התובנות שלך..."):
+                        # הנחיה ללשון זכר וניתוח התובנה
+                        prompt = f"פנה אלי בלשון זכר. נתח את התובנה המחקרית שלי לגבי הסטודנט {student_name}: {raw_insight}"
                         res = call_gemini(prompt)
                         st.session_state.last_feedback = res
                         st.rerun()
                 else:
-                    st.warning("התיבה ריקה. כתוב משהו ב'תצפית שדה' לפני הלחיצה.")
+                    st.warning("תיבת התובנות (Insight) ריקה. כתוב שם משהו כדי שאוכל לנתח.")
 
         with c_btns[1]:
             if st.button("💾 שמור תצפית", type="primary"):
@@ -232,10 +238,13 @@ def render_tab_entry(svc, full_df):
                             "duration_min": duration,
                             "drawings_count": drawings,
                             "work_method": work_method,
-                            "challenge": final_ch, # שמירת הטקסט הנכון
-                            "insight": ins,
+                            # משיכה ישירה מהמפתחות הקבועים שהגדרנו בתיבות
+                            "challenge": st.session_state.get("field_obs_input", ""),
+                            "insight": st.session_state.get("insight_input", ""),
+                            "tags": tags, # הוספנו גם את התגיות שסימנת
                             "timestamp": datetime.now().isoformat()
                         }
+                        
                         with open(DATA_FILE, "a", encoding="utf-8") as f:
                             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                         
@@ -407,6 +416,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
