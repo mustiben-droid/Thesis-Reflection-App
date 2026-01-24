@@ -30,22 +30,28 @@ st.markdown("""
         /* מניעת היפוך של סליידרים */
         [data-testid="stSlider"] { direction: ltr !important; }
 
-        /* --- התיקון לסלייד החותך --- */
+        /* תיקון להתראות ופסים ירוקים */
         [data-testid="stNotification"], .stAlert {
             direction: rtl;
             width: 100% !important;
-            display: block !important;
-            position: relative !important;
-            transform: none !important;
             margin: 10px 0 !important;
         }
         
-        /* מניעת מתיחה אנכית של אלמנטים בטלפון */
-        [data-testid="column"] {
-            width: 100% !important;
-            flex: 1 1 auto !important;
+        /* --- פתרון הסיידבר החותך בטלפון --- */
+        @media (max-width: 600px) {
+            /* הסתרת הסיידבר לחלוטין במובייל */
+            section[data-testid="stSidebar"] {
+                display: none !important;
+            }
+            /* ביטול השוליים המיותרים שהסיידבר משאיר */
+            .main .block-container {
+                padding-right: 1rem !important;
+                padding-left: 1rem !important;
+                width: 100% !important;
+            }
         }
 
+        /* עיצוב כפתורים ותיבות משוב */
         .stButton > button { width: 100%; font-weight: bold; border-radius: 12px; height: 3em; }
         .stButton button[kind="primary"] { background-color: #28a745; color: white; }
         .feedback-box { background-color: #f8f9fa; padding: 20px; border-radius: 15px; border: 1px solid #dee2e6; margin: 15px 0; color: #333; }
@@ -392,6 +398,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
