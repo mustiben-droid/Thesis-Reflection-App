@@ -199,24 +199,54 @@ def render_tab_entry(svc, full_df):
             s4 = st.slider("📏 פרופורציות ומימדים", 1, 5, 3, key=f"s4_{it}")
 
         tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
-        ch = st.text_area("🗣️ תצפית שדה (Challenge):", height=150, key=f"ch_{it}")
+        ch_text = st.text_area("🗣️ תצפית שדה (Challenge):", height=150, key="field_obs_input")
+        
         ins = st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key=f"ins_{it}")
         up_files = st.file_uploader("📷 צרף תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{it}")
 
-        if st.session_state.last_feedback:
-            st.markdown(f'<div class="feedback-box"><b>💡 משוב AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
-
-# כפתורי פעולה - שימי לב ליישור מצד שמאל
+        # כפתורי פעולה
         c_btns = st.columns(2)
         with c_btns[0]:
             if st.button("🔍 בקש רפלקציה (AI)"):
-                if ch.strip():
+                # משיכה ישירה מה-Session State
+                raw_text = st.session_state.get("field_obs_input", "")
+                if raw_text.strip():
                     with st.spinner("היועץ מנתח..."):
-                        res = call_gemini(f"נתח תצפית עבור {student_name}: {ch}")
+                        # פנייה בלשון זכר
+                        prompt = f"פנה אלי בלשון זכר. נתח תצפית עבור {student_name}: {raw_text}"
+                        res = call_gemini(prompt)
                         st.session_state.last_feedback = res
                         st.rerun()
                 else:
-                    st.warning("אנא כתבי תצפית.")
+                    st.warning("התיבה ריקה. כתוב משהו ב'תצפית שדה' לפני הלחיצה.")
+
+        with c_btns[1]:
+            if st.button("💾 שמור תצפית", type="primary"):
+                # משיכה מה-Session State גם כאן
+                final_ch = st.session_state.get("field_obs_input", "")
+                if final_ch.strip():
+                    with st.spinner("שומר..."):
+                        entry = {
+                            "date": date.today().isoformat(),
+                            "student_name": student_name,
+                            "duration_min": duration,
+                            "drawings_count": drawings,
+                            "work_method": work_method,
+                            "challenge": final_ch, # שמירת הטקסט הנכון
+                            "insight": ins,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        with open(DATA_FILE, "a", encoding="utf-8") as f:
+                            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                        
+                        # איפוס התיבה והמשוב אחרי שמירה
+                        st.session_state.it += 1
+                        st.session_state.last_feedback = ""
+                        # ניקוי התיבה בזיכרון
+                        st.session_state["field_obs_input"] = ""
+                        st.rerun()
+                else:
+                    st.warning("אנא כתוב תצפית לפני השמירה.")
 
         with c_btns[1]:
             if st.button("💾 שמור תצפית", type="primary"):
@@ -398,6 +428,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
