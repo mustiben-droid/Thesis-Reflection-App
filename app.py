@@ -120,25 +120,32 @@ def call_gemini(prompt):
 # ==========================================
 
 def render_tab_entry(svc, full_df):
+    it = st.session_state.it
+    
+    # 1. בחירת סטודנט - מחוץ לעמודות (לכל רוחב המסך)
+    student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
+    
+    # 2. לוגיקה של הפס הירוק
+    if student_name != st.session_state.last_selected_student:
+        target = normalize_name(student_name)
+        match = full_df[full_df['name_clean'] == target] if not full_df.empty else pd.DataFrame()
+        st.session_state.show_success_bar = not match.empty
+        st.session_state.student_context = match.tail(15).to_string() if not match.empty else ""
+        st.session_state.last_selected_student = student_name
+        st.session_state.chat_history = []
+        st.rerun()
+
+    # 3. הפס הירוק - עכשיו הוא לכל רוחב המסך ולא יחתוך את הטלפון
+    if st.session_state.show_success_bar:
+        st.success(f"✅ נמצאה היסטוריה עבור {student_name}.")
+    else:
+        st.info(f"ℹ️ {student_name}: אין תצפיות קודמות.")
+
+    # 4. עכשיו פותחים את העמודות עבור שאר הטופס
     col_in, col_chat = st.columns([1.2, 1])
     
     with col_in:
-        it = st.session_state.it
-        student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
-        
-        if student_name != st.session_state.last_selected_student:
-            target = normalize_name(student_name)
-            match = full_df[full_df['name_clean'] == target] if not full_df.empty else pd.DataFrame()
-            st.session_state.show_success_bar = not match.empty
-            st.session_state.student_context = match.tail(15).to_string() if not match.empty else ""
-            st.session_state.last_selected_student = student_name
-            st.session_state.chat_history = []
-            st.rerun()
-
-        if st.session_state.show_success_bar:
-            st.success(f"✅ נמצאה היסטוריה עבור {student_name}.")
-        else:
-            st.info(f"ℹ️ {student_name}: אין תצפיות קודמות.")
+        # כאן ממשיך שאר הקוד שלך (זמן עבודה, מספר שרטוטים וכו')
 
         # הוספת תיבות למספר שרטוטים וזמן - מעל ה-multiselect
         c_metrics1, c_metrics2 = st.columns(2)
@@ -360,6 +367,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
