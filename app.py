@@ -33,8 +33,9 @@ st.markdown("""
 
 def normalize_name(name):
     if not isinstance(name, str): return ""
-    # מוריד נקודות, רווחים, מקפים וסימנים מיוחדים
-    return name.replace(" ", "").replace(".", "").replace("־", "").replace("-", "").strip()
+    import re
+    # משאיר רק אותיות ומספרים (מוחק נקודות, רווחים, מקפים וכו')
+    return re.sub(r'[^א-תa-zA-Z0-9]', '', name).strip()
 
 @st.cache_resource
 def get_drive_service():
@@ -58,13 +59,12 @@ def load_full_dataset(_svc):
                 while not done: _, done = downloader.next_chunk()
                 fh.seek(0); df_drive = pd.read_excel(fh)
                 
-                # זיהוי חכם של עמודת השם
-                cols = [c for c in df_drive.columns if any(x in str(c).lower() for x in ["student", "name", "שם", "תלמיד"])]
-                if cols: 
-                    df_drive.rename(columns={cols[0]: "student_name"}, inplace=True)
-                    logging.info(f"עמודת שם זוהתה כ: {cols[0]}")
+                # זיהוי עמודת השם (student_name מופיע אצלך בקובץ)
+                if 'student_name' not in df_drive.columns:
+                    cols = [c for c in df_drive.columns if any(x in str(c).lower() for x in ["student", "name", "שם", "תלמיד"])]
+                    if cols: df_drive.rename(columns={cols[0]: "student_name"}, inplace=True)
         except Exception as e:
-            logging.error(f"Drive error: {e}")
+            logging.error(f"Drive load error: {e}")
 
     df_local = pd.DataFrame()
     if os.path.exists(DATA_FILE):
@@ -76,11 +76,12 @@ def load_full_dataset(_svc):
     df = pd.concat([df_drive, df_local], ignore_index=True)
     
     if not df.empty and 'student_name' in df.columns:
-        # ניקוי השמות גם בנתונים שנטענו
+        # ניקוי השמות - חיוני לזיהוי הפס הירוק
         df['student_name'] = df['student_name'].astype(str).str.strip()
         df['name_clean'] = df['student_name'].apply(normalize_name)
     
     return df
+    
 def call_gemini(prompt):
     try:
         genai.configure(api_key=st.secrets.get("GOOGLE_API_KEY"), transport='rest')
@@ -236,5 +237,6 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
