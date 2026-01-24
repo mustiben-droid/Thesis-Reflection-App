@@ -140,6 +140,13 @@ def render_tab_entry(svc, full_df):
         else:
             st.info(f"ℹ️ {student_name}: אין תצפיות קודמות.")
 
+        # הוספת תיבות למספר שרטוטים וזמן - מעל ה-multiselect
+        c_metrics1, c_metrics2 = st.columns(2)
+        with c_metrics1:
+            duration = st.number_input("⏱️ זמן עבודה (בדקות):", min_value=0, value=45, step=5, key=f"dur_{it}")
+        with c_metrics2:
+            drawings = st.number_input("📋 מספר שרטוטים שבוצעו:", min_value=0, value=1, step=1, key=f"drw_{it}")
+        
         st.markdown("---")
         work_method = st.radio("🛠️ צורת עבודה:", ["🧊 בעזרת גוף מודפס", "🎨 ללא גוף (דמיון)"], key=f"wm_{it}", horizontal=True)
 
@@ -338,6 +345,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
