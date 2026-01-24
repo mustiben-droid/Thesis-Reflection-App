@@ -6,14 +6,13 @@ from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from datetime import date, datetime
 
 # --- 0. הגדרות ועיצוב ---
-logging.basicConfig(level=logging.INFO)
 DATA_FILE = "reflections.jsonl"
 MASTER_FILENAME = "All_Observations_Master.xlsx"
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 TAGS_OPTIONS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="מערכת תצפית מחקרית - 46.0", layout="wide")
+st.set_page_config(page_title="מערכת תצפית מחקרית - 48.0", layout="wide")
 
 st.markdown("""
     <style>
@@ -22,12 +21,7 @@ st.markdown("""
         [data-testid="stSlider"] { direction: ltr !important; }
         .stButton > button { width: 100%; font-weight: bold; border-radius: 12px; height: 3em; }
         .stButton button[kind="primary"] { background-color: #28a745; color: white; }
-        .feedback-box { 
-            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); 
-            padding: 20px; border-radius: 15px; border: 1px solid #ddd; margin: 15px 0; color: #333;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
-        .feedback-box h4 { color: #2c3e50; margin-top:0; }
+        .feedback-box { background: linear-gradient(135deg, #fdfbfb 0%, #f3f4f6 100%); padding: 20px; border-radius: 15px; border: 1px solid #ddd; margin: 15px 0; color: #333; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -45,7 +39,7 @@ def get_drive_service():
         return build("drive", "v3", credentials=creds)
     except: return None
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def load_full_dataset(_svc):
     df_drive = pd.DataFrame()
     if _svc:
@@ -77,30 +71,19 @@ def load_full_dataset(_svc):
 
 def get_ai_response(prompt_type, context_data):
     api_key = st.secrets.get("GOOGLE_API_KEY")
-    if not api_key: return "⚠️ מפתח API חסר"
     try:
         genai.configure(api_key=api_key, transport='rest')
         model = genai.GenerativeModel('gemini-1.5-flash')
-        
         if prompt_type == "reflection":
-            prompt = f"""
-            אתה פרופ' דן רוזנברג, מנחה תזה בכיר בחינוך טכנולוגי.
-            נתח את התצפית שכתבה הסטודנטית על {context_data['student_name']}:
-            "{context_data['challenge']}"
-            
-            1. תן ציון איכות מחקרי (1-5).
-            2. הצע נוסח אקדמי משופר (3 שורות) לפרק הממצאים.
-            3. ציין אם חסר מידע אובייקטיבי.
-            """
+            p = f"אתה מנחה תזה בכיר. בקר את התצפית על {context_data['student_name']}: {context_data['challenge']}. הצע נוסח אקדמי משופר."
         elif prompt_type == "chat":
-            prompt = f"נתח היסטוריה מחקרית: {str(context_data['history'])[:4000]}. שאלה: {context_data['question']}"
-        else: # analysis
-            prompt = f"בצע ניתוח תמות (Thematic Analysis) אקדמי על התצפיות הבאות: {context_data['text']}"
-            
-        return model.generate_content(prompt).text
-    except Exception as e: return f"שגיאת AI: {str(e)[:100]}"
+            p = f"נתח היסטוריה: {str(context_data['history'])[:4000]}. שאלה: {context_data['question']}"
+        else:
+            p = f"בצע ניתוח תמות מחקרי על הטקסט הבא: {context_data['text']}"
+        return model.generate_content(p).text
+    except: return "שגיאת AI"
 
-# --- 2. אתחול נתונים ---
+# --- 2. אתחול ---
 svc = get_drive_service()
 full_df = load_full_dataset(svc)
 
@@ -110,8 +93,7 @@ if "last_selected_student" not in st.session_state: st.session_state.last_select
 if "show_success_bar" not in st.session_state: st.session_state.show_success_bar = False
 if "last_feedback" not in st.session_state: st.session_state.last_feedback = ""
 
-# --- 3. ממשק משתמש ---
-st.title("🎓 מנחה מחקר חכם - גרסה 46.0")
+# --- 3. ממשק ---
 tab1, tab2, tab3 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח"])
 
 with tab1:
@@ -120,7 +102,7 @@ with tab1:
         it = st.session_state.it
         student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
         
-        # --- לוגיקת הסליידר הירוק (זיהוי תלמיד) ---
+        # לוגיקת סליידר ירוק (זיהוי תלמיד)
         if student_name != st.session_state.last_selected_student:
             target = normalize_name(student_name)
             match = full_df[full_df['name_clean'] == target] if not full_df.empty else pd.DataFrame()
@@ -134,19 +116,25 @@ with tab1:
             st.rerun()
 
         if st.session_state.show_success_bar:
-            st.success(f"✅ נמצאה היסטוריה עבור {student_name}. הסוכן מעודכן.")
+            st.success(f"✅ נמצאה היסטוריה עבור {student_name}.")
         else:
-            st.info(f"ℹ️ {student_name}: אין תצפיות קודמות במערכת.")
+            st.info(f"ℹ️ {student_name}: אין תצפיות קודמות.")
 
         st.markdown("---")
-        # --- שדות הזנה מלאים ---
-        pl = st.text_area("📋 תכנון למפגש (Planned):", key=f"pl_{it}")
-        do = st.text_area("✅ מה בוצע בפועל (Done):", key=f"do_{it}")
-        ch = st.text_area("🗣️ תצפית שדה (Challenge):", height=120, key=f"ch_{it}")
-        ins = st.text_area("🧠 תובנה/פרשנות (Insight):", key=f"ins_{it}")
-        nxt = st.text_area("⏭️ שלב הבא (Next Step):", key=f"nxt_{it}")
+        
+        # --- שדה שחזור: מודל/ללא מודל ---
+        work_method = st.radio("🛠️ צורת עבודה:", ["🧊 בעזרת גוף מודפס", "🎨 ללא גוף (דמיון)"], key=f"wm_{it}", horizontal=True)
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            pl = st.text_area("📋 תכנון (Planned):", key=f"pl_{it}")
+            ch = st.text_area("🗣️ תצפית שדה (Challenge):", height=100, key=f"ch_{it}")
+            nxt = st.text_area("⏭️ שלב הבא (Next Step):", key=f"nxt_{it}")
+        with c2:
+            do = st.text_area("✅ בוצע (Done):", key=f"do_{it}")
+            ins = st.text_area("🧠 תובנה/פרשנות (Insight):", key=f"ins_{it}")
 
-        st.markdown("### 📊 מדדים כמותיים (1-5)")
+        st.markdown("### 📊 מדדים (1-5)")
         m1, m2 = st.columns(2)
         with m1:
             s1 = st.slider("המרת ייצוגים", 1, 5, 3, key=f"s1_{it}")
@@ -158,90 +146,71 @@ with tab1:
         tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
 
         if st.session_state.last_feedback:
-            st.markdown(f'<div class="feedback-box"><h4>💡 משוב פרופ\' רוזנברג</h4>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="feedback-box"><b>💡 משוב AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
 
         c_btns = st.columns(2)
         with c_btns[0]:
             if st.button("🔍 בקש רפלקציה (AI)"):
-                if ch: 
-                    with st.spinner("המנחה מנתח..."):
-                        st.session_state.last_feedback = get_ai_response("reflection", {"student_name": student_name, "challenge": ch})
-                        st.rerun()
-                else: st.warning("כתבי תצפית קודם.")
+                if ch: st.session_state.last_feedback = get_ai_response("reflection", {"student_name": student_name, "challenge": ch}); st.rerun()
         with c_btns[1]:
             if st.button("💾 שמור תצפית", type="primary"):
-                if not ch: st.error("חובה להזין תיאור.")
-                else:
+                if ch:
                     entry = {
-                        "date": date.today().isoformat(), "student_name": student_name, "planned": pl, "done": do,
-                        "challenge": ch, "insight": ins, "next_step": nxt,
+                        "date": date.today().isoformat(), "student_name": student_name, 
+                        "work_method": work_method, "planned": pl, "done": do, 
+                        "challenge": ch, "insight": ins, "next_step": nxt, 
                         "cat_convert_rep": int(s1), "cat_proj_trans": int(s2), 
-                        "cat_3d_support": int(s3), "cat_dims_props": int(s4),
+                        "cat_3d_support": int(s3), "cat_dims_props": int(s4), 
                         "tags": tags, "timestamp": datetime.now().isoformat()
                     }
-                    with open(DATA_FILE, "a", encoding="utf-8") as f:
-                        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                    with open(DATA_FILE, "a", encoding="utf-8") as f: f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                     st.session_state.it += 1; st.session_state.last_feedback = ""; st.rerun()
 
     with col_chat:
         st.subheader(f"🤖 יועץ: {student_name}")
-        chat_cont = st.container(height=450)
         for q, a in st.session_state.chat_history:
-            with chat_cont:
-                st.chat_message("user").write(q); st.chat_message("assistant").write(a)
-        u_q = st.chat_input("שאל את הסוכן...")
+            st.chat_message("user").write(q); st.chat_message("assistant").write(a)
+        u_q = st.chat_input("שאל...")
         if u_q:
             resp = get_ai_response("chat", {"name": student_name, "history": st.session_state.student_context, "question": u_q})
             st.session_state.chat_history.append((u_q, resp)); st.rerun()
 
 with tab2:
-    st.header("🔄 סנכרון לדרייב")
-    if os.path.exists(DATA_FILE) and st.button("🚀 סנכרן הכל לדרייב"):
-        try:
-            with st.spinner("מעלה נתונים..."):
-                with open(DATA_FILE, "r", encoding="utf-8") as f:
-                    locals_ = [json.loads(l) for l in f if l.strip()]
-                df_m = pd.concat([full_df, pd.DataFrame(locals_)], ignore_index=True).drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
-                buf = io.BytesIO()
-                with pd.ExcelWriter(buf, engine='openpyxl') as w: df_m.to_excel(w, index=False)
-                buf.seek(0)
-                res = svc.files().list(q=f"name='{MASTER_FILENAME}'", supportsAllDrives=True).execute().get('files', [])
-                media = MediaIoBaseUpload(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                if res:
-                    svc.files().update(fileId=res[0]['id'], media_body=media, supportsAllDrives=True).execute()
-                else:
-                    file_metadata = {'name': MASTER_FILENAME}
-                    if GDRIVE_FOLDER_ID: file_metadata['parents'] = [GDRIVE_FOLDER_ID]
-                    svc.files().create(body=file_metadata, media_body=media, supportsAllDrives=True).execute()
-                os.remove(DATA_FILE); st.success("הנתונים סונכרנו!"); st.cache_data.clear(); st.rerun()
-        except Exception as e: st.error(f"שגיאה: {e}")
+    if st.button("🚀 סנכרן הכל לדרייב"):
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, "r", encoding="utf-8") as f: locals_ = [json.loads(l) for l in f if l.strip()]
+            df_m = pd.concat([full_df, pd.DataFrame(locals_)], ignore_index=True).drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
+            buf = io.BytesIO()
+            with pd.ExcelWriter(buf, engine='openpyxl') as w: df_m.to_excel(w, index=False)
+            buf.seek(0)
+            res = svc.files().list(q=f"name='{MASTER_FILENAME}'", supportsAllDrives=True).execute().get('files', [])
+            media = MediaIoBaseUpload(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            if res: svc.files().update(fileId=res[0]['id'], media_body=media, supportsAllDrives=True).execute()
+            else: svc.files().create(body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
+            os.remove(DATA_FILE); st.success("סונכרן!"); st.cache_data.clear(); st.rerun()
 
 with tab3:
     st.header("📊 ניתוח מחקרי")
-    if not full_df.empty:
+    # טעינה כפויה של נתונים מעודכנים
+    df_v = load_full_dataset(svc)
+    if not df_v.empty:
         mode = st.radio("סוג ניתוח:", ["👤 אישי", "📅 שבועי"], horizontal=True)
         if mode == "👤 אישי":
-            sel_s = st.selectbox("בחר סטודנט:", ["כולם"] + sorted(full_df['student_name'].unique().tolist()))
-            v_df = full_df if sel_s == "כולם" else full_df[full_df['student_name'] == sel_s]
-            st.dataframe(v_df.sort_values(by='date', ascending=False), use_container_width=True)
+            sel = st.selectbox("בחר סטודנט:", ["כולם"] + sorted(df_v['student_name'].unique().tolist()))
+            view = df_v if sel == "כולם" else df_v[df_v['student_name'] == sel]
+            st.dataframe(view.sort_values(by='date', ascending=False), use_container_width=True)
         else:
-            df_an = full_df.copy()
-            df_an['date'] = pd.to_datetime(df_an['date'], errors='coerce')
-            df_an['week'] = df_an['date'].dt.strftime('%Y - שבוע %U')
-            sel_week = st.selectbox("בחר שבוע:", sorted(df_an['week'].dropna().unique(), reverse=True))
-            w_df = df_an[df_an['week'] == sel_week]
+            df_v['date'] = pd.to_datetime(df_v['date'], errors='coerce')
+            df_v['week'] = df_v['date'].dt.strftime('%Y - שבוע %U')
+            sel_w = st.selectbox("בחר שבוע לניתוח:", sorted(df_v['week'].dropna().unique(), reverse=True))
+            w_df = df_v[df_v['week'] == sel_w]
             st.dataframe(w_df)
-            if st.button("✨ הפק ניתוח תמות"):
+            if st.button("✨ ניתוח תמות"):
                 txt = "".join([f"תצפית: {r.get('challenge','')} | תובנה: {r.get('insight','')}\n" for _, r in w_df.iterrows()])
-                res = get_ai_response("analysis", {"text": txt})
-                st.info(res)
+                st.info(get_ai_response("analysis", {"text": txt}))
 
-# --- Sidebar & Debug ---
-st.sidebar.title("🛠️ ניהול ודיבוג")
-if st.sidebar.button("🔍 הצג מידע דיבוג"):
-    st.sidebar.write("**עמודות:**", full_df.columns.tolist() if not full_df.empty else "ריק")
-    if not full_df.empty:
-        st.sidebar.write("**שמות מזוהים:**", full_df['student_name'].unique().tolist())
+st.sidebar.title("🛠️ ניהול")
+if st.sidebar.button("🔍 הצג שמות במערכת"):
+    st.sidebar.write(full_df['student_name'].unique().tolist() if not full_df.empty else "ריק")
 if st.sidebar.button("🔄 רענן נתונים"):
     st.cache_data.clear(); st.rerun()
-st.sidebar.write("מצב חיבור לדרייב:", "✅" if svc else "❌")
