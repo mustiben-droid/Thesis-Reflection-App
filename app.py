@@ -89,17 +89,31 @@ def load_full_dataset(_svc):
 def call_gemini(prompt):
     try:
         api_key = st.secrets.get("GOOGLE_API_KEY")
-        if not api_key: return "שגיאה: חסר API Key"
+        if not api_key: 
+            return "שגיאה: חסר API Key ב-Secrets"
             
+        # אתחול נקי ללא transport='rest'
         genai.configure(api_key=api_key)
         
-        # שים לב לתוספת של model_name=
-        model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+        # שימוש בתחביר החדש והמחמיר ביותר
+        model = genai.GenerativeModel(model_name="gemini-2.0-flash")
         
+        # שליחת הבקשה
         response = model.generate_content(prompt)
-        return response.text
+        
+        if response.text:
+            return response.text
+        else:
+            return "התקבלה תשובה ריקה מהמודל."
+            
     except Exception as e:
-        return f"שגיאה בחיבור ליועץ AI: {str(e)}"
+        # אם יש שגיאה, ננסה "נסיגת בטיחות" ל-1.5 פלאש בתחביר החדש
+        try:
+            model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e2:
+            return f"שגיאה סופית בחיבור ל-AI: {str(e2)}"
 
 # ==========================================
 # --- 2. פונקציות ממשק משתמש (Tabs) ---
@@ -324,6 +338,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
