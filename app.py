@@ -168,15 +168,22 @@ def render_tab_entry(svc, full_df):
         if st.session_state.last_feedback:
             st.markdown(f'<div class="feedback-box"><b>💡 משוב AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
 
-        c_btns = st.columns(2)
+       c_btns = st.columns(2)
         with c_btns[0]:
+            # כפתור רפלקציה משופר
             if st.button("🔍 בקש רפלקציה (AI)"):
-                if ch:
-                    st.session_state.last_feedback = call_gemini(f"נתח תצפית אקדמית עבור {student_name}: {ch}")
-                    st.rerun()
+                if ch.strip():
+                    with st.spinner("היועץ מנתח את התצפית..."):
+                        # קריאה ל-AI ושמירה ב-session_state
+                        res = call_gemini(f"נתח תצפית אקדמית עבור הסטודנט {student_name}: {ch}")
+                        st.session_state.last_feedback = res
+                        st.rerun()
+                else:
+                    st.warning("אנא כתבי תצפית בתיבת הטקסט לפני בקשת הרפלקציה.")
+
         with c_btns[1]:
             if st.button("💾 שמור תצפית", type="primary"):
-                if ch:
+                if ch.strip():
                     with st.spinner("מעלה נתונים..."):
                         links = []
                         if up_files and svc:
@@ -188,15 +195,40 @@ def render_tab_entry(svc, full_df):
                                     links.append(res.get('webViewLink'))
                                 except: pass
                         
+                        # יצירת הרשומה כולל זמן ומספר שרטוטים
                         entry = {
-                            "date": date.today().isoformat(), "student_name": student_name, "work_method": work_method,
-                            "challenge": ch, "insight": ins, "difficulty": s_diff, "cat_dims_props": int(s4),
-                            "cat_convert_rep": int(s1), "cat_proj_trans": int(s2), "cat_3d_support": int(s3),
-                            "tags": tags, "file_links": links, "timestamp": datetime.now().isoformat()
+                            "date": date.today().isoformat(),
+                            "student_name": student_name,
+                            "duration_min": duration,      # שדה חדש
+                            "drawings_count": drawings,    # שדה חדש
+                            "work_method": work_method,
+                            "challenge": ch,
+                            "insight": ins,
+                            "difficulty": s_diff,
+                            "cat_dims_props": int(s4),
+                            "cat_convert_rep": int(s1),
+                            "cat_proj_trans": int(s2),
+                            "cat_3d_support": int(s3),
+                            "tags": tags,
+                            "file_links": links,
+                            "timestamp": datetime.now().isoformat()
                         }
                         with open(DATA_FILE, "a", encoding="utf-8") as f:
                             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                        st.session_state.it += 1; st.session_state.last_feedback = ""; st.rerun()
+                        
+                        # ניקוי והודעת הצלחה
+                        st.session_state.it += 1
+                        st.session_state.last_feedback = ""
+                        st.success("התצפית נשמרה בהצלחה!")
+                        st.rerun()
+
+        # --- חשוב: הצגת המשוב על המסך ---
+        if st.session_state.last_feedback:
+            st.markdown("---")
+            st.markdown(f'<div class="feedback-box"><b>💡 משוב יועץ AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
+            if st.button("🗑️ נקה משוב"):
+                st.session_state.last_feedback = ""
+                st.rerun()
 
     with col_chat:
         st.subheader(f"🤖 יועץ: {student_name}")
@@ -345,6 +377,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
