@@ -33,7 +33,8 @@ st.markdown("""
 
 def normalize_name(name):
     if not isinstance(name, str): return ""
-    return name.replace(" ", "").replace("־", "").replace("-", "").strip()
+    # מוריד נקודות, רווחים, מקפים וסימנים מיוחדים
+    return name.replace(" ", "").replace(".", "").replace("־", "").replace("-", "").strip()
 
 @st.cache_resource
 def get_drive_service():
@@ -226,3 +227,4 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
