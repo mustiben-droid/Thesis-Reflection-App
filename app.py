@@ -222,24 +222,79 @@ def render_tab_sync(svc, full_df):
             st.error(f"❌ שגיאת סנכרון: {e}")
 
 def render_tab_analysis(svc):
-    st.header("📊 ניתוח מחקרי שבועי")
+    st.header("📊 מרכז ניתוח ומגמות")
     df_v = load_full_dataset(svc)
-    if not df_v.empty:
-        df_v['date'] = pd.to_datetime(df_v['date'], errors='coerce')
-        df_v['week'] = df_v['date'].dt.strftime('%Y - שבוע %U')
-        weeks = sorted(df_v['week'].dropna().unique(), reverse=True)
-        sel_w = st.selectbox("בחר שבוע לניתוח:", weeks)
-        w_df = df_v[df_v['week'] == sel_w]
-        st.dataframe(w_df, use_container_width=True)
+    
+    if df_v.empty:
+        st.info("אין עדיין מספיק נתונים לניתוח. בצעי סנכרון בטאב 2.")
+        return
+
+    # עיבוד תאריכים לשבועות
+    df_v['date'] = pd.to_datetime(df_v['date'], errors='coerce')
+    df_v['week'] = df_v['date'].dt.strftime('%Y - שבוע %U')
+    
+    # --- חלק א: מעקב התקדמות אישי (מעולה לתזה!) ---
+    st.subheader("📈 מעקב התקדמות אישי")
+    all_students = sorted(df_v['student_name'].dropna().unique())
+    sel_student = st.selectbox("בחר תלמיד למעקב ויזואלי:", all_students)
+    
+    student_data = df_v[df_v['student_name'] == sel_student].sort_values('date')
+    
+    if len(student_data) >= 1:
+        # הגדרת המדדים שאנחנו רוצים להציג בגרף
+        metrics = {
+            'cat_convert_rep': 'המרת ייצוגים',
+            'cat_dims_props': 'פרופורציות',
+            'cat_proj_trans': 'מעבר בין היטלים',
+            'cat_3d_support': 'שימוש במודל 3D'
+        }
         
+        # הכנת הנתונים לגרף
+        plot_df = student_data[['date'] + list(metrics.keys())].copy()
+        plot_df = plot_df.rename(columns=metrics).set_index('date')
+        
+        # הצגת הגרף
+        st.line_chart(plot_df)
+        st.caption("מגמת שינוי במדדים הכמותיים לאורך זמן (1-5)")
+    else:
+        st.warning("אין מספיק נתונים להצגת גרף עבור תלמיד זה.")
+
+    st.markdown("---")
+
+    # --- חלק ב: ניתוח כיתתי שבועי ---
+    st.subheader("🧠 ניתוח תמות שבועי (AI)")
+    weeks = sorted(df_v['week'].dropna().unique(), reverse=True)
+    sel_w = st.selectbox("בחר שבוע לניתוח כיתתי:", weeks)
+    w_df = df_v[df_v['week'] == sel_w]
+    
+    col_table, col_ai = st.columns([1, 1])
+    
+    with col_table:
+        st.write(f"תצפיות בשבוע {sel_w}:")
+        st.dataframe(w_df[['student_name', 'challenge', 'tags']], use_container_width=True)
+    
+    with col_ai:
         if st.button("✨ הפק ניתוח שבועי ושמור לדרייב"):
-            with st.spinner("מנתח..."):
-                txt = "".join([f"תצפית: {r.get('challenge','')} | תובנה: {r.get('insight','')}\n" for _, r in w_df.iterrows()])
-                response = call_gemini(f"נתח תמות אקדמיות לשבוע {sel_w}: {txt}")
-                st.info(response)
-                media = MediaIoBaseUpload(io.BytesIO(response.encode('utf-8')), mimetype='text/plain')
-                svc.files().create(body={'name': f"ניתוח_{sel_w}.txt", 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
-                st.success("הניתוח נשמר בדרייב")
+            with st.spinner("ג'ימיני מנתח את כל התצפיות של השבוע..."):
+                # איסוף כל הטקסט של השבוע
+                txt = "".join([f"תלמיד: {r['student_name']} | קושי: {r.get('challenge','')} | תובנה: {r.get('insight','')}\n" for _, r in w_df.iterrows()])
+                
+                response = call_gemini(f"בצע ניתוח תמות (Thematic Analysis) אקדמי על התצפיות הבאות עבור שבוע {sel_w}:\n\n{txt}")
+                
+                st.markdown(f'<div class="feedback-box"><b>📊 ממצאים לשבוע {sel_w}:</b><br>{response}</div>', unsafe_allow_html=True)
+                
+                # שמירה אוטומטית לדרייב
+                try:
+                    f_name = f"ניתוח_תמות_{sel_w.replace(' ', '_')}.txt"
+                    media = MediaIoBaseUpload(io.BytesIO(response.encode('utf-8')), mimetype='text/plain')
+                    svc.files().create(
+                        body={'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []},
+                        media_body=media,
+                        supportsAllDrives=True
+                    ).execute()
+                    st.success(f"הניתוח נשמר בדרייב כקובץ: {f_name}")
+                except Exception as e:
+                    st.error(f"הניתוח הופק אך נכשלה השמירה לדרייב: {e}")
 
 # ==========================================
 # --- 3. גוף הקוד הראשי (Main) ---
@@ -262,6 +317,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
