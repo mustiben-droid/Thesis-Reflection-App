@@ -6,12 +6,14 @@ from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from datetime import date, datetime
 
 # --- 0. הגדרות ועיצוב ---
+logging.basicConfig(level=logging.INFO)
 DATA_FILE = "reflections.jsonl"
 MASTER_FILENAME = "All_Observations_Master.xlsx"
+GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 TAGS_OPTIONS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="מערכת תצפית - 45.4", layout="wide")
+st.set_page_config(page_title="מערכת תצפית מחקרית - 46.0", layout="wide")
 
 st.markdown("""
     <style>
@@ -20,14 +22,18 @@ st.markdown("""
         [data-testid="stSlider"] { direction: ltr !important; }
         .stButton > button { width: 100%; font-weight: bold; border-radius: 12px; height: 3em; }
         .stButton button[kind="primary"] { background-color: #28a745; color: white; }
-        .feedback-box { background-color: #f8f9fa; padding: 20px; border-radius: 15px; border: 1px solid #dee2e6; margin: 15px 0; color: #212529; }
+        .feedback-box { 
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); 
+            padding: 20px; border-radius: 15px; border: 1px solid #ddd; margin: 15px 0; color: #333;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .feedback-box h4 { color: #2c3e50; margin-top:0; }
     </style>
 """, unsafe_allow_html=True)
 
 # --- 1. פונקציות עזר ---
 def normalize_name(name):
     if not isinstance(name, str): return ""
-    # משאירים נקודות כדי להתאים ל"דניאל.ר" אבל מנקים רווחים מיותרים
     return name.replace(" ", "").replace("־", "").replace("-", "").strip()
 
 @st.cache_resource
@@ -52,7 +58,6 @@ def load_full_dataset(_svc):
                 done = False
                 while not done: _, done = downloader.next_chunk()
                 fh.seek(0); df_drive = pd.read_excel(fh)
-                # וידוא עמודת שם
                 cols = [c for c in df_drive.columns if any(x in c.lower() for x in ["student", "name", "שם", "תלמיד"])]
                 if cols: df_drive.rename(columns={cols[0]: "student_name"}, inplace=True)
         except: pass
@@ -72,18 +77,30 @@ def load_full_dataset(_svc):
 
 def get_ai_response(prompt_type, context_data):
     api_key = st.secrets.get("GOOGLE_API_KEY")
+    if not api_key: return "⚠️ מפתח API חסר"
     try:
         genai.configure(api_key=api_key, transport='rest')
         model = genai.GenerativeModel('gemini-1.5-flash')
+        
         if prompt_type == "reflection":
-            p = f"אתה מנחה מחקר. בקר את התצפית על {context_data['student_name']}: {context_data['challenge']}. הצע נוסח אקדמי משופר."
+            prompt = f"""
+            אתה פרופ' דן רוזנברג, מנחה תזה בכיר בחינוך טכנולוגי.
+            נתח את התצפית שכתבה הסטודנטית על {context_data['student_name']}:
+            "{context_data['challenge']}"
+            
+            1. תן ציון איכות מחקרי (1-5).
+            2. הצע נוסח אקדמי משופר (3 שורות) לפרק הממצאים.
+            3. ציין אם חסר מידע אובייקטיבי.
+            """
         elif prompt_type == "chat":
-            p = f"נתח היסטוריה מחקרית: {str(context_data['history'])[:4000]}. שאלה: {context_data['question']}"
-        else: p = "זהה תמות אקדמיות בטקסט..."
-        return model.generate_content(p).text
-    except: return "שגיאת AI"
+            prompt = f"נתח היסטוריה מחקרית: {str(context_data['history'])[:4000]}. שאלה: {context_data['question']}"
+        else: # analysis
+            prompt = f"בצע ניתוח תמות (Thematic Analysis) אקדמי על התצפיות הבאות: {context_data['text']}"
+            
+        return model.generate_content(prompt).text
+    except Exception as e: return f"שגיאת AI: {str(e)[:100]}"
 
-# --- 2. אתחול ---
+# --- 2. אתחול נתונים ---
 svc = get_drive_service()
 full_df = load_full_dataset(svc)
 
@@ -93,7 +110,8 @@ if "last_selected_student" not in st.session_state: st.session_state.last_select
 if "show_success_bar" not in st.session_state: st.session_state.show_success_bar = False
 if "last_feedback" not in st.session_state: st.session_state.last_feedback = ""
 
-# --- 3. ממשק ---
+# --- 3. ממשק משתמש ---
+st.title("🎓 מנחה מחקר חכם - גרסה 46.0")
 tab1, tab2, tab3 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח"])
 
 with tab1:
@@ -102,13 +120,12 @@ with tab1:
         it = st.session_state.it
         student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
         
-        # לוגיקת סליידר ירוק משופרת
+        # --- לוגיקת הסליידר הירוק (זיהוי תלמיד) ---
         if student_name != st.session_state.last_selected_student:
             target = normalize_name(student_name)
-            match = pd.DataFrame()
-            if not full_df.empty:
-                # חיפוש לפי שם נקי (כולל נקודות)
-                match = full_df[full_df['name_clean'] == target]
+            match = full_df[full_df['name_clean'] == target] if not full_df.empty else pd.DataFrame()
+            if match.empty and not full_df.empty:
+                match = full_df[full_df['student_name'].str.contains(student_name, case=False, na=False)]
             
             st.session_state.show_success_bar = not match.empty
             st.session_state.student_context = match.tail(15).to_string() if not match.empty else ""
@@ -122,13 +139,14 @@ with tab1:
             st.info(f"ℹ️ {student_name}: אין תצפיות קודמות במערכת.")
 
         st.markdown("---")
+        # --- שדות הזנה מלאים ---
         pl = st.text_area("📋 תכנון למפגש (Planned):", key=f"pl_{it}")
         do = st.text_area("✅ מה בוצע בפועל (Done):", key=f"do_{it}")
         ch = st.text_area("🗣️ תצפית שדה (Challenge):", height=120, key=f"ch_{it}")
         ins = st.text_area("🧠 תובנה/פרשנות (Insight):", key=f"ins_{it}")
         nxt = st.text_area("⏭️ שלב הבא (Next Step):", key=f"nxt_{it}")
 
-        st.markdown("### 📊 מדדים (1-5)")
+        st.markdown("### 📊 מדדים כמותיים (1-5)")
         m1, m2 = st.columns(2)
         with m1:
             s1 = st.slider("המרת ייצוגים", 1, 5, 3, key=f"s1_{it}")
@@ -140,13 +158,13 @@ with tab1:
         tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
 
         if st.session_state.last_feedback:
-            st.markdown(f'<div class="feedback-box"><b>💡 משוב AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="feedback-box"><h4>💡 משוב פרופ\' רוזנברג</h4>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
 
         c_btns = st.columns(2)
         with c_btns[0]:
             if st.button("🔍 בקש רפלקציה (AI)"):
                 if ch: 
-                    with st.spinner("מנתח..."):
+                    with st.spinner("המנחה מנתח..."):
                         st.session_state.last_feedback = get_ai_response("reflection", {"student_name": student_name, "challenge": ch})
                         st.rerun()
                 else: st.warning("כתבי תצפית קודם.")
@@ -189,23 +207,41 @@ with tab2:
                 buf.seek(0)
                 res = svc.files().list(q=f"name='{MASTER_FILENAME}'", supportsAllDrives=True).execute().get('files', [])
                 media = MediaIoBaseUpload(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                if res: svc.files().update(fileId=res[0]['id'], media_body=media, supportsAllDrives=True).execute()
-                else: svc.files().create(body={'name': MASTER_FILENAME}, media_body=media, supportsAllDrives=True).execute()
-                os.remove(DATA_FILE); st.success("הנתונים סונכרנו בהצלחה!"); st.cache_data.clear(); st.rerun()
-        except Exception as e: st.error(f"שגיאה בסנכרון: {e}")
+                if res:
+                    svc.files().update(fileId=res[0]['id'], media_body=media, supportsAllDrives=True).execute()
+                else:
+                    file_metadata = {'name': MASTER_FILENAME}
+                    if GDRIVE_FOLDER_ID: file_metadata['parents'] = [GDRIVE_FOLDER_ID]
+                    svc.files().create(body=file_metadata, media_body=media, supportsAllDrives=True).execute()
+                os.remove(DATA_FILE); st.success("הנתונים סונכרנו!"); st.cache_data.clear(); st.rerun()
+        except Exception as e: st.error(f"שגיאה: {e}")
 
 with tab3:
     st.header("📊 ניתוח מחקרי")
     if not full_df.empty:
-        st.subheader("📋 כל התצפיות מהדרייב")
-        st.dataframe(full_df.sort_values(by='date', ascending=False), use_container_width=True)
+        mode = st.radio("סוג ניתוח:", ["👤 אישי", "📅 שבועי"], horizontal=True)
+        if mode == "👤 אישי":
+            sel_s = st.selectbox("בחר סטודנט:", ["כולם"] + sorted(full_df['student_name'].unique().tolist()))
+            v_df = full_df if sel_s == "כולם" else full_df[full_df['student_name'] == sel_s]
+            st.dataframe(v_df.sort_values(by='date', ascending=False), use_container_width=True)
+        else:
+            df_an = full_df.copy()
+            df_an['date'] = pd.to_datetime(df_an['date'], errors='coerce')
+            df_an['week'] = df_an['date'].dt.strftime('%Y - שבוע %U')
+            sel_week = st.selectbox("בחר שבוע:", sorted(df_an['week'].dropna().unique(), reverse=True))
+            w_df = df_an[df_an['week'] == sel_week]
+            st.dataframe(w_df)
+            if st.button("✨ הפק ניתוח תמות"):
+                txt = "".join([f"תצפית: {r.get('challenge','')} | תובנה: {r.get('insight','')}\n" for _, r in w_df.iterrows()])
+                res = get_ai_response("analysis", {"text": txt})
+                st.info(res)
 
 # --- Sidebar & Debug ---
-st.sidebar.title("🛠️ ניהול")
-if st.sidebar.button("🔍 הצג רשימת שמות באקסל"):
+st.sidebar.title("🛠️ ניהול ודיבוג")
+if st.sidebar.button("🔍 הצג מידע דיבוג"):
+    st.sidebar.write("**עמודות:**", full_df.columns.tolist() if not full_df.empty else "ריק")
     if not full_df.empty:
-        st.sidebar.write("**שמות מזוהים:**")
-        for n in sorted(full_df['student_name'].unique()): st.sidebar.write(f"- {n}")
-    else: st.sidebar.error("אין נתונים")
+        st.sidebar.write("**שמות מזוהים:**", full_df['student_name'].unique().tolist())
 if st.sidebar.button("🔄 רענן נתונים"):
     st.cache_data.clear(); st.rerun()
+st.sidebar.write("מצב חיבור לדרייב:", "✅" if svc else "❌")
