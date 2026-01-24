@@ -248,27 +248,6 @@ def render_tab_entry(svc, full_df):
                 else:
                     st.warning("אנא כתוב תצפית לפני השמירה.")
 
-        with c_btns[1]:
-            if st.button("💾 שמור תצפית", type="primary", key=f"save_btn_{it}"):
-                if ch.strip():
-                    with st.spinner("שומר..."):
-                        links = []
-                        # ... כאן קוד העלאת הקבצים (מוודא שהוא מיושר מתחת ל-with)
-                        entry = {
-                            "date": date.today().isoformat(),
-                            "student_name": student_name,
-                            "duration_min": duration,
-                            "drawings_count": drawings,
-                            "work_method": work_method,
-                            "challenge": ch,
-                            "timestamp": datetime.now().isoformat()
-                        }
-                        with open(DATA_FILE, "a", encoding="utf-8") as f:
-                            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                        st.session_state.it += 1
-                        st.session_state.last_feedback = ""
-                        st.rerun()
-
         # הצגת המשוב - חייב להיות מיושר בדיוק כמו c_btns
         if st.session_state.last_feedback:
             st.markdown("---")
@@ -428,6 +407,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
