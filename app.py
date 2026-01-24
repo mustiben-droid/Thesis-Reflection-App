@@ -57,21 +57,30 @@ def load_full_dataset(_svc):
                 done = False
                 while not done: _, done = downloader.next_chunk()
                 fh.seek(0); df_drive = pd.read_excel(fh)
-                cols = [c for c in df_drive.columns if any(x in c.lower() for x in ["student", "name", "שם", "תלמיד"])]
-                if cols: df_drive.rename(columns={cols[0]: "student_name"}, inplace=True)
-        except: pass
+                
+                # זיהוי חכם של עמודת השם
+                cols = [c for c in df_drive.columns if any(x in str(c).lower() for x in ["student", "name", "שם", "תלמיד"])]
+                if cols: 
+                    df_drive.rename(columns={cols[0]: "student_name"}, inplace=True)
+                    logging.info(f"עמודת שם זוהתה כ: {cols[0]}")
+        except Exception as e:
+            logging.error(f"Drive error: {e}")
+
     df_local = pd.DataFrame()
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 df_local = pd.DataFrame([json.loads(l) for l in f if l.strip()])
         except: pass
+
     df = pd.concat([df_drive, df_local], ignore_index=True)
+    
     if not df.empty and 'student_name' in df.columns:
+        # ניקוי השמות גם בנתונים שנטענו
         df['student_name'] = df['student_name'].astype(str).str.strip()
         df['name_clean'] = df['student_name'].apply(normalize_name)
+    
     return df
-
 def call_gemini(prompt):
     try:
         genai.configure(api_key=st.secrets.get("GOOGLE_API_KEY"), transport='rest')
@@ -227,4 +236,5 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
