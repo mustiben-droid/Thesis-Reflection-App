@@ -199,6 +199,7 @@ if "chat_history" not in st.session_state: st.session_state.chat_history = []
 if "student_context" not in st.session_state: st.session_state.student_context = ""
 if "last_selected_student" not in st.session_state: st.session_state.last_selected_student = ""
 if "last_feedback" not in st.session_state: st.session_state.last_feedback = ""
+if "show_success_bar" not in st.session_state: st.session_state.show_success_bar = False
 
 # --- 3. טעינת נתונים ---
 svc = get_drive_service()
@@ -215,16 +216,29 @@ with tab1:
         it = st.session_state.it
         student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
         
-        # טעינת הקשר
+        # טעינת הקשר עם אינדיקציה ויזואלית
         if student_name != st.session_state.last_selected_student:
             with st.spinner(f"טוען היסטוריה עבור {student_name}..."):
                 target = normalize_name(student_name)
                 match = full_df[full_df['name_clean'] == target] if not full_df.empty else pd.DataFrame()
-                st.session_state.student_context = match.tail(15).to_string() if not match.empty else ""
+                
+                if not match.empty:
+                    st.session_state.student_context = match.tail(15).to_string()
+                    st.session_state.show_success_bar = True
+                else:
+                    st.session_state.student_context = ""
+                    st.session_state.show_success_bar = False
+            
             st.session_state.last_selected_student = student_name
             st.session_state.chat_history = []
             st.session_state.last_feedback = ""
             st.rerun()
+
+        # הצגת סטטוס טעינה
+        if st.session_state.show_success_bar:
+            st.success(f"✅ נמצאה היסטוריה עבור {student_name}. הסוכן מעודכן.")
+        else:
+            st.info(f"ℹ️ {student_name}: אין תצפיות קודמות במערכת.")
 
         st.markdown("---")
         
@@ -433,29 +447,127 @@ with tab3:
     st.header("📊 ניתוח מחקרי")
     
     if full_df.empty:
-        st.info("אין נתונים. הזן תצפיות תחילה.")
+        st.info("אין נתונים לניתוח. בצע סנכרון בטאב 2.")
     else:
-        if 'student_name' in full_df.columns:
-            all_students = sorted(full_df['student_name'].unique().tolist())
-            selected_s = st.selectbox("👤 בחר סטודנט:", ["כולם"] + all_students)
+        # בחירה בין ניתוח אישי לשבועי
+        analysis_mode = st.radio(
+            "בחר סוג ניתוח:",
+            ["👤 ניתוח אישי", "📅 ניתוח שבועי"],
+            horizontal=True
+        )
+        
+        if analysis_mode == "👤 ניתוח אישי":
+            # ניתוח אישי - כמו שהיה
+            if 'student_name' in full_df.columns:
+                all_students = sorted(full_df['student_name'].unique().tolist())
+                selected_s = st.selectbox("👤 בחר סטודנט:", ["כולם"] + all_students)
+                
+                view_df = full_df if selected_s == "כולם" else full_df[full_df['student_name'] == selected_s]
+                
+                cols_to_show = ['date', 'student_name', 'work_method', 'challenge', 'interpretation', 'tags', 'cat_convert_rep', 'cat_proj_trans', 'cat_self_efficacy']
+                actual_cols = [c for c in cols_to_show if c in view_df.columns]
+                
+                if actual_cols:
+                    if 'date' in actual_cols:
+                        st.dataframe(view_df[actual_cols].sort_values(by='date', ascending=False), use_container_width=True)
+                    else:
+                        st.dataframe(view_df[actual_cols], use_container_width=True)
+                
+                # ניתוח AI אישי
+                st.markdown("---")
+                if st.button("✨ הפק ניתוח מגמות אקדמי"):
+                    with st.spinner("המנחה מנתח את כל התצפיות..."):
+                        analysis = get_ai_response("analysis", {
+                            "history": view_df.tail(15).to_string(),
+                            "question": "זהה דפוסים חוזרים, התקדמות, ונקודות למעקב"
+                        })
+                        st.markdown(f'<div class="feedback-box"><h4>📊 ניתוח מחקרי</h4>{analysis}</div>', unsafe_allow_html=True)
+        
+        else:
+            # ניתוח שבועי - הקוד המקורי שלך
+            st.subheader("🧠 ניתוח תמות שבועי")
             
-            view_df = full_df if selected_s == "כולם" else full_df[full_df['student_name'] == selected_s]
-            
-            cols_to_show = ['date', 'student_name', 'work_method', 'challenge', 'interpretation', 'tags', 'cat_convert_rep', 'cat_proj_trans', 'cat_self_efficacy']
-            actual_cols = [c for c in cols_to_show if c in view_df.columns]
-            
-            if actual_cols:
-                if 'date' in actual_cols:
-                    st.dataframe(view_df[actual_cols].sort_values(by='date', ascending=False), use_container_width=True)
+            # יצירת עמודת שבוע
+            df_an = full_df.copy()
+            if 'date' in df_an.columns:
+                df_an['date'] = pd.to_datetime(df_an['date'], errors='coerce')
+                df_an['week'] = df_an['date'].dt.strftime('%Y - שבוע %U')
+                
+                weeks = sorted(df_an['week'].dropna().unique(), reverse=True)
+                if weeks:
+                    sel_week = st.selectbox("בחר שבוע לניתוח:", weeks)
+                    w_df = df_an[df_an['week'] == sel_week]
+                    
+                    # תצוגת הנתונים
+                    st.write(f"**{len(w_df)} תצפיות בשבוע {sel_week}**")
+                    st.dataframe(w_df[['student_name', 'challenge', 'tags', 'interpretation']].fillna(''), use_container_width=True)
+                    
+                    # כפתור ניתוח + שמירה
+                    if st.button("✨ הפק ניתוח תמות ושמור לדרייב"):
+                        with st.spinner("ג'ימיני מנתח תמות חוזרות..."):
+                            # הכנת הטקסט לניתוח
+                            txt = ""
+                            for _, r in w_df.iterrows():
+                                txt += f"סטודנט: {r.get('student_name','')} | תצפית: {r.get('challenge','')} | תובנה: {r.get('interpretation','')}\n---\n"
+                            
+                            try:
+                                # קריאה ל-AI
+                                genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], transport='rest')
+                                model = genai.GenerativeModel('gemini-1.5-flash')
+                                
+                                prompt = f"""
+אתה מנחה מחקר איכותני. נתח את התצפיות מ{sel_week}:
+
+{txt}
+
+בצע ניתוח תמות (Thematic Analysis):
+1. זהה 3-5 תמות מרכזיות החוזרות בתצפיות
+2. לכל תמה - ספק דוגמאות מהשטח
+3. הצע המלצות פדגוגיות
+4. זהה סטודנטים הזקוקים למעקב מיוחד
+
+ענה בעברית אקדמית בפורמט מובנה.
+"""
+                                
+                                response = model.generate_content(prompt).text
+                                
+                                # הצגת התוצאה
+                                st.markdown(f'<div class="feedback-box"><h4>📊 ניתוח תמות - {sel_week}</h4>{response}</div>', unsafe_allow_html=True)
+                                
+                                # שמירה לדרייב
+                                if svc:
+                                    f_name = f"ניתוח_תמות_{sel_week.replace(' ', '_')}.txt"
+                                    media = MediaIoBaseUpload(
+                                        io.BytesIO(response.encode('utf-8')), 
+                                        mimetype='text/plain'
+                                    )
+                                    
+                                    GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
+                                    body = {'name': f_name}
+                                    if GDRIVE_FOLDER_ID:
+                                        body['parents'] = [GDRIVE_FOLDER_ID]
+                                    
+                                    svc.files().create(
+                                        body=body, 
+                                        media_body=media, 
+                                        supportsAllDrives=True
+                                    ).execute()
+                                    
+                                    st.success(f"✅ הניתוח נשמר בדרייב בשם: {f_name}")
+                                else:
+                                    st.warning("לא ניתן לשמור - שירות Drive לא זמין")
+                                    
+                            except Exception as e:
+                                st.error(f"❌ שגיאה בניתוח: {str(e)[:200]}")
                 else:
-                    st.dataframe(view_df[actual_cols], use_container_width=True)
-            
-            # ניתוח AI מתקדם
-            st.markdown("---")
-            if st.button("✨ הפק ניתוח מגמות אקדמי"):
-                with st.spinner("המנחה מנתח את כל התצפיות..."):
-                    analysis = get_ai_response("analysis", {
-                        "history": view_df.tail(15).to_string(),
-                        "question": "זהה דפוסים חוזרים, התקדמות, ונקודות למעקב"
-                    })
-                    st.markdown(f'<div class="feedback-box"><h4>📊 ניתוח מחקרי</h4>{analysis}</div>', unsafe_allow_html=True)
+                    st.warning("אין נתוני תאריכים תקינים")
+            else:
+                st.error("חסרה עמודת 'date' בנתונים")
+
+# --- Sidebar ---
+st.sidebar.write("**מצב חיבור:**")
+st.sidebar.write("🔗 Drive:", "✅ מחובר" if svc else "❌ לא מחובר")
+if not full_df.empty:
+    st.sidebar.metric("תצפיות במערכת", len(full_df))
+    if 'student_name' in full_df.columns:
+        st.sidebar.metric("סטודנטים", full_df['student_name'].nunique())
