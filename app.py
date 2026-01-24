@@ -77,8 +77,16 @@ def load_full_dataset(_svc):
                 while not done: _, done = downloader.next_chunk()
                 fh.seek(0)
                 df_drive = pd.read_excel(fh)
-                possible = [c for c in df_drive.columns if "student" in c.lower()]
-                if possible: df_drive.rename(columns={possible[0]: "student_name"}, inplace=True)
+                
+                # DEBUG: הצגת עמודות
+                logging.info(f"עמודות בקובץ Excel: {df_drive.columns.tolist()}")
+                logging.info(f"מספר שורות: {len(df_drive)}")
+                
+                # חיפוש עמודת שם - יותר גמיש
+                possible = [c for c in df_drive.columns if "student" in c.lower() or "name" in c.lower() or "שם" in c.lower() or "תלמיד" in c.lower()]
+                if possible: 
+                    df_drive.rename(columns={possible[0]: "student_name"}, inplace=True)
+                    logging.info(f"שינוי שם עמודה: {possible[0]} -> student_name")
         except Exception as e: 
             logging.error(f"Drive load error: {e}")
 
@@ -87,13 +95,25 @@ def load_full_dataset(_svc):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 lines = [json.loads(l) for l in f if l.strip()]
-                if lines: df_local = pd.DataFrame(lines)
-        except: pass
+                if lines: 
+                    df_local = pd.DataFrame(lines)
+                    logging.info(f"נטענו {len(df_local)} שורות מקומיות")
+        except Exception as e:
+            logging.error(f"Local load error: {e}")
 
+    # איחוד
+    if df_drive.empty and df_local.empty:
+        logging.warning("אין נתונים כלל!")
+        return pd.DataFrame()
+    
     df = pd.concat([df_drive, df_local], ignore_index=True)
+    
+    # ניקוי ונורמליזציה
     if not df.empty and 'student_name' in df.columns:
         df = df.dropna(subset=['student_name'])
         df['name_clean'] = df['student_name'].apply(normalize_name)
+        logging.info(f"סה״כ {len(df)} תצפיות, {df['student_name'].nunique()} סטודנטים")
+    
     return df
 
 def get_ai_response(prompt_type, context_data):
@@ -219,9 +239,30 @@ with tab1:
         # טעינת הקשר עם אינדיקציה ויזואלית
         if student_name != st.session_state.last_selected_student:
             with st.spinner(f"טוען היסטוריה עבור {student_name}..."):
-                target = normalize_name(student_name)
-                match = full_df[full_df['name_clean'] == target] if not full_df.empty else pd.DataFrame()
                 
+                if full_df.empty:
+                    st.warning("⚠️ הטבלה ריקה! לא נטענו נתונים מהדרייב.")
+                    match = pd.DataFrame()
+                elif 'student_name' not in full_df.columns:
+                    st.error("❌ חסרה עמודת 'student_name' בנתונים!")
+                    st.write("**עמודות זמינות:**", full_df.columns.tolist())
+                    match = pd.DataFrame()
+                else:
+                    # חיפוש חכם: מדויק -> נורמליזציה -> חלקי
+                    
+                    # ניסיון 1: השוואה מדויקת
+                    match = full_df[full_df['student_name'] == student_name]
+                    
+                    # ניסיון 2: נורמליזציה (אם ריק)
+                    if match.empty and 'name_clean' in full_df.columns:
+                        target = normalize_name(student_name)
+                        match = full_df[full_df['name_clean'] == target]
+                    
+                    # ניסיון 3: חיפוש חלקי (fallback)
+                    if match.empty:
+                        match = full_df[full_df['student_name'].str.contains(student_name, case=False, na=False)]
+                
+                # עדכון ה-state
                 if not match.empty:
                     st.session_state.student_context = match.tail(15).to_string()
                     st.session_state.show_success_bar = True
@@ -239,6 +280,22 @@ with tab1:
             st.success(f"✅ נמצאה היסטוריה עבור {student_name}. הסוכן מעודכן.")
         else:
             st.info(f"ℹ️ {student_name}: אין תצפיות קודמות במערכת.")
+            
+            # עזרה לדיבוג
+            with st.expander("🔍 עזרה - למה לא נמצא?"):
+                if full_df.empty:
+                    st.write("הטבלה ריקה לגמרי. בדוק:")
+                    st.write("1. האם הקובץ Excel קיים בדרייב?")
+                    st.write("2. האם יש תצפיות שמורות מקומית?")
+                    st.write("3. לחץ על '🔄 רענן נתונים' בסיידבר")
+                elif 'student_name' in full_df.columns:
+                    st.write("**שמות זמינים במערכת:**")
+                    for name in sorted(full_df['student_name'].unique()):
+                        st.write(f"- {name}")
+                    st.write(f"\n**חיפשתי:** '{student_name}'")
+                    st.write("💡 ייתכן שהשם נשמר אחרת (עם שם משפחה, רווחים וכו')")
+                else:
+                    st.error("בעיה במבנה הנתונים - עמודת student_name חסרה")
 
         st.markdown("---")
         
@@ -571,3 +628,27 @@ if not full_df.empty:
     st.sidebar.metric("תצפיות במערכת", len(full_df))
     if 'student_name' in full_df.columns:
         st.sidebar.metric("סטודנטים", full_df['student_name'].nunique())
+
+# כפתור דיבוג
+st.sidebar.markdown("---")
+if st.sidebar.button("🔍 הצג מידע דיבוג"):
+    st.sidebar.write("**עמודות ב-DataFrame:**")
+    st.sidebar.write(full_df.columns.tolist() if not full_df.empty else "ריק")
+    
+    if not full_df.empty and 'student_name' in full_df.columns:
+        st.sidebar.write("**כל השמות במערכת:**")
+        unique_names = full_df['student_name'].unique()
+        for name in sorted(unique_names):
+            st.sidebar.write(f"- '{name}' (נורמל: '{normalize_name(name)}')")
+    
+    st.sidebar.write(f"**סה״כ שורות:** {len(full_df)}")
+    
+    # הצגת 3 שורות ראשונות
+    if not full_df.empty:
+        st.sidebar.write("**דוגמה (3 שורות ראשונות):**")
+        st.sidebar.dataframe(full_df.head(3))
+
+# כפתור לניקוי cache
+if st.sidebar.button("🔄 רענן נתונים"):
+    st.cache_data.clear()
+    st.rerun()
