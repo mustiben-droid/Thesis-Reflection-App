@@ -72,36 +72,6 @@ def get_drive_service():
     except: return None
 
 @st.cache_data(ttl=30)
-def load_full_dataset(_svc):
-    df_drive = pd.DataFrame()
-    file_id = st.secrets.get("MASTER_FILE_ID")
-    
-    if _svc and file_id:
-        try:
-            req = _svc.files().get_media(fileId=file_id)
-            fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, req)
-            done = False
-            while not done: _, done = downloader.next_chunk()
-            fh.seek(0)
-            
-            # טעינת האקסל - שימי לב שאנחנו טוענים את הגיליון הראשון
-            df_drive = pd.read_excel(fh)
-            
-            # זיהוי עמודת השם (בקישור ששלחת היא נקראת student_name)
-            if 'student_name' not in df_drive.columns:
-                cols = [c for c in df_drive.columns if any(x in str(c).lower() for x in ["student", "name", "שם", "תלמיד"])]
-                if cols: df_drive.rename(columns={cols[0]: "student_name"}, inplace=True)
-            
-            st.sidebar.success("🔗 מחובר לקובץ המאסטר הנכון")
-        except Exception as e:
-            st.sidebar.error(f"❌ שגיאת חיבור לקובץ: {e}")
-
-    df_local = pd.DataFrame()
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                df_local = pd.DataFrame([json.loads(l) for l in f if l.strip()])
-        except: pass
 
     df = pd.concat([df_drive, df_local], ignore_index=True)
     if not df.empty and 'student_name' in df.columns:
@@ -392,6 +362,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
