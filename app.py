@@ -36,13 +36,6 @@ st.markdown("""
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
         .feedback-box h4 { margin-top: 0; color: #fff; }
-        .improved-text {
-            background-color: rgba(255,255,255,0.2);
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 10px;
-            border-left: 4px solid #ffd700;
-        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -129,7 +122,7 @@ def get_ai_response(prompt_type, context_data):
             )
         
         elif prompt_type == "reflection":
-            # זהו הפרומפט המתקדם למנחה מחקר!
+            # פרומפט מתקדם למנחה מחקר
             observation = context_data.get('challenge', '')
             tags = context_data.get('tags', [])
             student_name = context_data.get('student_name', '')
@@ -206,7 +199,6 @@ if "chat_history" not in st.session_state: st.session_state.chat_history = []
 if "student_context" not in st.session_state: st.session_state.student_context = ""
 if "last_selected_student" not in st.session_state: st.session_state.last_selected_student = ""
 if "last_feedback" not in st.session_state: st.session_state.last_feedback = ""
-if "show_improved" not in st.session_state: st.session_state.show_improved = False
 
 # --- 3. טעינת נתונים ---
 svc = get_drive_service()
@@ -236,16 +228,35 @@ with tab1:
 
         st.markdown("---")
         
-        # טופס קצר יותר
+        # טופס מלא עם כל הפיצ'רים המקוריים
         c1, c2 = st.columns(2)
         with c1:
+            work_method = st.radio(
+                "🛠️ סוג תרגול:", 
+                ["🧊 בעזרת גוף מודפס", "🎨 ללא גוף (דמיון)"], 
+                key=f"wm_{it}", 
+                horizontal=True
+            )
+            ex_diff = st.select_slider(
+                "📉 רמת קושי:", 
+                options=["קל", "בינוני", "קשה"], 
+                key=f"ed_{it}"
+            )
+        with c2:
+            drw_cnt = st.number_input("כמות שרטוטים", min_value=0, key=f"dc_{it}")
+            dur_min = st.number_input("זמן עבודה (דק')", min_value=0, key=f"dm_{it}")
+
+        st.markdown("### 📊 מדדים כמותיים (1-5)")
+        m1, m2 = st.columns(2)
+        with m1:
             s1 = st.slider("המרת ייצוגים", 1, 5, 3, key=f"s1_{it}")
             s2 = st.slider("מעבר בין היטלים", 1, 5, 3, key=f"s2_{it}")
-        with c2:
-            s3 = st.slider("שימוש במודל 3D", 1, 5, 3, key=f"s3_{it}")
+        with m2:
+            s3 = st.slider("שימוש במודל", 1, 5, 3, key=f"s3_{it}")
             s4 = st.slider("מסוגלות עצמית", 1, 5, 3, key=f"s4_{it}")
 
         tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
+        
         challenge = st.text_area(
             "🗣️ תצפית שדה (תאר מה ראית - פעולות, התנהגות, שרטוטים):", 
             height=150,
@@ -254,9 +265,19 @@ with tab1:
         )
         
         interpretation = st.text_area(
-            "🧠 פרשנות מחקרית (אופציונלי - מה זה אומר?):", 
+            "🧠 פרשנות מחקרית (אופציונלי):", 
             height=80,
-            key=f"int_{it}"
+            key=f"int_{it}",
+            placeholder="הסבר מה התצפית מלמדת על תהליך החשיבה של התלמיד..."
+        )
+
+        # העלאת תמונות (חזרה!)
+        up_files = st.file_uploader(
+            "📷 צרף תמונות של שרטוטים/עבודות", 
+            accept_multiple_files=True, 
+            type=['png', 'jpg', 'jpeg'], 
+            key=f"up_{it}",
+            help="תמונות יועלו ל-Google Drive ויקושרו לתצפית"
         )
 
         # תיבת המשוב של המנחה
@@ -283,7 +304,6 @@ with tab1:
                             "student_name": student_name
                         })
                         st.session_state.last_feedback = feedback
-                        st.session_state.show_improved = True
                         st.rerun()
         
         with col_btns[1]:
@@ -291,10 +311,40 @@ with tab1:
                 if not challenge:
                     st.error("⚠️ חובה להזין תיאור תצפית")
                 else:
-                    with st.spinner("שומר..."):
+                    with st.spinner("מעלה תמונות ושומר..."):
+                        # העלאת תמונות ל-Drive
+                        links = []
+                        GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
+                        
+                        if up_files and svc:
+                            for f in up_files:
+                                try:
+                                    file_meta = {'name': f.name}
+                                    if GDRIVE_FOLDER_ID:
+                                        file_meta['parents'] = [GDRIVE_FOLDER_ID]
+                                    
+                                    media = MediaIoBaseUpload(
+                                        io.BytesIO(f.getvalue()), 
+                                        mimetype=f.type
+                                    )
+                                    res = svc.files().create(
+                                        body=file_meta, 
+                                        media_body=media, 
+                                        fields='webViewLink', 
+                                        supportsAllDrives=True
+                                    ).execute()
+                                    links.append(res.get('webViewLink'))
+                                except Exception as e:
+                                    st.warning(f"לא הצלחתי להעלות {f.name}: {e}")
+                        
+                        # שמירת התצפית המלאה
                         entry = {
                             "date": date.today().isoformat(),
                             "student_name": student_name,
+                            "work_method": work_method,
+                            "exercise_difficulty": ex_diff,
+                            "drawings_count": int(drw_cnt),
+                            "duration_min": int(dur_min),
                             "cat_convert_rep": int(s1),
                             "cat_proj_trans": int(s2),
                             "cat_3d_support": int(s3),
@@ -302,6 +352,7 @@ with tab1:
                             "tags": tags,
                             "challenge": challenge,
                             "interpretation": interpretation,
+                            "file_links": links,
                             "timestamp": datetime.now().isoformat()
                         }
                         
@@ -390,7 +441,7 @@ with tab3:
             
             view_df = full_df if selected_s == "כולם" else full_df[full_df['student_name'] == selected_s]
             
-            cols_to_show = ['date', 'student_name', 'challenge', 'interpretation', 'tags']
+            cols_to_show = ['date', 'student_name', 'work_method', 'challenge', 'interpretation', 'tags', 'cat_convert_rep', 'cat_proj_trans', 'cat_self_efficacy']
             actual_cols = [c for c in cols_to_show if c in view_df.columns]
             
             if actual_cols:
