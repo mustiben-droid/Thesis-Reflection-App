@@ -94,4 +94,66 @@ with tab1:
         st.info(f"ℹ️ {student_name}: אין תצפיות קודמות.")
 
     st.markdown("---")
-    st.write("שלב הבא: כאן נכניס את הסליידרים והשדות שביקשת.")
+   # --- שלב 2: בניית הטופס המעודכן ---
+    work_method = st.radio("🛠️ צורת עבודה:", ["🧊 בעזרת גוף מודפס", "🎨 ללא גוף (דמיון)"], key=f"wm_{it}", horizontal=True)
+
+    st.markdown("### 📊 מדדים כמותיים (1-5)")
+    m1, m2 = st.columns(2)
+    with m1:
+        s1 = st.slider("המרת ייצוגים", 1, 5, 3, key=f"s1_{it}")
+        s2 = st.slider("מעבר בין היטלים", 1, 5, 3, key=f"s2_{it}")
+    with m2:
+        s3 = st.slider("שימוש במודל 3D", 1, 5, 3, key=f"s3_{it}")
+        s_diff = st.slider("📉 רמת קושי התרגיל", 1, 5, 3, key=f"sd_{it}")
+
+    tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
+
+    # תיבות טקסט (רק אלו שביקשת)
+    ch = st.text_area("🗣️ תצפית שדה (Challenge):", height=150, key=f"ch_{it}", placeholder="מה ראית בפועל?")
+    ins = st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key=f"ins_{it}", placeholder="מה זה מלמד על תהליך החשיבה?")
+
+    # העלאת תמונות
+    up_files = st.file_uploader("📷 צרף תמונות (שרטוטים/עבודות)", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{it}")
+
+    if st.session_state.last_feedback:
+        st.markdown(f'<div class="feedback-box"><b>💡 משוב AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
+
+    c_btns = st.columns(2)
+    with c_btns[0]:
+        if st.button("🔍 בקש רפלקציה (AI)"):
+            if ch:
+                try:
+                    genai.configure(api_key=st.secrets.get("GOOGLE_API_KEY"), transport='rest')
+                    model = genai.GenerativeModel('models/gemini-1.5-flash')
+                    st.session_state.last_feedback = model.generate_content(f"נתח תצפית אקדמית עבור {student_name}: {ch}").text
+                    st.rerun()
+                except Exception as e: st.error(f"שגיאת AI: {e}")
+            else: st.warning("כתבי תצפית קודם.")
+            
+    with c_btns[1]:
+        if st.button("💾 שמור תצפית", type="primary"):
+            if ch:
+                with st.spinner("שומר ומעלה נתונים..."):
+                    links = []
+                    if up_files and svc:
+                        for f in up_files:
+                            try:
+                                f_meta = {'name': f.name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
+                                media = MediaIoBaseUpload(io.BytesIO(f.getvalue()), mimetype=f.type)
+                                res = svc.files().create(body=f_meta, media_body=media, fields='webViewLink', supportsAllDrives=True).execute()
+                                links.append(res.get('webViewLink'))
+                            except: pass
+                    
+                    entry = {
+                        "date": date.today().isoformat(), "student_name": student_name, "work_method": work_method,
+                        "challenge": ch, "insight": ins, "difficulty": s_diff,
+                        "cat_convert_rep": int(s1), "cat_proj_trans": int(s2), "cat_3d_support": int(s3),
+                        "tags": tags, "file_links": links, "timestamp": datetime.now().isoformat()
+                    }
+                    with open(DATA_FILE, "a", encoding="utf-8") as f:
+                        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                    st.session_state.it += 1
+                    st.session_state.last_feedback = ""
+                    st.rerun()
+            else: st.error("חובה להזין תיאור תצפית.")
+
