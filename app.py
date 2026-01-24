@@ -231,38 +231,18 @@ tab1, tab2, tab3 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "�
 
 with tab1:
     col_in, col_chat = st.columns([1.2, 1])
-    
     with col_in:
         it = st.session_state.it
         student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
         
-        # טעינת הקשר עם אינדיקציה ויזואלית
+        # --- פונקציית הסליידר הירוק המשוחזרת ---
         if student_name != st.session_state.last_selected_student:
-            with st.spinner(f"טוען היסטוריה עבור {student_name}..."):
+            with st.spinner(f"בודק היסטוריה עבור {student_name}..."):
+                # נורמליזציה לשם לבדיקה חסינה
+                target = normalize_name(student_name)
+                # חיפוש בדאטה המרכזי
+                match = full_df[full_df['name_clean'] == target] if not full_df.empty else pd.DataFrame()
                 
-                if full_df.empty:
-                    st.warning("⚠️ הטבלה ריקה! לא נטענו נתונים מהדרייב.")
-                    match = pd.DataFrame()
-                elif 'student_name' not in full_df.columns:
-                    st.error("❌ חסרה עמודת 'student_name' בנתונים!")
-                    st.write("**עמודות זמינות:**", full_df.columns.tolist())
-                    match = pd.DataFrame()
-                else:
-                    # חיפוש חכם: מדויק -> נורמליזציה -> חלקי
-                    
-                    # ניסיון 1: השוואה מדויקת
-                    match = full_df[full_df['student_name'] == student_name]
-                    
-                    # ניסיון 2: נורמליזציה (אם ריק)
-                    if match.empty and 'name_clean' in full_df.columns:
-                        target = normalize_name(student_name)
-                        match = full_df[full_df['name_clean'] == target]
-                    
-                    # ניסיון 3: חיפוש חלקי (fallback)
-                    if match.empty:
-                        match = full_df[full_df['student_name'].str.contains(student_name, case=False, na=False)]
-                
-                # עדכון ה-state
                 if not match.empty:
                     st.session_state.student_context = match.tail(15).to_string()
                     st.session_state.show_success_bar = True
@@ -271,11 +251,10 @@ with tab1:
                     st.session_state.show_success_bar = False
             
             st.session_state.last_selected_student = student_name
-            st.session_state.chat_history = []
-            st.session_state.last_feedback = ""
+            st.session_state.chat_history = [] # איפוס צ'אט במעבר תלמיד
             st.rerun()
 
-        # הצגת סטטוס טעינה
+        # הצגת הפס הירוק/כחול
         if st.session_state.show_success_bar:
             st.success(f"✅ נמצאה היסטוריה עבור {student_name}. הסוכן מעודכן.")
         else:
@@ -652,3 +631,4 @@ if st.sidebar.button("🔍 הצג מידע דיבוג"):
 if st.sidebar.button("🔄 רענן נתונים"):
     st.cache_data.clear()
     st.rerun()
+
