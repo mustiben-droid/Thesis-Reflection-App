@@ -100,7 +100,7 @@ with tab1:
     # --- שלב 2: בניית הטופס המעודכן ---
     work_method = st.radio("🛠️ צורת עבודה:", ["🧊 בעזרת גוף מודפס", "🎨 ללא גוף (דמיון)"], key=f"wm_{it}", horizontal=True)
 
-    st.markdown("### 📊 מדדים כמותיים (1-5)")
+  st.markdown("### 📊 מדדים כמותיים (1-5)")
     m1, m2 = st.columns(2)
     with m1:
         s1 = st.slider("המרת ייצוגים", 1, 5, 3, key=f"s1_{it}")
@@ -108,6 +108,8 @@ with tab1:
     with m2:
         s3 = st.slider("שימוש במודל 3D", 1, 5, 3, key=f"s3_{it}")
         s_diff = st.slider("📉 רמת קושי התרגיל", 1, 5, 3, key=f"sd_{it}")
+        # הוספת סליידר פרופורציות:
+        s4 = st.slider("📏 פרופורציות ומימדים", 1, 5, 3, key=f"s4_{it}")
 
     tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
 
@@ -158,6 +160,7 @@ with tab1:
                     st.session_state.it += 1
                     st.session_state.last_feedback = ""
                     st.rerun()
+                    
             else: st.error("חובה להזין תיאור תצפית.")
 
     tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
@@ -210,5 +213,6 @@ with tab1:
                     st.session_state.last_feedback = ""
                     st.rerun()
             else: st.error("חובה להזין תיאור תצפית.")
+
 
 
