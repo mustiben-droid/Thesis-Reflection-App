@@ -6,13 +6,14 @@ from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from datetime import date, datetime
 
 # --- 0. הגדרות ועיצוב ---
+logging.basicConfig(level=logging.INFO)
 DATA_FILE = "reflections.jsonl"
 MASTER_FILENAME = "All_Observations_Master.xlsx"
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 TAGS_OPTIONS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
 
-st.set_page_config(page_title="מערכת תצפית - גרסה 50.0", layout="wide")
+st.set_page_config(page_title="מערכת תצפית - גרסה 51.0", layout="wide")
 
 st.markdown("""
     <style>
@@ -102,7 +103,7 @@ with tab1:
         st.markdown("---")
         work_method = st.radio("🛠️ צורת עבודה:", ["🧊 בעזרת גוף מודפס", "🎨 ללא גוף (דמיון)"], key=f"wm_{it}", horizontal=True)
         
-        # --- מדדים כמותיים (עלו למעלה) ---
+        # --- מדדים כמותיים (עלו למעלה כפי שביקשת) ---
         st.markdown("### 📊 מדדים כמותיים (1-5)")
         m1, m2 = st.columns(2)
         with m1:
@@ -114,12 +115,12 @@ with tab1:
 
         tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
 
-        # --- תיבות טקסט (צומצמו) ---
+        # --- תיבות טקסט (Challenge ו-Insight בלבד) ---
         ch = st.text_area("🗣️ תצפית שדה (Challenge):", height=150, key=f"ch_{it}")
         ins = st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key=f"ins_{it}")
 
         # --- העלאת תמונות ---
-        up_files = st.file_uploader("📷 צרף תמונות (שרטוטים/עבודות)", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{it}")
+        up_files = st.file_uploader("📷 צרף תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{it}")
 
         if st.session_state.last_feedback:
             st.markdown(f'<div class="feedback-box"><b>💡 משוב AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
@@ -128,20 +129,24 @@ with tab1:
         with c_btns[0]:
             if st.button("🔍 בקש רפלקציה (AI)"):
                 if ch:
-                    genai.configure(api_key=st.secrets.get("GOOGLE_API_KEY"), transport='rest')
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    st.session_state.last_feedback = model.generate_content(f"נתח תצפית עבור {student_name}: {ch}").text
-                    st.rerun()
+                    try:
+                        genai.configure(api_key=st.secrets.get("GOOGLE_API_KEY"), transport='rest')
+                        model = genai.GenerativeModel('models/gemini-1.5-flash')
+                        st.session_state.last_feedback = model.generate_content(f"נתח תצפית עבור {student_name}: {ch}").text
+                        st.rerun()
+                    except Exception as e: st.error(f"שגיאת AI: {e}")
         with c_btns[1]:
             if st.button("💾 שמור תצפית", type="primary"):
                 if ch:
                     links = []
                     if up_files and svc:
                         for f in up_files:
-                            f_meta = {'name': f.name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
-                            media = MediaIoBaseUpload(io.BytesIO(f.getvalue()), mimetype=f.type)
-                            res = svc.files().create(body=f_meta, media_body=media, fields='webViewLink', supportsAllDrives=True).execute()
-                            links.append(res.get('webViewLink'))
+                            try:
+                                f_meta = {'name': f.name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}
+                                media = MediaIoBaseUpload(io.BytesIO(f.getvalue()), mimetype=f.type)
+                                res = svc.files().create(body=f_meta, media_body=media, fields='webViewLink', supportsAllDrives=True).execute()
+                                links.append(res.get('webViewLink'))
+                            except: pass
                     
                     entry = {
                         "date": date.today().isoformat(), "student_name": student_name, "work_method": work_method,
@@ -156,13 +161,15 @@ with tab1:
         st.subheader(f"🤖 יועץ: {student_name}")
         u_q = st.chat_input("שאל...")
         if u_q:
-            genai.configure(api_key=st.secrets.get("GOOGLE_API_KEY"), transport='rest')
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            resp = model.generate_content(f"היסטוריה: {st.session_state.student_context}. שאלה: {u_q}").text
-            st.write(resp)
+            try:
+                genai.configure(api_key=st.secrets.get("GOOGLE_API_KEY"), transport='rest')
+                model = genai.GenerativeModel('models/gemini-1.5-flash')
+                resp = model.generate_content(f"היסטוריה: {st.session_state.student_context}. שאלה: {u_q}").text
+                st.write(resp)
+            except Exception as e: st.error(f"שגיאה: {e}")
 
 with tab2:
-    if st.button("🚀 סנכרן הכל לדרייב"):
+    if st.button("🚀 סנכרן לדרייב"):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f: locals_ = [json.loads(l) for l in f if l.strip()]
             df_m = pd.concat([full_df, pd.DataFrame(locals_)], ignore_index=True).drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
@@ -180,16 +187,20 @@ with tab3:
     if not df_v.empty:
         df_v['date'] = pd.to_datetime(df_v['date'], errors='coerce')
         df_v['week'] = df_v['date'].dt.strftime('%Y - שבוע %U')
-        sel_w = st.selectbox("בחר שבוע לניתוח:", sorted(df_v['week'].dropna().unique(), reverse=True))
+        weeks = sorted(df_v['week'].dropna().unique(), reverse=True)
+        sel_w = st.selectbox("בחר שבוע לניתוח:", weeks)
         w_df = df_v[df_v['week'] == sel_w]
         st.dataframe(w_df)
+        
         if st.button("✨ הפק ניתוח שבועי ושמור לדרייב"):
             with st.spinner("מנתח..."):
-                genai.configure(api_key=st.secrets.get("GOOGLE_API_KEY"), transport='rest')
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                txt = "".join([f"תצפית: {r.get('challenge','')} | תובנה: {r.get('insight','')}\n" for _, r in w_df.iterrows()])
-                response = model.generate_content(f"נתח תמות אקדמיות לשבוע {sel_w}: {txt}").text
-                st.info(response)
-                media = MediaIoBaseUpload(io.BytesIO(response.encode('utf-8')), mimetype='text/plain')
-                svc.files().create(body={'name': f"ניתוח_{sel_w}.txt", 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
-                st.success("הניתוח נשמר בדרייב")
+                try:
+                    genai.configure(api_key=st.secrets.get("GOOGLE_API_KEY"), transport='rest')
+                    model = genai.GenerativeModel('models/gemini-1.5-flash')
+                    txt = "".join([f"סטודנט: {r.get('student_name','')} | תצפית: {r.get('challenge','')} | תובנה: {r.get('insight','')}\n" for _, r in w_df.iterrows()])
+                    response = model.generate_content(f"נתח תמות אקדמיות לשבוע {sel_w}: {txt}").text
+                    st.info(response)
+                    media = MediaIoBaseUpload(io.BytesIO(response.encode('utf-8')), mimetype='text/plain')
+                    svc.files().create(body={'name': f"ניתוח_{sel_w}.txt", 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
+                    st.success("נשמר בדרייב")
+                except Exception as e: st.error(f"שגיאה ב-AI: {e}")
