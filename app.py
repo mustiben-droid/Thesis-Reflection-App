@@ -249,7 +249,7 @@ def render_tab_entry(svc, full_df):
                     st.warning("אנא כתוב תצפית לפני השמירה.")
 
         with c_btns[1]:
-            if st.button("💾 שמור תצפית", type="primary"):
+            if st.button("💾 שמור תצפית", type="primary", key=f"save_btn_{it}"):
                 if ch.strip():
                     with st.spinner("שומר..."):
                         links = []
@@ -428,6 +428,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
