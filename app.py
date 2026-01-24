@@ -1,5 +1,5 @@
 import json, base64, os, io, logging, pandas as pd, streamlit as st
-import google.generativeai as genai
+from google import generativeai as genai
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
@@ -88,27 +88,18 @@ def load_full_dataset(_svc):
     
 def call_gemini(prompt):
     try:
-        # הגדרת ה-API Key מה-Secrets
         api_key = st.secrets.get("GOOGLE_API_KEY")
-        if not api_key:
-            return "שגיאה: חסר API Key ב-Secrets"
+        if not api_key: return "שגיאה: חסר API Key"
             
-        # הגדרת התצורה עם הטרנספורט הנכון
-        genai.configure(api_key=api_key, transport='rest')
+        genai.configure(api_key=api_key)
         
-        # שימוש בשם המודל ללא הקידומת models/ (לפעמים זה מה שגורם ל-404)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # שים לב לתוספת של model_name=
+        model = genai.GenerativeModel(model_name="gemini-1.5-flash")
         
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        # אם הניסיון הראשון נכשל, ננסה עם הקידומת המלאה
-        try:
-            model = genai.GenerativeModel('models/gemini-1.5-flash')
-            response = model.generate_content(prompt)
-            return response.text
-        except Exception as e2:
-            return f"שגיאה בחיבור ליועץ AI: {str(e2)}"
+        return f"שגיאה בחיבור ליועץ AI: {str(e)}"
 
 # ==========================================
 # --- 2. פונקציות ממשק משתמש (Tabs) ---
@@ -333,6 +324,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
