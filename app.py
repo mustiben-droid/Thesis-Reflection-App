@@ -19,8 +19,33 @@ st.set_page_config(page_title="מערכת תצפית מחקרית - 54.0", layou
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
-        html, body, .stApp { direction: rtl; text-align: right; font-family: 'Heebo', sans-serif !important; }
+        
+        /* הגדרות כלליות */
+        html, body, .stApp { 
+            direction: rtl; 
+            text-align: right; 
+            font-family: 'Heebo', sans-serif !important; 
+        }
+
+        /* מניעת היפוך של סליידרים */
         [data-testid="stSlider"] { direction: ltr !important; }
+
+        /* --- התיקון לסלייד החותך --- */
+        [data-testid="stNotification"], .stAlert {
+            direction: rtl;
+            width: 100% !important;
+            display: block !important;
+            position: relative !important;
+            transform: none !important;
+            margin: 10px 0 !important;
+        }
+        
+        /* מניעת מתיחה אנכית של אלמנטים בטלפון */
+        [data-testid="column"] {
+            width: 100% !important;
+            flex: 1 1 auto !important;
+        }
+
         .stButton > button { width: 100%; font-weight: bold; border-radius: 12px; height: 3em; }
         .stButton button[kind="primary"] { background-color: #28a745; color: white; }
         .feedback-box { background-color: #f8f9fa; padding: 20px; border-radius: 15px; border: 1px solid #dee2e6; margin: 15px 0; color: #333; }
@@ -367,6 +392,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
