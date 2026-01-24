@@ -49,22 +49,27 @@ def get_drive_service():
 @st.cache_data(ttl=30)
 def load_full_dataset(_svc):
     df_drive = pd.DataFrame()
-    if _svc:
+    file_id = st.secrets.get("MASTER_FILE_ID")
+    
+    if _svc and file_id:
         try:
-            res = _svc.files().list(q=f"name='{MASTER_FILENAME}' and trashed=false", supportsAllDrives=True).execute().get('files', [])
-            if res:
-                req = _svc.files().get_media(fileId=res[0]['id'])
-                fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, req)
-                done = False
-                while not done: _, done = downloader.next_chunk()
-                fh.seek(0); df_drive = pd.read_excel(fh)
-                
-                # זיהוי עמודת השם (student_name מופיע אצלך בקובץ)
-                if 'student_name' not in df_drive.columns:
-                    cols = [c for c in df_drive.columns if any(x in str(c).lower() for x in ["student", "name", "שם", "תלמיד"])]
-                    if cols: df_drive.rename(columns={cols[0]: "student_name"}, inplace=True)
+            req = _svc.files().get_media(fileId=file_id)
+            fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, req)
+            done = False
+            while not done: _, done = downloader.next_chunk()
+            fh.seek(0)
+            
+            # טעינת האקסל - שימי לב שאנחנו טוענים את הגיליון הראשון
+            df_drive = pd.read_excel(fh)
+            
+            # זיהוי עמודת השם (בקישור ששלחת היא נקראת student_name)
+            if 'student_name' not in df_drive.columns:
+                cols = [c for c in df_drive.columns if any(x in str(c).lower() for x in ["student", "name", "שם", "תלמיד"])]
+                if cols: df_drive.rename(columns={cols[0]: "student_name"}, inplace=True)
+            
+            st.sidebar.success("🔗 מחובר לקובץ המאסטר הנכון")
         except Exception as e:
-            logging.error(f"Drive load error: {e}")
+            st.sidebar.error(f"❌ שגיאת חיבור לקובץ: {e}")
 
     df_local = pd.DataFrame()
     if os.path.exists(DATA_FILE):
@@ -74,9 +79,8 @@ def load_full_dataset(_svc):
         except: pass
 
     df = pd.concat([df_drive, df_local], ignore_index=True)
-    
     if not df.empty and 'student_name' in df.columns:
-        # ניקוי השמות - חיוני לזיהוי הפס הירוק
+        # ניקוי השמות לזיהוי מושלם של ה"פס הירוק"
         df['student_name'] = df['student_name'].astype(str).str.strip()
         df['name_clean'] = df['student_name'].apply(normalize_name)
     
@@ -180,21 +184,42 @@ def render_tab_entry(svc, full_df):
 
 def render_tab_sync(svc, full_df):
     st.header("🔄 סנכרון לדרייב")
-    if os.path.exists(DATA_FILE) and st.button("🚀 סנכרן הכל לדרייב"):
+    # שליפת ה-ID מה-Secrets שהגדרת
+    file_id = st.secrets.get("MASTER_FILE_ID")
+    
+    if os.path.exists(DATA_FILE) and st.button("🚀 סנכרן לקובץ המרכזי"):
+        if not file_id:
+            st.error("⚠️ חסר MASTER_FILE_ID בתוך ה-Secrets של Streamlit!")
+            return
+
         try:
-            with st.spinner("מעלה..."):
+            with st.spinner("מתחבר לקובץ המאסטר וממזג נתונים..."):
+                # 1. קריאת התצפיות החדשות מהמכשיר
                 with open(DATA_FILE, "r", encoding="utf-8") as f:
                     locals_ = [json.loads(l) for l in f if l.strip()]
-                df_m = pd.concat([full_df, pd.DataFrame(locals_)], ignore_index=True).drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
+                
+                # 2. איחוד עם המאסטר הקיים ומניעת כפילויות
+                df_new = pd.DataFrame(locals_)
+                df_combined = pd.concat([full_df, df_new], ignore_index=True)
+                df_combined = df_combined.drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
+                
+                # 3. הכנת הקובץ למשלוח
                 buf = io.BytesIO()
-                with pd.ExcelWriter(buf, engine='openpyxl') as w: df_m.to_excel(w, index=False)
+                with pd.ExcelWriter(buf, engine='openpyxl') as w:
+                    df_combined.to_excel(w, index=False)
                 buf.seek(0)
-                res = svc.files().list(q=f"name='{MASTER_FILENAME}'", supportsAllDrives=True).execute().get('files', [])
+                
+                # 4. עדכון הקובץ הספציפי בדרייב (לפי ה-ID)
                 media = MediaIoBaseUpload(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                if res: svc.files().update(fileId=res[0]['id'], media_body=media, supportsAllDrives=True).execute()
-                else: svc.files().create(body={'name': MASTER_FILENAME, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []}, media_body=media, supportsAllDrives=True).execute()
-                os.remove(DATA_FILE); st.success("סונכרן!"); st.cache_data.clear(); st.rerun()
-        except Exception as e: st.error(f"שגיאה: {e}")
+                svc.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
+                
+                # 5. ניקוי וסיום
+                os.remove(DATA_FILE)
+                st.success("✅ הנתונים סונכרנו בהצלחה לקובץ המאסטר הראשי!")
+                st.cache_data.clear()
+                st.rerun()
+        except Exception as e:
+            st.error(f"❌ שגיאת סנכרון: {e}")
 
 def render_tab_analysis(svc):
     st.header("📊 ניתוח מחקרי שבועי")
@@ -237,6 +262,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
