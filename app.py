@@ -211,7 +211,7 @@ def render_tab_entry(svc, full_df):
 
         # כפתורי פעולה
         c_btns = st.columns(2)
-        with c_btns[0]:
+    with c_btns[0]:
             if st.button("🔍 בקש רפלקציה (AI)", key=f"ai_btn_{it}"):
                 # שינינו את המקור ל-insight_input
                 raw_insight = st.session_state.get("insight_input", "")
@@ -226,7 +226,7 @@ def render_tab_entry(svc, full_df):
                 else:
                     st.warning("תיבת התובנות (Insight) ריקה. כתוב שם משהו כדי שאוכל לנתח.")
 
-       with c_btns[1]:
+    with c_btns[1]:
             # שימוש ב-key ייחודי מונע כפילויות לחיצה
             save_key = f"save_btn_{st.session_state.it}"
             
@@ -274,6 +274,7 @@ def render_tab_entry(svc, full_df):
                         st.rerun()
                 else:
                     st.error("לא ניתן לשמור תצפית ריקה. אנא כתוב משהו בתיבות.")
+                    
         # הצגת המשוב - חייב להיות מיושר בדיוק כמו c_btns
         if st.session_state.last_feedback:
             st.markdown("---")
@@ -433,6 +434,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
