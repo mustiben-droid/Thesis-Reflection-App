@@ -209,35 +209,36 @@ def render_tab_entry(svc, full_df):
         
         up_files = st.file_uploader("📷 צרף תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{it}")
 
-        # כפתורי פעולה
+       # --- אזור כפתורי הפעולה ---
+        st.markdown("---")
         c_btns = st.columns(2)
-    with c_btns[0]:
-            if st.button("🔍 בקש רפלקציה (AI)", key=f"ai_btn_{it}"):
-                # שינינו את המקור ל-insight_input
+        
+        with c_btns[0]:
+            if st.button("🔍 בקש רפלקציה (AI)", key=f"ai_btn_{st.session_state.it}"):
+                # לוקח את הטקסט מהפרשנות (Insight)
                 raw_insight = st.session_state.get("insight_input", "")
                 
                 if raw_insight.strip():
                     with st.spinner("היועץ מנתח את התובנות שלך..."):
-                        # הנחיה ללשון זכר וניתוח התובנה
+                        # פנייה בלשון זכר
                         prompt = f"פנה אלי בלשון זכר. נתח את התובנה המחקרית שלי לגבי הסטודנט {student_name}: {raw_insight}"
                         res = call_gemini(prompt)
                         st.session_state.last_feedback = res
                         st.rerun()
                 else:
-                    st.warning("תיבת התובנות (Insight) ריקה. כתוב שם משהו כדי שאוכל לנתח.")
+                    st.warning("תיבת התובנות (Insight) ריקה.")
 
-    with c_btns[1]:
-            # שימוש ב-key ייחודי מונע כפילויות לחיצה
+        with c_btns[1]:
+            # מפתח ייחודי למניעת כפילויות
             save_key = f"save_btn_{st.session_state.it}"
             
             if st.button("💾 שמור תצפית", type="primary", key=save_key):
-                # משיכה מהזיכרון של כל מה שכתבת
                 final_ch = st.session_state.get("field_obs_input", "").strip()
                 final_ins = st.session_state.get("insight_input", "").strip()
                 
                 if final_ch or final_ins:
                     with st.spinner("שומר נתונים..."):
-                        # 1. הכנת הנתונים למילון השמירה
+                        # 1. הכנת הנתונים
                         entry = {
                             "date": date.today().isoformat(),
                             "student_name": student_name,
@@ -250,36 +251,35 @@ def render_tab_entry(svc, full_df):
                             "timestamp": datetime.now().isoformat()
                         }
                         
-                        # 2. שמירה פיזית לקובץ (שמסתנכרן לדרייב)
+                        # 2. שמירה לקובץ
                         with open(DATA_FILE, "a", encoding="utf-8") as f:
                             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                         
-                        # 3. חגיגת שמירה - הבלונים חוזרים!
+                        # 3. פידבק חיובי
                         st.balloons()
-                        st.success(f"✅ התצפית על {student_name} נשמרה בהצלחה.")
+                        st.success(f"✅ התצפית על {student_name} נשמרה!")
 
-                        # 4. ניקוי הזיכרון (השיטה הבטוחה למניעת קריסות)
+                        # 4. ניקוי הזיכרון (השיטה הבטוחה של קופיילוט)
                         st.session_state.pop("field_obs_input", None)
                         st.session_state.pop("insight_input", None)
                         st.session_state.last_feedback = ""
                         
-                        # 5. קידום המונה - מייצר "טופס חדש" לסטודנט הבא
+                        # 5. קידום המונה - ליצירת דף חדש ונקי
                         st.session_state.it += 1
                         
-                        # 6. השהיה קצרה לראות את הבלונים
+                        # 6. השהיה קצרה לבלונים
                         import time
                         time.sleep(1.8)
                         
-                        # 7. רענון האפליקציה למצב נקי
+                        # 7. רענון
                         st.rerun()
                 else:
-                    st.error("לא ניתן לשמור תצפית ריקה. אנא כתוב משהו בתיבות.")
-                    
-        # הצגת המשוב - חייב להיות מיושר בדיוק כמו c_btns
+                    st.error("לא ניתן לשמור תצפית ריקה.")
+
+        # הצגת המשוב מתחת לכפתורים
         if st.session_state.last_feedback:
             st.markdown("---")
-            st.markdown(f'<div class="feedback-box"><b>💡 משוב יועץ AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
-        # --- חשוב: הצגת המשוב על המסך ---
+            st.markdown(f'<div class="feedback-box"><b>💡 משוב יועץ AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)        # --- חשוב: הצגת המשוב על המסך ---
         if st.session_state.last_feedback:
             st.markdown("---")
             st.markdown(f'<div class="feedback-box"><b>💡 משוב יועץ AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
@@ -434,6 +434,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
