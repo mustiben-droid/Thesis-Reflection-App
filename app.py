@@ -226,37 +226,54 @@ def render_tab_entry(svc, full_df):
                 else:
                     st.warning("תיבת התובנות (Insight) ריקה. כתוב שם משהו כדי שאוכל לנתח.")
 
-        with c_btns[1]:
-            if st.button("💾 שמור תצפית", type="primary"):
-                # משיכה מה-Session State גם כאן
-                final_ch = st.session_state.get("field_obs_input", "")
-                if final_ch.strip():
-                    with st.spinner("שומר..."):
+       with c_btns[1]:
+            # שימוש ב-key ייחודי מונע כפילויות לחיצה
+            save_key = f"save_btn_{st.session_state.it}"
+            
+            if st.button("💾 שמור תצפית", type="primary", key=save_key):
+                # משיכה מהזיכרון של כל מה שכתבת
+                final_ch = st.session_state.get("field_obs_input", "").strip()
+                final_ins = st.session_state.get("insight_input", "").strip()
+                
+                if final_ch or final_ins:
+                    with st.spinner("שומר נתונים..."):
+                        # 1. הכנת הנתונים למילון השמירה
                         entry = {
                             "date": date.today().isoformat(),
                             "student_name": student_name,
                             "duration_min": duration,
                             "drawings_count": drawings,
                             "work_method": work_method,
-                            # משיכה ישירה מהמפתחות הקבועים שהגדרנו בתיבות
-                            "challenge": st.session_state.get("field_obs_input", ""),
-                            "insight": st.session_state.get("insight_input", ""),
-                            "tags": tags, # הוספנו גם את התגיות שסימנת
+                            "challenge": final_ch,
+                            "insight": final_ins,
+                            "tags": tags,
                             "timestamp": datetime.now().isoformat()
                         }
                         
+                        # 2. שמירה פיזית לקובץ (שמסתנכרן לדרייב)
                         with open(DATA_FILE, "a", encoding="utf-8") as f:
                             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                         
-                        # איפוס התיבה והמשוב אחרי שמירה
-                        st.session_state.it += 1
+                        # 3. חגיגת שמירה - הבלונים חוזרים!
+                        st.balloons()
+                        st.success(f"✅ התצפית על {student_name} נשמרה בהצלחה.")
+
+                        # 4. ניקוי הזיכרון (השיטה הבטוחה למניעת קריסות)
+                        st.session_state.pop("field_obs_input", None)
+                        st.session_state.pop("insight_input", None)
                         st.session_state.last_feedback = ""
-                        # ניקוי התיבה בזיכרון
-                        st.session_state["field_obs_input"] = ""
+                        
+                        # 5. קידום המונה - מייצר "טופס חדש" לסטודנט הבא
+                        st.session_state.it += 1
+                        
+                        # 6. השהיה קצרה לראות את הבלונים
+                        import time
+                        time.sleep(1.8)
+                        
+                        # 7. רענון האפליקציה למצב נקי
                         st.rerun()
                 else:
-                    st.warning("אנא כתוב תצפית לפני השמירה.")
-
+                    st.error("לא ניתן לשמור תצפית ריקה. אנא כתוב משהו בתיבות.")
         # הצגת המשוב - חייב להיות מיושר בדיוק כמו c_btns
         if st.session_state.last_feedback:
             st.markdown("---")
@@ -416,6 +433,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
