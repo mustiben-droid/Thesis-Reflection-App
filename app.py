@@ -255,23 +255,29 @@ def render_tab_entry(svc, full_df):
                         with open(DATA_FILE, "a", encoding="utf-8") as f:
                             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                         
-                        # 3. פידבק חיובי
+                        # 3. חגיגה וויזואלית
                         st.balloons()
-                        st.success(f"✅ התצפית על {student_name} נשמרה!")
+                        st.success(f"✅ התצפית על {student_name} נשמרה בהצלחה!")
 
-                        # 4. ניקוי הזיכרון (השיטה הבטוחה של קופיילוט)
+                        # 4. ניקוי זיכרון יסודי (השיטה המנצחת של קופיילוט)
+                        # ניקוי המפתחות הישירים
                         st.session_state.pop("field_obs_input", None)
                         st.session_state.pop("insight_input", None)
                         st.session_state.last_feedback = ""
-                        
-                        # 5. קידום המונה - ליצירת דף חדש ונקי
+
+                        # ניקוי כל שארית דינמית שאולי נוצרה בעבר
+                        for key in list(st.session_state.keys()):
+                            if key.startswith("field_obs_input_") or key.startswith("insight_input_") or key.startswith("t_"):
+                                st.session_state.pop(key, None)
+
+                        # 5. קידום המונה - יצירת דף חדש ונקי לגמרי
                         st.session_state.it += 1
                         
-                        # 6. השהיה קצרה לבלונים
+                        # 6. השהיה קצרה כדי שתוכל לראות את הבלונים
                         import time
                         time.sleep(1.8)
                         
-                        # 7. רענון
+                        # 7. רענון האפליקציה
                         st.rerun()
                 else:
                     st.error("לא ניתן לשמור תצפית ריקה.")
@@ -434,6 +440,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
