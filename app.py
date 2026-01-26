@@ -188,6 +188,7 @@ def render_tab_entry(svc, full_df):
         st.markdown("---")
         work_method = st.radio("🛠️ צורת עבודה:", ["🧊 בעזרת גוף מודפס", "🎨 ללא גוף (דמיון)"], key=f"wm_{it}", horizontal=True)
 
+# --- 2. מדדים כמותיים (1-5) ---
         st.markdown("### 📊 מדדים כמותיים (1-5)")
         m1, m2 = st.columns(2)
         with m1:
@@ -200,6 +201,18 @@ def render_tab_entry(svc, full_df):
             difficulty = st.slider("📉 רמת קושי התרגיל", 1, 5, 3, key=f"sd_{st.session_state.it}")
 
         st.markdown("---")
+        
+        # --- 3. תיבות טקסט ותמונות (החזרתי אותן!) ---
+        tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{st.session_state.it}")
+        
+        # תיבות הטקסט שומרות על Key קבוע כדי שה-AI וה-Pop יעבדו
+        st.text_area("🗣️ תצפית שדה (Challenge):", height=150, key="field_obs_input")
+        st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key="insight_input")
+        
+        up_files = st.file_uploader("📷 צרף תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{st.session_state.it}")
+        
+        # --- 4. כפתורי פעולה ---
+        st.markdown("---")
         c_btns = st.columns(2)
         
         with c_btns[0]:
@@ -210,6 +223,8 @@ def render_tab_entry(svc, full_df):
                         res = call_gemini(f"פנה אלי בלשון זכר. נתח תצפית על {student_name}: {raw_ins}")
                         st.session_state.last_feedback = res
                         st.rerun()
+                else:
+                    st.warning("תיבת התובנות ריקה.")
 
         with c_btns[1]:
             if st.button("💾 שמור תצפית", type="primary", key=f"save_btn_{st.session_state.it}"):
@@ -221,18 +236,19 @@ def render_tab_entry(svc, full_df):
                         img_links = []
                         if up_files:
                             for f in up_files:
-                                try: link = svc.upload_file(f); img_links.append(link)
+                                try:
+                                    link = svc.upload_file(f)
+                                    img_links.append(link)
                                 except: pass
 
-                        # המילון המותאם בדיוק למבנה ה-Master Excel שלך
                         entry = {
-                            "type": "reflection",  # סוג הרשומה כפי שמופיע באקסל
+                            "type": "reflection",
                             "date": date.today().isoformat(),
                             "student_name": student_name,
+                            "difficulty": difficulty,
                             "duration_min": duration,
                             "drawings_count": drawings,
                             "work_method": work_method,
-                            "difficulty": difficulty,  # עמודה קיימת באקסל
                             "score_proj": score_proj,
                             "score_spatial": score_spatial,
                             "score_conv": score_conv,
@@ -240,7 +256,7 @@ def render_tab_entry(svc, full_df):
                             "score_views": score_views,
                             "challenge": final_ch,
                             "insight": final_ins,
-                            "tags": str(tags), # שמירה כטקסט עבור האקסל
+                            "tags": str(tags),
                             "images": ", ".join(img_links),
                             "timestamp": datetime.now().isoformat()
                         }
@@ -249,9 +265,9 @@ def render_tab_entry(svc, full_df):
                             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                         
                         st.balloons()
-                        st.success(f"✅ נשמר באקסל! ({len(img_links)} תמונות)")
+                        st.success("✅ נשמר בהצלחה!")
                         
-                        # ניקוי זיכרון ורענון
+                        # ניקוי זיכרון
                         st.session_state.pop("field_obs_input", None)
                         st.session_state.pop("insight_input", None)
                         st.session_state.last_feedback = ""
@@ -263,7 +279,6 @@ def render_tab_entry(svc, full_df):
                         import time
                         time.sleep(1.8)
                         st.rerun()
-
         # הצגת המשוב מתחת לכפתורים
         if st.session_state.last_feedback:
             st.markdown("---")
@@ -419,6 +434,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
