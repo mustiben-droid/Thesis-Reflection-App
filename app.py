@@ -228,59 +228,77 @@ def render_tab_entry(svc, full_df):
                 else:
                     st.warning("תיבת התובנות (Insight) ריקה.")
 
-        with c_btns[1]:
-            # מפתח ייחודי למניעת כפילויות
+      with c_btns[1]:
+            # מפתח ייחודי למניעת כפילויות לחיצה
             save_key = f"save_btn_{st.session_state.it}"
             
             if st.button("💾 שמור תצפית", type="primary", key=save_key):
+                # משיכה מהזיכרון של הטקסטים
                 final_ch = st.session_state.get("field_obs_input", "").strip()
                 final_ins = st.session_state.get("insight_input", "").strip()
                 
                 if final_ch or final_ins:
-                    with st.spinner("שומר נתונים..."):
-                        # 1. הכנת הנתונים
+                    with st.spinner("מעלה תמונות ושומר נתונים..."):
+                        # --- 1. טיפול בתמונות (העלאה לדרייב) ---
+                        img_links = []
+                        if up_files:
+                            for f in up_files:
+                                try:
+                                    # וודא ששם הפונקציה ב-svc שלך הוא upload_file
+                                    link = svc.upload_file(f) 
+                                    img_links.append(link)
+                                except Exception as e:
+                                    st.error(f"שגיאה בהעלאת תמונה: {e}")
+                        
+                        # --- 2. הכנת הנתונים למילון (כולל המדדים הכמותיים והתמונות) ---
                         entry = {
                             "date": date.today().isoformat(),
                             "student_name": student_name,
                             "duration_min": duration,
                             "drawings_count": drawings,
                             "work_method": work_method,
+                            
+                            # המדדים הכמותיים (1-5) - עכשיו הם יישמרו!
+                            "score_proj": score_proj,
+                            "score_spatial": score_spatial,
+                            "score_conv": score_conv,
+                            "score_efficacy": score_efficacy,
+                            "score_model": score_model,
+                            "score_views": score_views,
+                            
                             "challenge": final_ch,
                             "insight": final_ins,
                             "tags": tags,
+                            "images": ", ".join(img_links), # שמירת לינקים לתמונות
                             "timestamp": datetime.now().isoformat()
                         }
                         
-                        # 2. שמירה לקובץ
+                        # --- 3. שמירה פיזית לקובץ ---
                         with open(DATA_FILE, "a", encoding="utf-8") as f:
                             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                         
-                        # 3. חגיגה וויזואלית
+                        # --- 4. פידבק חגיגי ---
                         st.balloons()
-                        st.success(f"✅ התצפית על {student_name} נשמרה בהצלחה!")
+                        st.success(f"✅ הנתונים של {student_name} נשמרו עם {len(img_links)} תמונות!")
 
-                        # 4. ניקוי זיכרון יסודי (השיטה המנצחת של קופיילוט)
-                        # ניקוי המפתחות הישירים
+                        # --- 5. ניקוי זיכרון יסודי (השיטה של קופיילוט + תוספות) ---
                         st.session_state.pop("field_obs_input", None)
                         st.session_state.pop("insight_input", None)
                         st.session_state.last_feedback = ""
-
-                        # ניקוי כל שארית דינמית שאולי נוצרה בעבר
-                        for key in list(st.session_state.keys()):
-                            if key.startswith("field_obs_input_") or key.startswith("insight_input_") or key.startswith("t_"):
-                                st.session_state.pop(key, None)
-
-                        # 5. קידום המונה - יצירת דף חדש ונקי לגמרי
+                        
+                        # ניקוי כל שארית דינמית (כולל תגיות ותמונות)
+                        for k in list(st.session_state.keys()):
+                            if any(k.startswith(prefix) for prefix in ["field_obs_input_", "insight_input_", "t_", "up_"]):
+                                st.session_state.pop(k, None)
+                        
+                        # קידום המונה ליצירת דף נקי
                         st.session_state.it += 1
                         
-                        # 6. השהיה קצרה כדי שתוכל לראות את הבלונים
                         import time
-                        time.sleep(1.8)
-                        
-                        # 7. רענון האפליקציה
+                        time.sleep(2.0)
                         st.rerun()
                 else:
-                    st.error("לא ניתן לשמור תצפית ריקה.")
+                    st.error("לא ניתן לשמור תצפית ריקה. אנא כתוב משהו בתיבות הטקסט.")
 
         # הצגת המשוב מתחת לכפתורים
         if st.session_state.last_feedback:
@@ -440,6 +458,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
