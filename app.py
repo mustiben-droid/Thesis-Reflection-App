@@ -208,10 +208,6 @@ def render_tab_entry(svc, full_df):
         ins = st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key="insight_input")
         
         up_files = st.file_uploader("📷 צרף תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{it}")
-
-       # --- אזור כפתורי הפעולה ---
-        st.markdown("---")
-        c_btns = st.columns(2)
         
        # --- אזור כפתורי הפעולה (מיושר ומתוקן) ---
         st.markdown("---")
@@ -235,7 +231,7 @@ def render_tab_entry(svc, full_df):
                 final_ch = st.session_state.get("field_obs_input", "").strip()
                 final_ins = st.session_state.get("insight_input", "").strip()
                 
-                if final_ch or final_ins:
+       if final_ch or final_ins:
                     with st.spinner("מעלה תמונות ושומר..."):
                         # העלאת תמונות לדרייב
                         img_links = []
@@ -289,8 +285,7 @@ def render_tab_entry(svc, full_df):
                     st.error("לא ניתן לשמור תצפית ריקה.")
 
         # הצגת משוב AI
-
-        if st.session_state.last_feedback:
+    if st.session_state.last_feedback:
             st.markdown("---")
             st.markdown(f'<div class="feedback-box"><b>💡 משוב יועץ AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
             if st.button("🗑️ נקה משוב"):
@@ -444,6 +439,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
