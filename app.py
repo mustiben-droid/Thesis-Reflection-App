@@ -213,97 +213,83 @@ def render_tab_entry(svc, full_df):
         st.markdown("---")
         c_btns = st.columns(2)
         
+       # --- אזור כפתורי הפעולה (מיושר ומתוקן) ---
+        st.markdown("---")
+        c_btns = st.columns(2)
+        
         with c_btns[0]:
             if st.button("🔍 בקש רפלקציה (AI)", key=f"ai_btn_{st.session_state.it}"):
-                # לוקח את הטקסט מהפרשנות (Insight)
                 raw_insight = st.session_state.get("insight_input", "")
-                
                 if raw_insight.strip():
-                    with st.spinner("היועץ מנתח את התובנות שלך..."):
-                        # פנייה בלשון זכר
+                    with st.spinner("היועץ מנתח..."):
                         prompt = f"פנה אלי בלשון זכר. נתח את התובנה המחקרית שלי לגבי הסטודנט {student_name}: {raw_insight}"
                         res = call_gemini(prompt)
                         st.session_state.last_feedback = res
                         st.rerun()
                 else:
-                    st.warning("תיבת התובנות (Insight) ריקה.")
+                    st.warning("תיבת התובנות ריקה.")
 
-      with c_btns[1]:
-            # מפתח ייחודי למניעת כפילויות לחיצה
+        with c_btns[1]:
             save_key = f"save_btn_{st.session_state.it}"
-            
             if st.button("💾 שמור תצפית", type="primary", key=save_key):
-                # משיכה מהזיכרון של הטקסטים
                 final_ch = st.session_state.get("field_obs_input", "").strip()
                 final_ins = st.session_state.get("insight_input", "").strip()
                 
                 if final_ch or final_ins:
-                    with st.spinner("מעלה תמונות ושומר נתונים..."):
-                        # --- 1. טיפול בתמונות (העלאה לדרייב) ---
+                    with st.spinner("מעלה תמונות ושומר..."):
+                        # העלאת תמונות לדרייב
                         img_links = []
                         if up_files:
                             for f in up_files:
                                 try:
-                                    # וודא ששם הפונקציה ב-svc שלך הוא upload_file
-                                    link = svc.upload_file(f) 
+                                    link = svc.upload_file(f)
                                     img_links.append(link)
                                 except Exception as e:
                                     st.error(f"שגיאה בהעלאת תמונה: {e}")
-                        
-                        # --- 2. הכנת הנתונים למילון (כולל המדדים הכמותיים והתמונות) ---
+
+                        # הכנת המילון עם כל המדדים (1-5) והתמונות
                         entry = {
                             "date": date.today().isoformat(),
                             "student_name": student_name,
                             "duration_min": duration,
                             "drawings_count": drawings,
                             "work_method": work_method,
-                            
-                            # המדדים הכמותיים (1-5) - עכשיו הם יישמרו!
                             "score_proj": score_proj,
                             "score_spatial": score_spatial,
                             "score_conv": score_conv,
                             "score_efficacy": score_efficacy,
                             "score_model": score_model,
                             "score_views": score_views,
-                            
                             "challenge": final_ch,
                             "insight": final_ins,
                             "tags": tags,
-                            "images": ", ".join(img_links), # שמירת לינקים לתמונות
+                            "images": ", ".join(img_links),
                             "timestamp": datetime.now().isoformat()
                         }
                         
-                        # --- 3. שמירה פיזית לקובץ ---
                         with open(DATA_FILE, "a", encoding="utf-8") as f:
                             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                         
-                        # --- 4. פידבק חגיגי ---
                         st.balloons()
-                        st.success(f"✅ הנתונים של {student_name} נשמרו עם {len(img_links)} תמונות!")
-
-                        # --- 5. ניקוי זיכרון יסודי (השיטה של קופיילוט + תוספות) ---
+                        st.success(f"✅ נשמר בהצלחה! ({len(img_links)} תמונות)")
+                        
+                        # ניקוי זיכרון יסודי (לפי ההצעה של קופיילוט)
                         st.session_state.pop("field_obs_input", None)
                         st.session_state.pop("insight_input", None)
                         st.session_state.last_feedback = ""
-                        
-                        # ניקוי כל שארית דינמית (כולל תגיות ותמונות)
                         for k in list(st.session_state.keys()):
-                            if any(k.startswith(prefix) for prefix in ["field_obs_input_", "insight_input_", "t_", "up_"]):
+                            if any(k.startswith(p) for p in ["field_obs_input_", "insight_input_", "t_", "up_"]):
                                 st.session_state.pop(k, None)
                         
-                        # קידום המונה ליצירת דף נקי
                         st.session_state.it += 1
-                        
                         import time
-                        time.sleep(2.0)
+                        time.sleep(1.8)
                         st.rerun()
                 else:
-                    st.error("לא ניתן לשמור תצפית ריקה. אנא כתוב משהו בתיבות הטקסט.")
+                    st.error("לא ניתן לשמור תצפית ריקה.")
 
-        # הצגת המשוב מתחת לכפתורים
-        if st.session_state.last_feedback:
-            st.markdown("---")
-            st.markdown(f'<div class="feedback-box"><b>💡 משוב יועץ AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)        # --- חשוב: הצגת המשוב על המסך ---
+        # הצגת משוב AI
+
         if st.session_state.last_feedback:
             st.markdown("---")
             st.markdown(f'<div class="feedback-box"><b>💡 משוב יועץ AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)
@@ -458,6 +444,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
