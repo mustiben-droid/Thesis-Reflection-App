@@ -555,3 +555,4 @@ st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.c
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 
 
+
