@@ -486,6 +486,21 @@ def render_tab_interview(svc, full_df):
                     
                     st.success("הראיון נשמר בהצלחה בדרייב ובאקסל!")
                     st.balloons()
+
+def drive_upload_file(svc, file_obj, folder_id):
+    """מעלה קובץ (כמו תמונה) מה-Uploader של סטרימליט - משמש לטאב 1"""
+    try:
+        from googleapiclient.http import MediaIoBaseUpload
+        import io
+        file_content = file_obj.read()
+        file_obj.seek(0) 
+        media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype=file_obj.type, resumable=True)
+        file_metadata = {'name': file_obj.name, 'parents': [folder_id]}
+        result = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink', supportsAllDrives=True).execute()
+        return result.get('webViewLink', '')
+    except Exception as e:
+        st.error(f"❌ שגיאה בהעלאת תמונה: {e}")
+        return ""
                     
 def drive_upload_bytes(svc, content, filename, folder_id, is_text=False):
     try:
@@ -538,4 +553,5 @@ with tab4: render_tab_interview(svc, full_df) # השורה שמוסיפה את �
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
