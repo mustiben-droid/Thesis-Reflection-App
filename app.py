@@ -237,7 +237,7 @@ def render_tab_entry(svc, full_df):
                         if up_files:
                             for f in up_files:
                                 try:
-                                    link = svc.upload_file(f)
+                                    link = drive_upload_file(svc, f, GDRIVE_FOLDER_ID)
                                     img_links.append(link)
                                 except: pass
 
@@ -434,6 +434,7 @@ with tab3: render_tab_analysis(svc)
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
