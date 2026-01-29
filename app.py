@@ -1,4 +1,6 @@
 import json, base64, os, io, logging, pandas as pd, streamlit as st
+import tempfile
+import time
 from google import generativeai as genai
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -10,10 +12,15 @@ from datetime import date, datetime
 # ==========================================
 DATA_FILE = "reflections.jsonl"
 MASTER_FILENAME = "All_Observations_Master.xlsx"
+
+# תיקיית האם (לתמונות ותצפיות רגילות)
 GDRIVE_FOLDER_ID = st.secrets.get("GDRIVE_FOLDER_ID")
+
+# התיקייה החדשה שלך להקלטות וניתוחי ראיונות
+INTERVIEW_FOLDER_ID = "1NQz2UZ6BfAURfN4a8h4_qSkyY-_gxhxP"
+
 CLASS_ROSTER = ["נתנאל", "רועי", "אסף", "עילאי", "טדי", "גאל", "אופק", "דניאל.ר", "אלי", "טיגרן", "פולינה.ק", "תלמיד אחר..."]
 TAGS_OPTIONS = ["התעלמות מקווים נסתרים", "בלבול בין היטלים", "קושי ברוטציה מנטלית", "טעות בפרופורציות", "קושי במעבר בין היטלים", "שימוש בכלי מדידה", "סיבוב פיזי של המודל", "תיקון עצמי", "עבודה עצמאית שוטפת"]
-
 st.set_page_config(page_title="מערכת תצפית מחקרית - 54.0", layout="wide")
 
 st.markdown("""
@@ -77,7 +84,7 @@ def get_drive_service():
         return build("drive", "v3", credentials=creds)
     except: return None
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300)
 def load_full_dataset(_svc):
     df_drive = pd.DataFrame()
     file_id = st.secrets.get("MASTER_FILE_ID")
@@ -117,34 +124,50 @@ def load_full_dataset(_svc):
     
     return df
     
-def call_gemini(prompt):
+def call_gemini(prompt, audio_bytes=None):
     try:
         api_key = st.secrets.get("GOOGLE_API_KEY")
         if not api_key: 
             return "שגיאה: חסר API Key ב-Secrets"
             
-        # אתחול נקי ללא transport='rest'
         genai.configure(api_key=api_key)
         
-        # שימוש בתחביר החדש והמחמיר ביותר
-        model = genai.GenerativeModel(model_name="gemini-2.0-flash")
+        # לראיונות ארוכים, Gemini 1.5 Flash הוא הכי יציב ומדויק
+        model = genai.GenerativeModel(model_name="gemini-1.5-flash")
         
-        # שליחת הבקשה
-        response = model.generate_content(prompt)
-        
-        if response.text:
-            return response.text
-        else:
-            return "התקבלה תשובה ריקה מהמודל."
+        if audio_bytes:
+            # 1. יצירת קובץ זמני מקומי מההקלטה
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp:
+                tmp.write(audio_bytes)
+                tmp_path = tmp.name
             
-    except Exception as e:
-        # אם יש שגיאה, ננסה "נסיגת בטיחות" ל-1.5 פלאש בתחביר החדש
-        try:
-            model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+            try:
+                # 2. העלאת הקובץ לשרתי גוגל (File API) - קריטי לקבצים ארוכים
+                uploaded_file = genai.upload_file(path=tmp_path, mime_type="audio/wav")
+                
+                # 3. המתנה שהשרת יסיים לעבד את האודיו (לוקח כמה שניות)
+                while uploaded_file.state.name == "PROCESSING":
+                    time.sleep(2)
+                    uploaded_file = genai.get_file(uploaded_file.name)
+                
+                # 4. שליחת הבקשה לניתוח
+                response = model.generate_content([prompt, uploaded_file])
+                
+                # 5. ניקוי הקובץ מהשרת של גוגל (שמירה על פרטיות וניקיון)
+                genai.delete_file(uploaded_file.name)
+                
+                return response.text
+            finally:
+                # מחיקת הקובץ הזמני מהמכשיר שלך
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+        else:
+            # אם זה צ'אט רגיל ללא אודיו
             response = model.generate_content(prompt)
             return response.text
-        except Exception as e2:
-            return f"שגיאה סופית בחיבור ל-AI: {str(e2)}"
+            
+    except Exception as e:
+        return f"שגיאה בתהליך הניתוח: {str(e)}"
 
 # ==========================================
 # --- 2. פונקציות ממשק משתמש (Tabs) ---
@@ -463,7 +486,34 @@ def render_tab_interview(svc, full_df):
                     
                     st.success("הראיון נשמר בהצלחה בדרייב ובאקסל!")
                     st.balloons()
-
+                    
+def drive_upload_bytes(svc, content, filename, folder_id, is_text=False):
+    try:
+        from googleapiclient.http import MediaIoBaseUpload
+        import io
+        
+        # הגדרת סוג הקובץ
+        mime = 'text/plain' if is_text else 'audio/wav'
+        
+        # אם זה טקסט (הניתוח), הופכים אותו ל-Bytes
+        if is_text and isinstance(content, str):
+            content = content.encode('utf-8')
+            
+        media = MediaIoBaseUpload(io.BytesIO(content), mimetype=mime, resumable=True)
+        file_metadata = {'name': filename, 'parents': [folder_id] if folder_id else []}
+        
+        f = svc.files().create(
+            body=file_metadata, 
+            media_body=media, 
+            fields='id, webViewLink',
+            supportsAllDrives=True
+        ).execute()
+        
+        return f.get('webViewLink')
+    except Exception as e:
+        st.error(f"❌ תקלה בהעלאה לדרייב: {e}")
+        return "שגיאת העלאה"
+        
 # ==========================================
 # --- 3. גוף הקוד הראשי (Main) ---
 # ==========================================
@@ -488,37 +538,4 @@ with tab4: render_tab_interview(svc, full_df) # השורה שמוסיפה את �
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
