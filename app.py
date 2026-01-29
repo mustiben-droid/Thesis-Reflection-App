@@ -413,6 +413,57 @@ def render_tab_analysis(svc):
                 except Exception as e:
                     st.error(f"הניתוח הופק אך נכשלה השמירה לדרייב: {e}")
 
+def render_tab_interview(svc, full_df):
+    from streamlit_mic_recorder import mic_recorder
+    it = st.session_state.it
+    st.subheader("🎙️ ראיון עומק וניתוח תמות למחקר")
+    
+    student_name = st.selectbox("בחר סטודנט לראיון:", CLASS_ROSTER, key=f"int_sel_{it}")
+    
+    st.info("הקלט שיחה על: תפיסה מרחבית, שימוש במודל ותחושת מסוגלות.")
+    audio_data = mic_recorder(start_prompt="התחל הקלטה ⏺️", stop_prompt="עצור ונתח ⏹️", key=f"mic_int_{it}")
+    
+    if audio_data:
+        audio_bytes = audio_data['bytes']
+        st.audio(audio_bytes, format="audio/wav")
+        
+        if st.button("✨ בצע תמלול וניתוח תמות עומק", key=f"btn_an_{it}"):
+            with st.spinner("ה-AI מקשיב ומנתח..."):
+                prompt = f"""
+                אתה חוקר בחינוך טכנולוגי. נתח את הראיון של הסטודנט {student_name}:
+                1. תמלול מלא של השיחה.
+                2. ניתוח תפיסה מרחבית (רוטציה, היטלים).
+                3. אפקטיביות המודל הפיזי/3D.
+                4. רמת מסוגלות עצמית (ביטחון מול תסכול).
+                החזר הכל בעברית עם כותרות ברורות.
+                """
+                analysis_res = call_gemini(prompt, audio_bytes)
+                st.session_state[f"last_analysis_{it}"] = analysis_res
+                st.markdown(f'<div class="feedback-box">{analysis_res}</div>', unsafe_allow_html=True)
+
+        if f"last_analysis_{it}" in st.session_state:
+            if st.button("💾 שמור תוצאות לדרייב ולאקסל המאסטר"):
+                with st.spinner("מעלה קבצים..."):
+                    # העלאה לדרייב באמצעות פונקציות העזר שכבר יש לך
+                    a_link = drive_upload_bytes(svc, audio_bytes, f"Audio_{student_name}_{date.today()}.wav", INTERVIEW_FOLDER_ID)
+                    t_link = drive_upload_bytes(svc, st.session_state[f"last_analysis_{it}"], f"Analysis_{student_name}_{date.today()}.txt", INTERVIEW_FOLDER_ID, is_text=True)
+                    
+                    # הכנת השורה לאקסל
+                    entry = {
+                        "type": "deep_interview", 
+                        "date": date.today().isoformat(),
+                        "student_name": student_name, 
+                        "insight": st.session_state[f"last_analysis_{it}"][:500],
+                        "audio_backup": a_link, 
+                        "full_doc_link": t_link, 
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    with open(DATA_FILE, "a", encoding="utf-8") as f:
+                        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                    
+                    st.success("הראיון נשמר בהצלחה בדרייב ובאקסל!")
+                    st.balloons()
+
 # ==========================================
 # --- 3. גוף הקוד הראשי (Main) ---
 # ==========================================
@@ -437,6 +488,7 @@ with tab4: render_tab_interview(svc, full_df) # השורה שמוסיפה את �
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
