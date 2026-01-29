@@ -426,14 +426,18 @@ if "show_success_bar" not in st.session_state: st.session_state.show_success_bar
 if "last_feedback" not in st.session_state: st.session_state.last_feedback = ""
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 
-tab1, tab2, tab3 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח"])
+# 1. יצירת 4 טאבים במקום 3
+tab1, tab2, tab3, tab4 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח", "🎙️ ראיון עומק"])
 
+# 2. שיוך הפונקציות לטאבים
 with tab1: render_tab_entry(svc, full_df)
 with tab2: render_tab_sync(svc, full_df)
 with tab3: render_tab_analysis(svc)
+with tab4: render_tab_interview(svc, full_df) # השורה שמוסיפה את הראיונות
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
