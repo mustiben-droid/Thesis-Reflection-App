@@ -674,8 +674,9 @@ if st.sidebar.button("🔄 רענן נתונים"):
     st.rerun()
 
 st.sidebar.markdown("---")
-        st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
-        st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
