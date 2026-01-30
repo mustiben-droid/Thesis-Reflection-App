@@ -153,7 +153,7 @@ def call_gemini(prompt, audio_bytes=None):
             return "שגיאה: חסר API Key ב-Secrets"
 
         # הכתובת היציבה והמעודכנת ביותר ל-2026
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
         
         headers = {'Content-Type': 'application/json'}
         
@@ -688,6 +688,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
