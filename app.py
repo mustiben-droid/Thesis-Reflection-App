@@ -644,3 +644,4 @@ st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 
 
+
