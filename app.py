@@ -512,7 +512,6 @@ def render_tab_interview(svc, full_df):
     if analysis_key in st.session_state and st.session_state[analysis_key]:
         st.markdown(f'<div class="feedback-box">{st.session_state[analysis_key]}</div>', unsafe_allow_html=True)
         
-        # השורה הזו חייבת להיות מוזחת ב-8 רווחים בדיוק (כמו ה-markdown שמעליה)
         if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
             saved_audio = st.session_state.get(f"audio_bytes_{it}")
             
@@ -525,7 +524,7 @@ def render_tab_interview(svc, full_df):
                     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
                     analysis_text = st.session_state.get(analysis_key, "")
                     
-                    # העלאה לתיקיית ראיונות (INTERVIEW_FOLDER_ID)
+                    # העלאה לתיקיית ראיונות בלבד
                     msg.text("🎤 מעלה הקלטת אודיו...")
                     audio_link = drive_upload_bytes(svc, saved_audio, f"Interview_{student_name}_{ts}.wav", INTERVIEW_FOLDER_ID)
                     prog_bar.progress(40)
@@ -534,7 +533,7 @@ def render_tab_interview(svc, full_df):
                     analysis_link = drive_upload_bytes(svc, analysis_text, f"Analysis_{student_name}_{ts}.txt", INTERVIEW_FOLDER_ID, is_text=True)
                     prog_bar.progress(70)
                     
-                    # רישום ל-JSONL המקומי (כדי שיסונכרן לאקסל הראשי בטאב 2)
+                    # רישום ל-JSONL המקומי
                     interview_entry = {
                         "type": "interview_analysis",
                         "date": date.today().isoformat(),
@@ -553,7 +552,7 @@ def render_tab_interview(svc, full_df):
                     st.success("✅ נשמר בהצלחה בתיקיית הראיונות!")
                     st.balloons()
                     
-                    # ניקוי הזיכרון לאחר שמירה מוצלחת
+                    # ניקוי זיכרון
                     st.session_state[analysis_key] = ""
                     st.session_state[f"audio_bytes_{it}"] = None
                     
@@ -657,6 +656,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
