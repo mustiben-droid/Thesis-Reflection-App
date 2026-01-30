@@ -524,7 +524,7 @@ def render_tab_interview(svc, full_df):
                     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
                     analysis_text = st.session_state.get(analysis_key, "")
                     
-                    # העלאה לתיקיית ראיונות בלבד
+                    # העלאה לתיקיית ראיונות בלבד (INTERVIEW_FOLDER_ID)
                     msg.text("🎤 מעלה הקלטת אודיו...")
                     audio_link = drive_upload_bytes(svc, saved_audio, f"Interview_{student_name}_{ts}.wav", INTERVIEW_FOLDER_ID)
                     prog_bar.progress(40)
@@ -656,6 +656,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
