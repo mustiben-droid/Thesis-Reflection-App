@@ -1,13 +1,16 @@
-import json, base64, os, io, logging, pandas as pd, streamlit as st
-import tempfile
-import time
-import requests
 import streamlit as st
-from google import generativeai as genai
+import pandas as pd
+import json
+import base64
+import os
+import io
+import time
+import tempfile
+import requests  # משאירים את זה כי הפתרון של ה-REST API הכי אמין כרגע
+from datetime import date, datetime
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
-from datetime import date, datetime
 
 # ==========================================
 # --- 0. הגדרות מערכת ועיצוב ---
@@ -147,38 +150,32 @@ def call_gemini(prompt, audio_bytes=None):
         api_key = st.secrets.get("GOOGLE_API_KEY")
         if not api_key: return "שגיאה: חסר API Key"
         
-        # אתחול ה-SDK
-        genai.configure(api_key=api_key)
-        
-        # שימוש במודל היציב בגרסת v1
-        # שים לב: בלי models/ ובלי v1beta
-        model = genai.GenerativeModel("gemini-1.5-flash-latest")
+        # אתחול ה-Client החדש (v1)
+        client = genai.Client(api_key=api_key)
+        model_id = "gemini-1.5-flash"
         
         if audio_bytes:
+            # שלב 1: העלאת הקובץ
             with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp:
                 tmp.write(audio_bytes)
                 tmp_path = tmp.name
             
             try:
-                # העלאה
-                uploaded_file = genai.upload_file(path=tmp_path, mime_type="audio/wav")
+                # ב-SDK החדש ההעלאה והקריאה פשוטות יותר
+                with open(tmp_path, "rb") as f:
+                    audio_part = {"data": f.read(), "mime_type": "audio/wav"}
                 
-                # המתנה
-                while uploaded_file.state.name == "PROCESSING":
-                    time.sleep(1)
-                    uploaded_file = genai.get_file(uploaded_file.name)
-                
-                # קריאה למודל בשיטה החדשה
-                response = model.generate_content([prompt, uploaded_file])
-                
-                # ניקוי
-                genai.delete_file(uploaded_file.name)
+                response = client.models.generate_content(
+                    model=model_id,
+                    contents=[prompt, audio_part]
+                )
                 return response.text
             finally:
                 if os.path.exists(tmp_path):
                     os.remove(tmp_path)
         else:
-            response = model.generate_content(prompt)
+            # טקסט בלבד
+            response = client.models.generate_content(model=model_id, contents=prompt)
             return response.text
             
     except Exception as e:
@@ -670,6 +667,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
