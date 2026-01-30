@@ -478,7 +478,7 @@ def render_tab_analysis(svc):
                     st.success(f"הניתוח נשמר בדרייב.")
                 except Exception as e:
                     st.error(f"הניתוח הופק אך נכשלה השמירה: {e}")
-
+                    
 def render_tab_interview(svc, full_df):
     it = st.session_state.it
     st.subheader("🎙️ ראיון עומק וניתוח תמות למחקר")
@@ -507,11 +507,12 @@ def render_tab_interview(svc, full_df):
                     status.update(label="✅ הושלם!", state="complete")
                     st.rerun()
 
-    # 2. הצגת התוצאה וכפתור השמירה - מוודאים שהכל מיושר לימין ופנימה
+    # 2. הצגת התוצאה וכפתור השמירה
     analysis_key = f"last_analysis_{it}"
     if analysis_key in st.session_state and st.session_state[analysis_key]:
         st.markdown(f'<div class="feedback-box">{st.session_state[analysis_key]}</div>', unsafe_allow_html=True)
         
+        # השורה הזו חייבת להיות מוזחת ב-8 רווחים בדיוק (כמו ה-markdown שמעליה)
         if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
             saved_audio = st.session_state.get(f"audio_bytes_{it}")
             
@@ -525,15 +526,15 @@ def render_tab_interview(svc, full_df):
                     analysis_text = st.session_state.get(analysis_key, "")
                     
                     # העלאה לתיקיית ראיונות (INTERVIEW_FOLDER_ID)
-                    msg.text("🎤 מעלה הקלטת אודיו לתיקיית ראיונות...")
+                    msg.text("🎤 מעלה הקלטת אודיו...")
                     audio_link = drive_upload_bytes(svc, saved_audio, f"Interview_{student_name}_{ts}.wav", INTERVIEW_FOLDER_ID)
                     prog_bar.progress(40)
                     
-                    msg.text("📄 מעלה ניתוח טקסטואלי לתיקיית ראיונות...")
+                    msg.text("📄 מעלה ניתוח טקסטואלי...")
                     analysis_link = drive_upload_bytes(svc, analysis_text, f"Analysis_{student_name}_{ts}.txt", INTERVIEW_FOLDER_ID, is_text=True)
                     prog_bar.progress(70)
                     
-                    # רישום ל-JSONL המקומי (כדי שיסונכרן לאקסל הראשי)
+                    # רישום ל-JSONL המקומי (כדי שיסונכרן לאקסל הראשי בטאב 2)
                     interview_entry = {
                         "type": "interview_analysis",
                         "date": date.today().isoformat(),
@@ -656,6 +657,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
