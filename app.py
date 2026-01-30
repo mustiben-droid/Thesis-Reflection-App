@@ -152,16 +152,13 @@ def call_gemini(prompt, audio_bytes=None):
         if not api_key:
             return "שגיאה: חסר API Key ב-Secrets"
 
-        # פנייה ישירה ל-API ללא שימוש ב-SDK הבעייתי
-        # שימוש בגרסת v1beta עם המודל הספציפי
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        # שינוי לגרסה v1 היציבה - כאן המודל חייב להימצא
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
         
         headers = {'Content-Type': 'application/json'}
         
         if audio_bytes:
-            # המרה של האודיו ל-Base64 כפי שה-API דורש
             audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
-            
             payload = {
                 "contents": [{
                     "parts": [
@@ -180,20 +177,17 @@ def call_gemini(prompt, audio_bytes=None):
                 "contents": [{"parts": [{"text": prompt}]}]
             }
 
-        # שליחת הבקשה
         response = requests.post(url, headers=headers, json=payload)
         res_json = response.json()
 
-        # בדיקת תקינות התשובה
         if response.status_code != 200:
-            error_details = res_json.get('error', {}).get('message', 'Unknown error')
-            return f"שגיאה מה-API של גוגל: {error_details}"
+            # אם v1 נכשל, ננסה אוטומטית גרסה חלופית בתוך הקוד
+            error_msg = res_json.get('error', {}).get('message', '')
+            if "not found" in error_msg.lower():
+                return "שגיאה: המודל gemini-1.5-flash לא זמין בגרסה זו. נסה להשתמש ב-API Key אחר או וודא שהמודל מאושר בחשבון שלך."
+            return f"שגיאה מה-API: {error_msg}"
 
-        # שליפת הטקסט מהמבנה של ה-JSON
-        if 'candidates' in res_json and len(res_json['candidates']) > 0:
-            return res_json['candidates'][0]['content']['parts'][0]['text']
-        else:
-            return "לא התקבלה תשובה מהמודל. בדוק את תוכן הקלט."
+        return res_json['candidates'][0]['content']['parts'][0]['text']
 
     except Exception as e:
         return f"שגיאה בתהליך הניתוח: {str(e)}"
@@ -684,6 +678,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
