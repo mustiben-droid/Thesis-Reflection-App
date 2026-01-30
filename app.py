@@ -483,16 +483,22 @@ def render_tab_interview(svc, full_df):
     st.subheader("🎙️ ראיון עומק וניתוח תמות למחקר")
     
     student_name = st.selectbox("בחר סטודנט לראיון:", CLASS_ROSTER, key=f"int_sel_{it}")
-    
     st.info("הקלט שיחה על: תפיסה מרחבית, שימוש במודל ותחושת מסוגלות.")
     audio_data = mic_recorder(start_prompt="התחל הקלטה ⏺️", stop_prompt="עצור ונתח ⏹️", key=f"mic_int_{it}")
     
     if audio_data:
         audio_bytes = audio_data['bytes']
+        
+        # בדיקת גודל קובץ למניעת קריסות (עד 15MB)
+        if len(audio_bytes) > 15 * 1024 * 1024:
+            st.error("⚠️ קובץ האודיו גדול מדי לניתוח ישיר. נסה להקליט קטעים קצרים יותר.")
+            return
+
         st.audio(audio_bytes, format="audio/wav")
         
         if st.button("✨ בצע תמלול וניתוח תמות עומק", key=f"btn_an_{it}"):
-            with st.spinner("ה-AI מקשיב ומנתח..."):
+            with st.status("🤖 ג'ימיני מנתח את ההקלטה...", expanded=True) as status:
+                st.write("📤 מעלה אודיו לעיבוד...")
                 prompt = f"""
                 אתה חוקר בחינוך טכנולוגי. נתח את הראיון של הסטודנט {student_name}:
                 1. תמלול מלא של השיחה.
@@ -503,16 +509,24 @@ def render_tab_interview(svc, full_df):
                 """
                 analysis_res = call_gemini(prompt, audio_bytes)
                 st.session_state[f"last_analysis_{it}"] = analysis_res
-                st.markdown(f'<div class="feedback-box">{analysis_res}</div>', unsafe_allow_html=True)
+                status.update(label="✅ הניתוח הושלם!", state="complete", expanded=False)
+                
+            st.markdown(f'<div class="feedback-box">{analysis_res}</div>', unsafe_allow_html=True)
 
         if f"last_analysis_{it}" in st.session_state:
             if st.button("💾 שמור תוצאות לדרייב ולאקסל המאסטר"):
-                with st.spinner("מעלה קבצים..."):
-                    # העלאה לדרייב באמצעות פונקציות העזר שכבר יש לך
+                prog_bar = st.progress(0)
+                status_text = st.empty()
+                
+                try:
+                    status_text.text("📤 מעלה קבצים ל-Google Drive...")
                     a_link = drive_upload_bytes(svc, audio_bytes, f"Audio_{student_name}_{date.today()}.wav", INTERVIEW_FOLDER_ID)
-                    t_link = drive_upload_bytes(svc, st.session_state[f"last_analysis_{it}"], f"Analysis_{student_name}_{date.today()}.txt", INTERVIEW_FOLDER_ID, is_text=True)
+                    prog_bar.progress(40)
                     
-                    # הכנת השורה לאקסל
+                    t_link = drive_upload_bytes(svc, st.session_state[f"last_analysis_{it}"], f"Analysis_{student_name}_{date.today()}.txt", INTERVIEW_FOLDER_ID, is_text=True)
+                    prog_bar.progress(80)
+                    
+                    status_text.text("💾 מעדכן בסיס נתונים מקומי...")
                     entry = {
                         "type": "deep_interview", 
                         "date": date.today().isoformat(),
@@ -525,8 +539,20 @@ def render_tab_interview(svc, full_df):
                     with open(DATA_FILE, "a", encoding="utf-8") as f:
                         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                     
-                    st.success("הראיון נשמר בהצלחה בדרייב ובאקסל!")
+                    prog_bar.progress(100)
+                    status_text.empty()
                     st.balloons()
+                    
+                    st.success(f"""
+                        ### ✅ הראיון נשמר בהצלחה!
+                        **הפרמטרים שעודכנו:**
+                        * **סטודנט:** {student_name}
+                        * **גיבוי אודיו:** [לחץ לצפייה]({a_link})
+                        * **מסמך ניתוח:** [לחץ לצפייה]({t_link})
+                        * **סטטוס:** נוסף לאקסל המאסטר
+                    """)
+                except Exception as e:
+                    st.error(f"❌ שגיאה בשמירה: {e}")
 
 def drive_upload_file(svc, file_obj, folder_id):
     """מעלה קובץ (כמו תמונה) מה-Uploader - משמש לטאב 1"""
@@ -619,6 +645,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
