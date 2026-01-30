@@ -509,6 +509,7 @@ def render_tab_analysis(svc):
     analysis_key = f"last_analysis_{it}"
     if analysis_key in st.session_state and st.session_state[analysis_key]:
         st.markdown(f'<div class="feedback-box">{st.session_state[analysis_key]}</div>', unsafe_allow_html=True)
+        
         if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
             saved_audio = st.session_state.get(f"audio_bytes_{it}")
             if not saved_audio:
@@ -540,8 +541,10 @@ def render_tab_analysis(svc):
                     time.sleep(2)
                     st.rerun()
                 except Exception as e:
-                    st.error(f"שגיאה בשמירה: {e}")
-                    
+                    st.error(f"הניתוח הופק אך נכשלה השמירה: {e}")
+
+# --- סוף פונקציית הניתוח ותחילת פונקציית הראיונות (מיושרות לשמאל!) ---
+
 def render_tab_interview(svc, full_df):
     it = st.session_state.it
     st.subheader("🎙️ ראיון עומק וניתוח תמות למחקר")
@@ -558,7 +561,7 @@ def render_tab_interview(svc, full_df):
         
         if st.button("✨ בצע תמלול וניתוח תמות עומק", key=f"btn_an_{it}"):
             with st.status("🤖 ג'ימיני מנתח...", expanded=True) as status:
-                prompt = f"נתח ראיון של {student_name}. תמלל ונתח תפיסה מרחבית."
+                prompt = f"נתח ראיון של {student_name}. תמלל ונתח תפיסה מרחבית באופן אקדמי."
                 analysis_res = call_gemini(prompt, audio_bytes)
                 
                 if "שגיאה" in analysis_res:
@@ -574,7 +577,6 @@ def render_tab_interview(svc, full_df):
     if analysis_key in st.session_state and st.session_state[analysis_key]:
         st.markdown(f'<div class="feedback-box">{st.session_state[analysis_key]}</div>', unsafe_allow_html=True)
         
-        # השורה הבעייתית (514) נמצאת כאן, עכשיו היא מיושרת מושלם
         if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
             saved_audio = st.session_state.get(f"audio_bytes_{it}")
             if not saved_audio:
@@ -583,26 +585,32 @@ def render_tab_interview(svc, full_df):
                 prog_bar = st.progress(0)
                 try:
                     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    # העלאה לדרייב
-                    a_link = drive_upload_bytes(svc, saved_audio, f"Int_{student_name}_{ts}.wav", RESEARCH_FOLDER_ID)
+                    
+                    # שימוש ב-INTERVIEW_FOLDER_ID לתיקיית המחקר
+                    a_link = drive_upload_bytes(svc, saved_audio, f"Int_{student_name}_{ts}.wav", INTERVIEW_FOLDER_ID)
                     prog_bar.progress(50)
-                    t_link = drive_upload_bytes(svc, st.session_state[analysis_key], f"An_{student_name}_{ts}.txt", RESEARCH_FOLDER_ID, is_text=True)
+                    t_link = drive_upload_bytes(svc, st.session_state[analysis_key], f"An_{student_name}_{ts}.txt", INTERVIEW_FOLDER_ID, is_text=True)
                     
                     # רישום ב-JSONL
                     entry = {
                         "type": "interview", 
                         "date": date.today().isoformat(),
-                        "student": student_name, 
-                        "audio": a_link, 
-                        "text": t_link,
+                        "student_name": student_name, 
+                        "audio_link": a_link, 
+                        "analysis_link": t_link,
                         "timestamp": datetime.now().isoformat()
                     }
                     with open(DATA_FILE, "a", encoding="utf-8") as f:
                         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                     
                     prog_bar.progress(100)
-                    st.success("✅ נשמר בהצלחה!")
+                    st.success("✅ הראיון נשמר בהצלחה בתיקיית המחקר!")
                     st.balloons()
+                    
+                    # ניקוי
+                    st.session_state[analysis_key] = ""
+                    st.session_state[f"audio_bytes_{it}"] = None
+                    
                     time.sleep(2)
                     st.rerun()
                 except Exception as e:
@@ -702,6 +710,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
