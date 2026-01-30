@@ -72,8 +72,11 @@ st.markdown("""
 def normalize_name(name):
     if not isinstance(name, str): return ""
     import re
-    # משאיר רק אותיות ומספרים (מוחק נקודות, רווחים, מקפים וכו')
-    return re.sub(r'[^א-תa-zA-Z0-9]', '', name).strip()
+    # 1. הסרת רווחים לפני הכל (הטיפ של קופיילוט)
+    name = name.replace(" ", "")
+    # 2. השארת רק אותיות ומספרים (ניקוי נקודות, מקפים וכו')
+    clean = re.sub(r'[^א-תa-zA-Z0-9]', '', name)
+    return clean.strip()
 
 @st.cache_resource
 def get_drive_service():
@@ -616,3 +619,4 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
