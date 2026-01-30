@@ -148,47 +148,44 @@ def load_full_dataset(_svc):
 def call_gemini(prompt, audio_bytes=None):
     try:
         api_key = st.secrets.get("GOOGLE_API_KEY")
-        if not api_key:
-            return "שגיאה: חסר API Key ב-Secrets"
+        if not api_key: return "שגיאה: חסר API Key"
 
-        # ינואר 2026: שימוש ב-Alias המעודכן למודל Gemini 3 Flash
         model_id = "gemini-flash-latest" 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
         
         headers = {'Content-Type': 'application/json'}
         
         if audio_bytes:
+            # זיהוי אוטומטי של סוג האודיו (WebM לעומת WAV)
+            mime_type = "audio/webm" if audio_bytes.startswith(b'\x1a\x45\xdf\xa3') else "audio/wav"
             audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+            
             payload = {
                 "contents": [{
                     "parts": [
                         {"text": prompt},
-                        {
-                            "inlineData": {  # תיקון קריטי ל-2026: inlineData ב-CamelCase
-                                "mimeType": "audio/wav", # תיקון: mimeType
-                                "data": audio_base64
-                            }
-                        }
+                        {"inlineData": {"mimeType": mime_type, "data": audio_base64}}
                     ]
                 }]
             }
         else:
-            payload = {
-                "contents": [{"parts": [{"text": prompt}]}]
-            }
+            payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
-        # שליחת הבקשה עם Timeout מורחב לאודיו
         response = requests.post(url, headers=headers, json=payload, timeout=90)
         res_json = response.json()
 
         if response.status_code != 200:
-            error_msg = res_json.get('error', {}).get('message', 'Unknown error')
-            return f"שגיאת API ({response.status_code}): {error_msg}"
+            return f"שגיאת API ({response.status_code}): {res_json.get('error', {}).get('message', 'Unknown error')}"
 
-        return res_json['candidates'][0]['content']['parts'][0]['text']
+        # חילוץ בטוח של התשובה (מניעת IndexError)
+        candidates = res_json.get('candidates', [])
+        if not candidates:
+            return "ג'ימיני לא החזיר תשובה. ייתכן שהתוכן נחסם עקב מגבלות בטיחות או רעש באודיו."
+        
+        return candidates[0].get('content', {}).get('parts', [{}])[0].get('text', 'לא התקבל טקסט מהמודל.')
 
     except Exception as e:
-        return f"שגיאה טכנית קריטית: {str(e)}"
+        return f"שגיאה טכנית: {str(e)}"
         
 # ==========================================
 # --- 2. פונקציות ממשק משתמש (Tabs) ---
@@ -514,15 +511,56 @@ def render_tab_interview(svc, full_df):
     if analysis_key in st.session_state and st.session_state[analysis_key]:
         st.markdown(f'<div class="feedback-box">{st.session_state[analysis_key]}</div>', unsafe_allow_html=True)
         
-        if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
-            prog_bar = st.progress(0)
-            msg = st.empty()
-            try:
-                # לוגיקת השמירה...
-                st.success("נשמר בהצלחה!")
-                st.balloons()
-            except Exception as e:
-                st.error(f"שגיאה בשמירה: {e}")
+       if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
+    # שליפת האודיו מהזיכרון (כי המשתנה המקומי עלול להימחק ברענון)
+    saved_audio = st.session_state.get(f"audio_bytes_{it}")
+    
+    if not saved_audio:
+        st.error("ההקלטה אבדה בזיכרון. אנא הקלט שוב.")
+    else:
+        prog_bar = st.progress(0)
+        msg = st.empty()
+        try:
+            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+            analysis_text = st.session_state.get(f"last_analysis_{it}", "")
+            
+            # העלאה (שימוש ב-ID הנכון)
+            msg.text("🎤 מעלה הקלטת אודיו לדרייב...")
+            audio_link = drive_upload_bytes(svc, saved_audio, f"Interview_{student_name}_{ts}.wav", RESEARCH_FOLDER_ID)
+            prog_bar.progress(40)
+            
+            msg.text("📄 מעלה ניתוח טקסטואלי לדרייב...")
+            analysis_link = drive_upload_bytes(svc, analysis_text, f"Analysis_{student_name}_{ts}.txt", RESEARCH_FOLDER_ID, is_text=True)
+            prog_bar.progress(70)
+            
+            # רישום מקומי
+            interview_entry = {
+                "type": "interview_analysis",
+                "date": date.today().isoformat(),
+                "student_name": student_name,
+                "timestamp": datetime.now().isoformat(),
+                "audio_link": audio_link,
+                "analysis_link": analysis_link,
+                "challenge": "ראיון עומק מוקלט",
+                "insight": analysis_text[:1000] 
+            }
+            
+            with open(DATA_FILE, "a", encoding="utf-8") as f:
+                f.write(json.dumps(interview_entry, ensure_ascii=False) + "\n")
+            
+            prog_bar.progress(100)
+            st.success("✅ הכל נשמר וסונכרן!")
+            st.balloons()
+            
+            # ניקוי
+            st.session_state[f"last_analysis_{it}"] = ""
+            st.session_state[f"audio_bytes_{it}"] = None
+            
+            time.sleep(2)
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"שגיאה קריטית: {e}")
 
 def drive_upload_file(svc, file_obj, folder_id):
     """מעלה קובץ (כמו תמונה) מה-Uploader - משמש לטאב 1"""
@@ -618,12 +656,3 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
-
-
-
-
-
-
-
-
-
