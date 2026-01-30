@@ -148,11 +148,12 @@ def load_full_dataset(_svc):
 def call_gemini(prompt, audio_bytes=None):
     try:
         api_key = st.secrets.get("GOOGLE_API_KEY")
-        # שימוש ב-URL המדויק עם v1beta ו-latest
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
         
-        headers = {'Content-Type': 'application/json'}
+        # דיבאג - כדי שנראה מה באמת קורה
+        st.sidebar.info(f"DEBUG: שולח בקשה ל-URL עם סיומת latest")
         
+        headers = {'Content-Type': 'application/json'}
         if audio_bytes:
             audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
             payload = {
@@ -166,12 +167,14 @@ def call_gemini(prompt, audio_bytes=None):
         else:
             payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
-        response = requests.post(url, headers=headers, json=payload)
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
         res_json = response.json()
         
-        # אם בכל זאת יש שגיאה מה-API, נציג אותה בבירור
-        if "error" in res_json:
-            return f"שגיאה מה-API: {res_json['error']['message']}"
+        # הדפסת התשובה המלאה מהשרת למקרה של שגיאה
+        if response.status_code != 200:
+            st.error(f"DEBUG STATUS: {response.status_code}")
+            st.write("DEBUG FULL BODY:", res_json)
+            return f"שגיאה מה-API: {res_json.get('error', {}).get('message', 'Unknown error')}"
             
         return res_json['candidates'][0]['content']['parts'][0]['text']
     except Exception as e:
@@ -605,6 +608,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
