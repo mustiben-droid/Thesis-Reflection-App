@@ -580,37 +580,39 @@ def drive_upload_bytes(svc, content, filename, folder_id, is_text=False):
 # --- 3. גוף הקוד הראשי (Main) ---
 # ==========================================
 
+# אתחול שירותים ונתונים
 svc = get_drive_service()
 full_df = load_full_dataset(svc)
 
-if "it" not in st.session_state: st.session_state.it = 0
-if "last_selected_student" not in st.session_state: st.session_state.last_selected_student = ""
-if "show_success_bar" not in st.session_state: st.session_state.show_success_bar = False
-if "last_feedback" not in st.session_state: st.session_state.last_feedback = ""
-if "chat_history" not in st.session_state: st.session_state.chat_history = []
+# אתחול ה-Session State (רק אם הם לא קיימים)
+if "it" not in st.session_state: 
+    st.session_state.it = 0
+if "last_selected_student" not in st.session_state: 
+    st.session_state.last_selected_student = ""
+if "show_success_bar" not in st.session_state: 
+    st.session_state.show_success_bar = False
+if "last_feedback" not in st.session_state: 
+    st.session_state.last_feedback = ""
+if "chat_history" not in st.session_state: 
+    st.session_state.chat_history = []
 
-# 1. יצירת 4 טאבים במקום 3
+# יצירת הטאבים בממשק
 tab1, tab2, tab3, tab4 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח", "🎙️ ראיון עומק"])
 
-# 2. שיוך הפונקציות לטאבים
-with tab1: render_tab_entry(svc, full_df)
-with tab2: render_tab_sync(svc, full_df)
-with tab3: render_tab_analysis(svc)
-with tab4: render_tab_interview(svc, full_df) # השורה שמוסיפה את הראיונות
+with tab1: 
+    render_tab_entry(svc, full_df)
+with tab2: 
+    render_tab_sync(svc, full_df)
+with tab3: 
+    render_tab_analysis(svc)
+with tab4: 
+    render_tab_interview(svc, full_df)
 
-st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
+# סיידבר - כפתורי בקרה
+st.sidebar.markdown("---")
+if st.sidebar.button("🔄 רענן נתונים"):
+    st.cache_data.clear()
+    st.rerun()
+
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
