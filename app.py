@@ -401,14 +401,14 @@ def render_tab_analysis(svc):
     df_v = load_full_dataset(svc)
     
     if df_v.empty:
-        st.info("אין עדיין מספיק נתונים לניתוח. בצעי סנכרון בטאב 2.")
+        st.info("אין עדיין מספיק נתונים לניתוח. בצע סנכרון בטאב 2 או הזן תצפיות חדשות.")
         return
 
     # עיבוד תאריכים לשבועות
     df_v['date'] = pd.to_datetime(df_v['date'], errors='coerce')
     df_v['week'] = df_v['date'].dt.strftime('%Y - שבוע %U')
     
-    # --- חלק א: מעקב התקדמות אישי (מעולה לתזה!) ---
+    # --- חלק א: מעקב התקדמות אישי ---
     st.subheader("📈 מעקב התקדמות אישי")
     all_students = sorted(df_v['student_name'].dropna().unique())
     sel_student = st.selectbox("בחר תלמיד למעקב ויזואלי:", all_students)
@@ -416,21 +416,31 @@ def render_tab_analysis(svc):
     student_data = df_v[df_v['student_name'] == sel_student].sort_values('date')
     
     if len(student_data) >= 1:
-        # הגדרת המדדים שאנחנו רוצים להציג בגרף
+        # מיפוי המדדים לשמות החדשים והנכונים
         metrics = {
-            'cat_convert_rep': 'המרת ייצוגים',
-            'cat_dims_props': 'פרופורציות',
-            'cat_proj_trans': 'מעבר בין היטלים',
-            'cat_3d_support': 'שימוש במודל 3D'
+            'score_proj': 'המרת ייצוגים',
+            'score_views': 'מעבר בין היטלים',
+            'score_model': 'שימוש במודל 3D',
+            'score_spatial': 'תפיסה מרחבית',
+            'score_conv': 'פרופורציות'
         }
         
-        # הכנת הנתונים לגרף
-        plot_df = student_data[['date'] + list(metrics.keys())].copy()
-        plot_df = plot_df.rename(columns=metrics).set_index('date')
+        # בדיקה אילו מדדים באמת קיימים בנתונים (השיפור של Perplexity)
+        available_metrics = [c for c in metrics.keys() if c in student_data.columns]
         
-        # הצגת הגרף
-        st.line_chart(plot_df)
-        st.caption("מגמת שינוי במדדים הכמותיים לאורך זמן (1-5)")
+        if available_metrics:
+            plot_df = student_data[['date'] + available_metrics].copy()
+            plot_df = plot_df.rename(columns=metrics).set_index('date')
+            
+            st.line_chart(plot_df)
+            st.caption("מגמת שינוי במדדים הכמותיים (1-5)")
+            
+            # הצגת הערה אם חלק מהמדדים חסרים
+            missing = [metrics[c] for c in metrics.keys() if c not in student_data.columns]
+            if missing:
+                st.info(f"💡 הערה: המדדים הבאים טרם תועדו עבור תלמיד זה: {', '.join(missing)}")
+        else:
+            st.warning("⚠️ לא נמצאו מדדים כמותיים להצגה עבור תלמיד זה.")
     else:
         st.warning("אין מספיק נתונים להצגת גרף עבור תלמיד זה.")
 
@@ -446,30 +456,23 @@ def render_tab_analysis(svc):
     
     with col_table:
         st.write(f"תצפיות בשבוע {sel_w}:")
-        st.dataframe(w_df[['student_name', 'challenge', 'tags']], use_container_width=True)
+        # וידוי שהעמודות קיימות לפני הצגת הטבלה
+        cols_to_show = [c for c in ['student_name', 'challenge', 'tags'] if c in w_df.columns]
+        st.dataframe(w_df[cols_to_show], use_container_width=True)
     
     with col_ai:
         if st.button("✨ הפק ניתוח שבועי ושמור לדרייב"):
-            with st.spinner("ג'ימיני מנתח את כל התצפיות של השבוע..."):
-                # איסוף כל הטקסט של השבוע
-                txt = "".join([f"תלמיד: {r['student_name']} | קושי: {r.get('challenge','')} | תובנה: {r.get('insight','')}\n" for _, r in w_df.iterrows()])
-                
-                response = call_gemini(f"בצע ניתוח תמות (Thematic Analysis) אקדמי על התצפיות הבאות עבור שבוע {sel_w}:\n\n{txt}")
-                
+            with st.spinner("ג'ימיני מנתח את התצפיות..."):
+                txt = "".join([f"תלמיד: {r.get('student_name','')} | קושי: {r.get('challenge','')} | תובנה: {r.get('insight','')}\n" for _, r in w_df.iterrows()])
+                response = call_gemini(f"בצע ניתוח תמות אקדמי על התצפיות הבאות עבור שבוע {sel_w}:\n\n{txt}")
                 st.markdown(f'<div class="feedback-box"><b>📊 ממצאים לשבוע {sel_w}:</b><br>{response}</div>', unsafe_allow_html=True)
                 
-                # שמירה אוטומטית לדרייב
                 try:
                     f_name = f"ניתוח_תמות_{sel_w.replace(' ', '_')}.txt"
-                    media = MediaIoBaseUpload(io.BytesIO(response.encode('utf-8')), mimetype='text/plain')
-                    svc.files().create(
-                        body={'name': f_name, 'parents': [GDRIVE_FOLDER_ID] if GDRIVE_FOLDER_ID else []},
-                        media_body=media,
-                        supportsAllDrives=True
-                    ).execute()
-                    st.success(f"הניתוח נשמר בדרייב כקובץ: {f_name}")
+                    drive_upload_bytes(svc, response, f_name, GDRIVE_FOLDER_ID, is_text=True)
+                    st.success(f"הניתוח נשמר בדרייב.")
                 except Exception as e:
-                    st.error(f"הניתוח הופק אך נכשלה השמירה לדרייב: {e}")
+                    st.error(f"הניתוח הופק אך נכשלה השמירה: {e}")
 
 def render_tab_interview(svc, full_df):
     from streamlit_mic_recorder import mic_recorder
@@ -597,6 +600,7 @@ with tab4: render_tab_interview(svc, full_df) # השורה שמוסיפה את �
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
