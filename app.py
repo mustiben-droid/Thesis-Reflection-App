@@ -620,43 +620,5 @@ if st.sidebar.button("🔄 רענן נתונים"):
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
-# אתחול ה-Session State (רק אם הם לא קיימים)
-if "it" not in st.session_state:
-    st.session_state.it = 0
-
-if "last_selected_student" not in st.session_state:
-    st.session_state.last_selected_student = ""
-
-if "show_success_bar" not in st.session_state:
-    st.session_state.show_success_bar = False
-
-if "last_feedback" not in st.session_state:
-    st.session_state.last_feedback = ""
-
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-
-if "student_context" not in st.session_state:
-    st.session_state.student_context = ""
-
-# --- הגדרת הטאבים ---
-tab1, tab2, tab3, tab4 = st.tabs([
-    "📋 הזנת תצפית",
-    "🔄 סנכרון",
-    "📊 ניתוח",
-    "🎙️ ראיונות עומק"
-])
-
-with tab1:
-    render_tab_entry(svc, full_df)
-
-with tab2:
-    render_tab_sync(svc, full_df)
-
-with tab3:
-    render_tab_analysis(svc)
-
-with tab4:
-    render_tab_interview(svc, full_df)
 
 
