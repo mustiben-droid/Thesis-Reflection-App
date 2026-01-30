@@ -483,15 +483,13 @@ def render_tab_interview(svc, full_df):
     st.subheader("🎙️ ראיון עומק וניתוח תמות למחקר")
     
     student_name = st.selectbox("בחר סטודנט לראיון:", CLASS_ROSTER, key=f"int_sel_{it}")
-    st.info("הקלט שיחה על: תפיסה מרחבית, שימוש במודל ותחושת מסוגלות.")
+    st.info("הקלט שיחה. בסיום, הניתוח יעלה אוטומטית לאקסל המאסטר בדרייב.")
     audio_data = mic_recorder(start_prompt="התחל הקלטה ⏺️", stop_prompt="עצור ונתח ⏹️", key=f"mic_int_{it}")
     
     if audio_data:
         audio_bytes = audio_data['bytes']
-        
-        # בדיקת גודל קובץ למניעת קריסות (עד 15MB)
         if len(audio_bytes) > 15 * 1024 * 1024:
-            st.error("⚠️ קובץ האודיו גדול מדי לניתוח ישיר. נסה להקליט קטעים קצרים יותר.")
+            st.error("⚠️ קובץ האודיו גדול מדי. נסה להקליט קטעים קצרים יותר.")
             return
 
         st.audio(audio_bytes, format="audio/wav")
@@ -514,45 +512,64 @@ def render_tab_interview(svc, full_df):
             st.markdown(f'<div class="feedback-box">{analysis_res}</div>', unsafe_allow_html=True)
 
         if f"last_analysis_{it}" in st.session_state:
-            if st.button("💾 שמור תוצאות לדרייב ולאקסל המאסטר"):
+            # הכפתור המשולב: שמירה + סנכרון אוטומטי
+            if st.button("💾 שמור וסנכרן לאקסל המאסטר", type="primary", key=f"save_int_{it}"):
                 prog_bar = st.progress(0)
-                status_text = st.empty()
+                msg = st.empty()
                 
                 try:
-                    status_text.text("📤 מעלה קבצים ל-Google Drive...")
+                    # 1. העלאת קבצים לדרייב
+                    msg.text("📤 מעלה קבצי אודיו וטקסט לדרייב...")
                     a_link = drive_upload_bytes(svc, audio_bytes, f"Audio_{student_name}_{date.today()}.wav", INTERVIEW_FOLDER_ID)
-                    prog_bar.progress(40)
-                    
                     t_link = drive_upload_bytes(svc, st.session_state[f"last_analysis_{it}"], f"Analysis_{student_name}_{date.today()}.txt", INTERVIEW_FOLDER_ID, is_text=True)
-                    prog_bar.progress(80)
+                    prog_bar.progress(30)
                     
-                    status_text.text("💾 מעדכן בסיס נתונים מקומי...")
+                    # 2. הכנת הנתונים (כל הניתוח נכנס לעמודת insight)
                     entry = {
                         "type": "deep_interview", 
                         "date": date.today().isoformat(),
                         "student_name": student_name, 
-                        "insight": st.session_state[f"last_analysis_{it}"][:500],
+                        "insight": st.session_state[f"last_analysis_{it}"], 
                         "audio_backup": a_link, 
                         "full_doc_link": t_link, 
                         "timestamp": datetime.now().isoformat()
                     }
-                    with open(DATA_FILE, "a", encoding="utf-8") as f:
-                        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                    prog_bar.progress(50)
+
+                    # 3. סנכרון אוטומטי לאקסל המאסטר (הקפצה לדרייב)
+                    msg.text("🔄 מעדכן את אקסל המאסטר בדרייב...")
+                    file_id = st.secrets.get("MASTER_FILE_ID")
+                    
+                    df_new = pd.DataFrame([entry])
+                    df_combined = pd.concat([full_df, df_new], ignore_index=True)
+                    df_combined = df_combined.drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
+                    
+                    buf = io.BytesIO()
+                    with pd.ExcelWriter(buf, engine='openpyxl') as w:
+                        df_combined.to_excel(w, index=False)
+                    buf.seek(0)
+                    
+                    media = MediaIoBaseUpload(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    svc.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
                     
                     prog_bar.progress(100)
-                    status_text.empty()
+                    msg.empty()
                     st.balloons()
                     
                     st.success(f"""
-                        ### ✅ הראיון נשמר בהצלחה!
-                        **הפרמטרים שעודכנו:**
+                        ### ✅ נשמר וסונכרן בהצלחה!
                         * **סטודנט:** {student_name}
-                        * **גיבוי אודיו:** [לחץ לצפייה]({a_link})
-                        * **מסמך ניתוח:** [לחץ לצפייה]({t_link})
-                        * **סטטוס:** נוסף לאקסל המאסטר
+                        * **תוכן:** הניתוח המלא הוכנס לעמודת insight באקסל.
+                        * **קבצים:** [הקלטה]({a_link}) | [מסמך ניתוח]({t_link})
                     """)
+                    
+                    # ניקוי ורענון
+                    st.cache_data.clear()
+                    time.sleep(2)
+                    st.rerun()
+
                 except Exception as e:
-                    st.error(f"❌ שגיאה בשמירה: {e}")
+                    st.error(f"❌ שגיאה בשמירה או בסנכרון: {e}")
 
 def drive_upload_file(svc, file_obj, folder_id):
     """מעלה קובץ (כמו תמונה) מה-Uploader - משמש לטאב 1"""
@@ -645,6 +662,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
