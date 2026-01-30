@@ -345,7 +345,7 @@ def render_tab_entry(svc, full_df):
                 st.session_state.last_feedback = ""
                 st.rerun()
 
-    with col_chat:
+with col_chat:
         st.subheader(f"🤖 יועץ: {student_name}")
         chat_cont = st.container(height=450)
         for q, a in st.session_state.chat_history:
@@ -597,6 +597,7 @@ with tab4: render_tab_interview(svc, full_df) # השורה שמוסיפה את �
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
