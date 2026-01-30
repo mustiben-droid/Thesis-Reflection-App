@@ -148,35 +148,40 @@ def load_full_dataset(_svc):
 def call_gemini(prompt, audio_bytes=None):
     try:
         api_key = st.secrets.get("GOOGLE_API_KEY")
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
-        
-        # דיבאג - כדי שנראה מה באמת קורה
-        st.sidebar.info(f"DEBUG: שולח בקשה ל-URL עם סיומת latest")
+        # המעבר לגרסה היציבה v1 ללא ה-beta
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
         
         headers = {'Content-Type': 'application/json'}
+        
         if audio_bytes:
             audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
             payload = {
                 "contents": [{
                     "parts": [
                         {"text": prompt},
-                        {"inline_data": {"mime_type": "audio/wav", "data": audio_base64}}
+                        {"inline_data": {
+                            "mime_type": "audio/wav",
+                            "data": audio_base64
+                        }}
                     ]
                 }]
             }
         else:
-            payload = {"contents": [{"parts": [{"text": prompt}]}]}
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}]
+            }
 
         response = requests.post(url, headers=headers, json=payload, timeout=60)
         res_json = response.json()
-        
-        # הדפסת התשובה המלאה מהשרת למקרה של שגיאה
+
+        # השארתי את הדיבאג כדי שנוכל לראות הצלחה (200)
         if response.status_code != 200:
-            st.error(f"DEBUG STATUS: {response.status_code}")
+            st.error(f"❌ שגיאת API (קוד {response.status_code})")
             st.write("DEBUG FULL BODY:", res_json)
-            return f"שגיאה מה-API: {res_json.get('error', {}).get('message', 'Unknown error')}"
-            
+            return f"שגיאה: {res_json.get('error', {}).get('message', 'Unknown error')}"
+
         return res_json['candidates'][0]['content']['parts'][0]['text']
+
     except Exception as e:
         return f"שגיאה טכנית: {str(e)}"
         
@@ -608,6 +613,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
