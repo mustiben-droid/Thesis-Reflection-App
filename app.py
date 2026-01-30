@@ -490,13 +490,12 @@ def render_tab_interview(svc, full_df):
     
     if audio_data:
         audio_bytes = audio_data['bytes']
-        st.session_state[f"audio_bytes_{it}"] = audio_bytes # שמירה בזיכרון
+        st.session_state[f"audio_bytes_{it}"] = audio_bytes
         st.audio(audio_bytes, format="audio/wav")
         
-        # כפתור הניתוח
         if st.button("✨ בצע תמלול וניתוח תמות עומק", key=f"btn_an_{it}"):
             with st.status("🤖 ג'ימיני מנתח...", expanded=True) as status:
-                prompt = f"נתח ראיון של הסטודנט {student_name}. תמלל ונתח תפיסה מרחבית."
+                prompt = f"נתח ראיון של {student_name}. תמלל ונתח תפיסה מרחבית."
                 analysis_res = call_gemini(prompt, audio_bytes)
                 
                 if "שגיאה" in analysis_res:
@@ -507,45 +506,40 @@ def render_tab_interview(svc, full_df):
                     status.update(label="✅ הושלם!", state="complete")
                     st.rerun()
 
-    # 2. הצגת התוצאה וכפתור השמירה (מחוץ לבלוק האודיו, מיושר ל-it)
+    # 2. הצגת תוצאות ושמירה (הקפדה על הזחה זהה ל-if audio_data)
     analysis_key = f"last_analysis_{it}"
     if analysis_key in st.session_state and st.session_state[analysis_key]:
         st.markdown(f'<div class="feedback-box">{st.session_state[analysis_key]}</div>', unsafe_allow_html=True)
         
-        # כפתור השמירה - מיושר בדיוק מתחת ל-markdown
+        # הכפתור הבא חייב להיות בדיוק באותו קו של ה-markdown
         if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
             saved_audio = st.session_state.get(f"audio_bytes_{it}")
             if not saved_audio:
-                st.error("ההקלטה אבדה. אנא הקלט שוב.")
+                st.error("ההקלטה לא נמצאה בזיכרון.")
             else:
                 prog_bar = st.progress(0)
-                msg = st.empty()
                 try:
                     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    msg.text("📤 מעלה נתונים לדרייב ול-JSONL...")
-                    
                     # העלאה לדרייב
-                    a_link = drive_upload_bytes(svc, saved_audio, f"Interview_{student_name}_{ts}.wav", RESEARCH_FOLDER_ID)
-                    prog_bar.progress(40)
-                    t_link = drive_upload_bytes(svc, st.session_state[analysis_key], f"Analysis_{student_name}_{ts}.txt", RESEARCH_FOLDER_ID, is_text=True)
-                    prog_bar.progress(70)
+                    a_link = drive_upload_bytes(svc, saved_audio, f"Int_{student_name}_{ts}.wav", RESEARCH_FOLDER_ID)
+                    prog_bar.progress(50)
+                    t_link = drive_upload_bytes(svc, st.session_state[analysis_key], f"An_{student_name}_{ts}.txt", RESEARCH_FOLDER_ID, is_text=True)
                     
-                    # רישום מקומי ב-JSONL
+                    # רישום ב-JSONL
                     entry = {
-                        "type": "interview_analysis", "date": date.today().isoformat(),
-                        "student_name": student_name, "timestamp": datetime.now().isoformat(),
-                        "audio_link": a_link, "text_link": t_link, "insight": st.session_state[analysis_key][:500]
+                        "type": "interview", "date": date.today().isoformat(),
+                        "student": student_name, "audio": a_link, "text": t_link
                     }
                     with open(DATA_FILE, "a", encoding="utf-8") as f:
                         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                     
                     prog_bar.progress(100)
-                    st.success("✅ נשמר וסונכרן בהצלחה!")
+                    st.success("✅ נשמר!")
                     st.balloons()
                     time.sleep(2)
                     st.rerun()
                 except Exception as e:
-                    st.error(f"שגיאה בשמירה: {e}")
+                    st.error(f"שגיאה: {e}")
 
 def drive_upload_file(svc, file_obj, folder_id):
     """מעלה קובץ (כמו תמונה) מה-Uploader - משמש לטאב 1"""
@@ -641,6 +635,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
