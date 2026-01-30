@@ -89,6 +89,7 @@ def load_full_dataset(_svc):
     df_drive = pd.DataFrame()
     file_id = st.secrets.get("MASTER_FILE_ID")
     
+    # 1. משיכת נתונים מהדרייב
     if _svc and file_id:
         try:
             req = _svc.files().get_media(fileId=file_id)
@@ -100,6 +101,7 @@ def load_full_dataset(_svc):
             fh.seek(0)
             df_drive = pd.read_excel(fh)
             
+            # וידוי שם עמודה אחיד
             if 'student_name' not in df_drive.columns:
                 cols = [c for c in df_drive.columns if any(x in str(c).lower() for x in ["student", "name", "שם", "תלמיד"])]
                 if cols:
@@ -107,6 +109,7 @@ def load_full_dataset(_svc):
         except Exception:
             pass
 
+    # 2. משיכת נתונים מהמכשיר המקומי
     df_local = pd.DataFrame()
     if os.path.exists(DATA_FILE):
         try:
@@ -115,12 +118,22 @@ def load_full_dataset(_svc):
         except Exception:
             pass
 
-    # שים לב ליישור של השורה הזו - היא צריכה להיות בקו אחד עם ה-if-ים למעלה
+    # 3. איחוד וניקוי כפילויות (השיפור של Copilot)
     df = pd.concat([df_drive, df_local], ignore_index=True)
     
-    if not df.empty and 'student_name' in df.columns:
-        df['student_name'] = df['student_name'].astype(str).str.strip()
-        df['name_clean'] = df['student_name'].apply(normalize_name)
+    if not df.empty:
+        # המרה לפורמט תאריך אחיד כדי שהזיהוי יעבוד
+        if 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        
+        # ניקוי כפילויות: אם יש אותו תלמיד באותו זמן בדיוק - תשמור רק את האחרון
+        # זה מונע כפילויות שנוצרות בזמן סנכרון או לחיצות כפולות
+        df = df.drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
+        
+        # הוספת עמודות עזר לחיפוש
+        if 'student_name' in df.columns:
+            df['student_name'] = df['student_name'].astype(str).str.strip()
+            df['name_clean'] = df['student_name'].apply(normalize_name)
     
     return df
     
@@ -553,6 +566,7 @@ with tab4: render_tab_interview(svc, full_df) # השורה שמוסיפה את �
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
