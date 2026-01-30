@@ -275,7 +275,7 @@ def render_tab_entry(svc, full_df):
                 else:
                     st.warning("תיבת התובנות ריקה.")
 
-       with c_btns[1]:
+    with c_btns[1]:
             if st.button("💾 שמור תצפית", type="primary", key=f"save_btn_{st.session_state.it}"):
                 final_ch = st.session_state.get("field_obs_input", "").strip()
                 final_ins = st.session_state.get("insight_input", "").strip()
@@ -597,6 +597,7 @@ with tab4: render_tab_interview(svc, full_df) # השורה שמוסיפה את �
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
