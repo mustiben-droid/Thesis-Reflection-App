@@ -145,45 +145,49 @@ def load_full_dataset(_svc):
 def call_gemini(prompt, audio_bytes=None):
     try:
         api_key = st.secrets.get("GOOGLE_API_KEY")
-        if not api_key: return "שגיאה: חסר API Key"
+        if not api_key: 
+            return "שגיאה: חסר API Key ב-Secrets"
+            
+        genai.configure(api_key=api_key)
         
-        if not audio_bytes:
-            # טקסט בלבד
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-            payload = {"contents": [{"parts": [{"text": prompt}]}]}
-            response = requests.post(url, json=payload, timeout=30)
-            if response.status_code == 200:
-                return response.json()['candidates'][0]['content']['parts'][0]['text']
-            return f"שגיאת API: {response.status_code}"
+        # שימוש בשם המודל היציב ביותר ל-SDK
+        model = genai.GenerativeModel(model_name="gemini-1.5-flash")
         
+        if audio_bytes:
+            # יצירת קובץ זמני לאודיו
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp:
+                tmp.write(audio_bytes)
+                tmp_path = tmp.name
+            
+            try:
+                # העלאה דרך ה-SDK המובנה
+                uploaded_file = genai.upload_file(path=tmp_path, mime_type="audio/wav")
+                
+                # המתנה לעיבוד בשרתי גוגל
+                while uploaded_file.state.name == "PROCESSING":
+                    time.sleep(2)
+                    uploaded_file = genai.get_file(uploaded_file.name)
+                
+                if uploaded_file.state.name == "FAILED":
+                    return "שגיאה: עיבוד הקובץ בשרתי גוגל נכשל."
+
+                # יצירת התוכן
+                response = model.generate_content([prompt, uploaded_file])
+                
+                # מחיקת הקובץ מהשרת (חשוב לפרטיות וניקיון)
+                genai.delete_file(uploaded_file.name)
+                
+                return response.text
+            finally:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
         else:
-            # אודיו + טקסט
-            upload_url = f"https://generativelanguage.googleapis.com/upload/v1beta/files?key={api_key}"
-            headers = {"X-Goog-Upload-Protocol": "multipart"}
-            files = {
-                'metadata': (None, '{"file": {"display_name": "audio.wav"}}', 'application/json'),
-                'file': ('audio.wav', audio_bytes, 'audio/wav')
-            }
-            upload_response = requests.post(upload_url, headers=headers, files=files, timeout=120)
-            file_uri = upload_response.json().get('file', {}).get('uri')
+            # מצב טקסט בלבד
+            response = model.generate_content(prompt)
+            return response.text
             
-            time.sleep(2) # המתנה קצרה לעיבוד
-            
-            generate_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-            payload = {
-                "contents": [{
-                    "parts": [
-                        {"text": prompt},
-                        {"file_data": {"file_uri": file_uri, "mime_type": "audio/wav"}}
-                    ]
-                }]
-            }
-            response = requests.post(generate_url, json=payload, timeout=180)
-            if response.status_code == 200:
-                return response.json()['candidates'][0]['content']['parts'][0]['text']
-            return f"שגיאת ניתוח: {response.status_code}"
     except Exception as e:
-        return f"שגיאה בתהליך: {str(e)}"
+        return f"שגיאה בתהליך הניתוח: {str(e)}"
 # ==========================================
 # --- 2. פונקציות ממשק משתמש (Tabs) ---
 # ==========================================
@@ -670,6 +674,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
