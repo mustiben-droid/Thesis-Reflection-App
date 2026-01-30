@@ -476,7 +476,7 @@ def render_tab_analysis(svc):
                     f_name = f"ניתוח_תמות_{sel_w.replace(' ', '_')}.txt"
                     drive_upload_bytes(svc, response, f_name, GDRIVE_FOLDER_ID, is_text=True)
                     st.success(f"הניתוח נשמר בדרייב.")
-               except Exception as e:
+                except Exception as e:
                     st.error(f"הניתוח הופק אך נכשלה השמירה: {e}")
 
 # --- שים לב: השורה הבאה חייבת להתחיל צמוד לשמאל (ללא רווחים בכלל!) ---
@@ -648,4 +648,5 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
