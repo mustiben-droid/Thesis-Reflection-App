@@ -7,7 +7,7 @@ import io
 import time
 import tempfile
 import requests
-import google.generativeai as genai  # השורה הזו מתאימה ל-google-generativeai
+from google import genai  
 from datetime import date, datetime
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -152,45 +152,34 @@ def call_gemini(prompt, audio_bytes=None):
         if not api_key:
             return "שגיאה: חסר API Key ב-Secrets"
 
-        # שינוי לגרסה v1 היציבה - כאן המודל חייב להימצא
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+        # יצירת הלקוח בשיטה החדשה
+        client = genai.Client(api_key=api_key)
         
-        headers = {'Content-Type': 'application/json'}
+        # בחירת המודל (בתיעוד ראית gemini-3, אבל נשתמש ב-flash היציב)
+        model_id = "gemini-1.5-flash" 
         
         if audio_bytes:
-            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
-            payload = {
-                "contents": [{
-                    "parts": [
-                        {"text": prompt},
-                        {
-                            "inline_data": {
-                                "mime_type": "audio/wav",
-                                "data": audio_base64
-                            }
-                        }
-                    ]
-                }]
-            }
+            # שליחה עם אודיו בפורמט החדש
+            response = client.models.generate_content(
+                model=model_id,
+                contents=[
+                    prompt,
+                    {"inline_data": {
+                        "mime_type": "audio/wav", 
+                        "data": base64.b64encode(audio_bytes).decode('utf-8')
+                    }}
+                ]
+            )
         else:
-            payload = {
-                "contents": [{"parts": [{"text": prompt}]}]
-            }
+            response = client.models.generate_content(
+                model=model_id, 
+                contents=prompt
+            )
 
-        response = requests.post(url, headers=headers, json=payload)
-        res_json = response.json()
-
-        if response.status_code != 200:
-            # אם v1 נכשל, ננסה אוטומטית גרסה חלופית בתוך הקוד
-            error_msg = res_json.get('error', {}).get('message', '')
-            if "not found" in error_msg.lower():
-                return "שגיאה: המודל gemini-1.5-flash לא זמין בגרסה זו. נסה להשתמש ב-API Key אחר או וודא שהמודל מאושר בחשבון שלך."
-            return f"שגיאה מה-API: {error_msg}"
-
-        return res_json['candidates'][0]['content']['parts'][0]['text']
+        return response.text
 
     except Exception as e:
-        return f"שגיאה בתהליך הניתוח: {str(e)}"
+        return f"שגיאה בחיבור החדש: {str(e)}"
         
 # ==========================================
 # --- 2. פונקציות ממשק משתמש (Tabs) ---
@@ -687,6 +676,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
