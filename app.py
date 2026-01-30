@@ -1,6 +1,8 @@
 import json, base64, os, io, logging, pandas as pd, streamlit as st
 import tempfile
 import time
+import requests
+import streamlit as st
 from google import generativeai as genai
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -668,6 +670,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
