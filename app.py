@@ -519,12 +519,21 @@ def render_tab_interview(svc, full_df):
                 4. רמת מסוגלות עצמית (ביטחון מול תסכול).
                 החזר הכל בעברית עם כותרות ברורות.
                 """
-                # כאן אנחנו משתמשים ב-call_gemini החדש שסידרנו
-                analysis_res = call_gemini(prompt, audio_bytes)
-                st.session_state[f"last_analysis_{it}"] = analysis_res
-                status.update(label="✅ הניתוח הושלם!", state="complete", expanded=False)
                 
-            st.markdown(f'<div class="feedback-box">{analysis_res}</div>', unsafe_allow_html=True)
+                # הקריאה לפונקציה החדשה שעוקפת את ה-SDK
+                analysis_res = call_gemini(prompt, audio_bytes)
+                
+                # בדיקה אם התוצאה היא שגיאה טכנית
+                if "שגיאה" in analysis_res or "Error" in analysis_res:
+                    status.update(label="❌ הניתוח נכשל", state="error", expanded=True)
+                    st.error(analysis_res)
+                else:
+                    st.session_state[f"last_analysis_{it}"] = analysis_res
+                    status.update(label="✅ הניתוח הושלם!", state="complete", expanded=False)
+            
+            # הצגת התוצאה רק אם היא תקינה
+            if f"last_analysis_{it}" in st.session_state:
+                st.markdown(f'<div class="feedback-box">{st.session_state[f"last_analysis_{it}"]}</div>', unsafe_allow_html=True)
 
         if f"last_analysis_{it}" in st.session_state:
             if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
@@ -678,6 +687,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
