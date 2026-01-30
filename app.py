@@ -482,8 +482,12 @@ def render_tab_interview(svc, full_df):
     it = st.session_state.it
     st.subheader("🎙️ ראיון עומק וניתוח תמות למחקר")
     
+    # עדכון ה-ID של התיקייה הספציפית שלך
+    RESEARCH_FOLDER_ID = "1NQz2UZ6BfAURfN4a8h4_qSkyY-_gxhxP"
+    
     student_name = st.selectbox("בחר סטודנט לראיון:", CLASS_ROSTER, key=f"int_sel_{it}")
-    st.info("הקלט שיחה. בסיום, הניתוח יעלה אוטומטית לאקסל המאסטר בדרייב.")
+    st.info("הקלט שיחה. בסיום, הניתוח וההקלטה יעלו לתיקיית המחקר בדרייב ולאקסל.")
+    
     audio_data = mic_recorder(start_prompt="התחל הקלטה ⏺️", stop_prompt="עצור ונתח ⏹️", key=f"mic_int_{it}")
     
     if audio_data:
@@ -512,19 +516,25 @@ def render_tab_interview(svc, full_df):
             st.markdown(f'<div class="feedback-box">{analysis_res}</div>', unsafe_allow_html=True)
 
         if f"last_analysis_{it}" in st.session_state:
-            # הכפתור המשולב: שמירה + סנכרון אוטומטי
-            if st.button("💾 שמור וסנכרן לאקסל המאסטר", type="primary", key=f"save_int_{it}"):
+            if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
                 prog_bar = st.progress(0)
                 msg = st.empty()
                 
                 try:
-                    # 1. העלאת קבצים לדרייב
-                    msg.text("📤 מעלה קבצי אודיו וטקסט לדרייב...")
-                    a_link = drive_upload_bytes(svc, audio_bytes, f"Audio_{student_name}_{date.today()}.wav", INTERVIEW_FOLDER_ID)
-                    t_link = drive_upload_bytes(svc, st.session_state[f"last_analysis_{it}"], f"Analysis_{student_name}_{date.today()}.txt", INTERVIEW_FOLDER_ID, is_text=True)
+                    # 1. העלאת הקלטת האודיו לתיקייה המבוקשת
+                    msg.text(f"📤 מעלה הקלטה לתיקייה {RESEARCH_FOLDER_ID}...")
+                    a_link = drive_upload_bytes(svc, audio_bytes, f"Audio_{student_name}_{date.today()}.wav", RESEARCH_FOLDER_ID)
                     prog_bar.progress(30)
                     
-                    # 2. הכנת הנתונים (כל הניתוח נכנס לעמודת insight)
+                    # 2. העלאת התמלול/ניתוח כקובץ טקסט לאותה תיקייה
+                    msg.text("📤 מעלה קובץ תמלול לדרייב...")
+                    t_link = drive_upload_bytes(svc, st.session_state[f"last_analysis_{it}"], f"Analysis_{student_name}_{date.today()}.txt", RESEARCH_FOLDER_ID, is_text=True)
+                    prog_bar.progress(60)
+                    
+                    # 3. עדכון אקסל המאסטר
+                    msg.text("🔄 מעדכן את אקסל המאסטר...")
+                    file_id = st.secrets.get("MASTER_FILE_ID")
+                    
                     entry = {
                         "type": "deep_interview", 
                         "date": date.today().isoformat(),
@@ -534,11 +544,6 @@ def render_tab_interview(svc, full_df):
                         "full_doc_link": t_link, 
                         "timestamp": datetime.now().isoformat()
                     }
-                    prog_bar.progress(50)
-
-                    # 3. סנכרון אוטומטי לאקסל המאסטר (הקפצה לדרייב)
-                    msg.text("🔄 מעדכן את אקסל המאסטר בדרייב...")
-                    file_id = st.secrets.get("MASTER_FILE_ID")
                     
                     df_new = pd.DataFrame([entry])
                     df_combined = pd.concat([full_df, df_new], ignore_index=True)
@@ -557,19 +562,18 @@ def render_tab_interview(svc, full_df):
                     st.balloons()
                     
                     st.success(f"""
-                        ### ✅ נשמר וסונכרן בהצלחה!
-                        * **סטודנט:** {student_name}
-                        * **תוכן:** הניתוח המלא הוכנס לעמודת insight באקסל.
-                        * **קבצים:** [הקלטה]({a_link}) | [מסמך ניתוח]({t_link})
+                        ### ✅ הכל נשמר בהצלחה!
+                        * **הקלטה ותמלול:** הועלו לתיקיית המחקר שציינת.
+                        * **אקסל:** שורה חדשה נוספה עם כל התוכן.
+                        * **קישורים:** [הקלטה]({a_link}) | [ניתוח]({t_link})
                     """)
                     
-                    # ניקוי ורענון
                     st.cache_data.clear()
                     time.sleep(2)
                     st.rerun()
 
                 except Exception as e:
-                    st.error(f"❌ שגיאה בשמירה או בסנכרון: {e}")
+                    st.error(f"❌ שגיאה בתהליך השמירה: {e}")
 
 def drive_upload_file(svc, file_obj, folder_id):
     """מעלה קובץ (כמו תמונה) מה-Uploader - משמש לטאב 1"""
@@ -662,6 +666,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
