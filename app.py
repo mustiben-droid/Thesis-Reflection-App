@@ -338,7 +338,7 @@ def render_tab_entry(svc, full_df):
                         st.warning("⚠️ לא ניתן לשמור תצפית ריקה. אנא מלא את ה-Challenge או את התובנות.")
                         
         # הצגת המשוב מתחת לכפתורים
-        if st.session_state.last_feedback:
+    if st.session_state.last_feedback:
             st.markdown("---")
             st.markdown(f'<div class="feedback-box"><b>💡 משוב יועץ AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)           
             if st.button("🗑️ נקה משוב"):
@@ -597,6 +597,7 @@ with tab4: render_tab_interview(svc, full_df) # השורה שמוסיפה את �
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
