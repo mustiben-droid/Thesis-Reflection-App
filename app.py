@@ -7,7 +7,7 @@ import io
 import time
 import tempfile
 import requests
-from google import genai
+import google.generativeai as genai  # השורה הזו מתאימה ל-google-generativeai
 from datetime import date, datetime
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -668,6 +668,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
