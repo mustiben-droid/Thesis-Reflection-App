@@ -149,7 +149,7 @@ def call_gemini(prompt, audio_bytes=None):
         genai.configure(api_key=api_key)
         
         # לראיונות ארוכים, Gemini 1.5 Flash הוא הכי יציב ומדויק
-        model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+        model = genai.GenerativeModel(model_name="models/gemini-1.5-flash")
         
         if audio_bytes:
             # 1. יצירת קובץ זמני מקומי מההקלטה
@@ -619,6 +619,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
