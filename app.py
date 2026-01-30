@@ -6,7 +6,8 @@ import os
 import io
 import time
 import tempfile
-import requests  # משאירים את זה כי הפתרון של ה-REST API הכי אמין כרגע
+import requests
+from google import genai
 from datetime import date, datetime
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -667,6 +668,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
