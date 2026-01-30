@@ -485,7 +485,7 @@ def render_tab_interview(svc, full_df):
     
     student_name = st.selectbox("בחר סטודנט לראיון:", CLASS_ROSTER, key=f"int_sel_{it}")
     
-    # 1. הקלטת אודיו ושמירה ל-Session State
+    # 1. הקלטת אודיו
     audio_data = mic_recorder(start_prompt="התחל הקלטה ⏺️", stop_prompt="עצור ונתח ⏹️", key=f"mic_int_{it}")
     
     if audio_data:
@@ -506,12 +506,11 @@ def render_tab_interview(svc, full_df):
                     status.update(label="✅ הושלם!", state="complete")
                     st.rerun()
 
-    # 2. הצגת תוצאות ושמירה (הקפדה על הזחה זהה ל-if audio_data)
+    # 2. הצגת תוצאות ושמירה
     analysis_key = f"last_analysis_{it}"
     if analysis_key in st.session_state and st.session_state[analysis_key]:
         st.markdown(f'<div class="feedback-box">{st.session_state[analysis_key]}</div>', unsafe_allow_html=True)
         
-        # הכפתור הבא חייב להיות בדיוק באותו קו של ה-markdown
         if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
             saved_audio = st.session_state.get(f"audio_bytes_{it}")
             if not saved_audio:
@@ -525,21 +524,25 @@ def render_tab_interview(svc, full_df):
                     prog_bar.progress(50)
                     t_link = drive_upload_bytes(svc, st.session_state[analysis_key], f"An_{student_name}_{ts}.txt", RESEARCH_FOLDER_ID, is_text=True)
                     
-                    # רישום ב-JSONL
+                    # רישום ב-JSONL המקומי
                     entry = {
-                        "type": "interview", "date": date.today().isoformat(),
-                        "student": student_name, "audio": a_link, "text": t_link
+                        "type": "interview", 
+                        "date": date.today().isoformat(),
+                        "student": student_name, 
+                        "audio": a_link, 
+                        "text": t_link,
+                        "timestamp": datetime.now().isoformat()
                     }
                     with open(DATA_FILE, "a", encoding="utf-8") as f:
                         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                     
                     prog_bar.progress(100)
-                    st.success("✅ נשמר!")
+                    st.success("✅ נשמר בהצלחה!")
                     st.balloons()
                     time.sleep(2)
                     st.rerun()
                 except Exception as e:
-                    st.error(f"שגיאה: {e}")
+                    st.error(f"שגיאה בשמירה: {e}")
 
 def drive_upload_file(svc, file_obj, folder_id):
     """מעלה קובץ (כמו תמונה) מה-Uploader - משמש לטאב 1"""
@@ -635,6 +638,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
