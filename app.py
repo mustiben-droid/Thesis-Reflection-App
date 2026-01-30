@@ -89,7 +89,7 @@ def load_full_dataset(_svc):
     df_drive = pd.DataFrame()
     file_id = st.secrets.get("MASTER_FILE_ID")
     
-    # 1. משיכת נתונים מהדרייב
+    # 1. ניסיון משיכת נתונים מהדרייב
     if _svc and file_id:
         try:
             req = _svc.files().get_media(fileId=file_id)
@@ -101,36 +101,36 @@ def load_full_dataset(_svc):
             fh.seek(0)
             df_drive = pd.read_excel(fh)
             
-            # וידוי שם עמודה אחיד
             if 'student_name' not in df_drive.columns:
                 cols = [c for c in df_drive.columns if any(x in str(c).lower() for x in ["student", "name", "שם", "תלמיד"])]
                 if cols:
                     df_drive.rename(columns={cols[0]: "student_name"}, inplace=True)
-        except Exception:
-            pass
+        except Exception as e:
+            # במקום pass - עכשיו אנחנו מדווחים על הבעיה
+            st.error(f"❌ שגיאה בטעינת קובץ המאסטר מהדרייב: {e}")
 
-    # 2. משיכת נתונים מהמכשיר המקומי
+    # 2. ניסיון משיכת נתונים מהמכשיר המקומי
     df_local = pd.DataFrame()
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 df_local = pd.DataFrame([json.loads(l) for l in f if l.strip()])
-        except Exception:
-            pass
+        except Exception as e:
+            # מדווחים אם הקובץ המקומי פגום
+            st.error(f"❌ שגיאה בקריאת הנתונים המקומיים (reflections.jsonl): {e}")
 
-    # 3. איחוד וניקוי כפילויות (השיפור של Copilot)
+    # 3. איחוד וניקוי כפילויות
     df = pd.concat([df_drive, df_local], ignore_index=True)
     
     if not df.empty:
-        # המרה לפורמט תאריך אחיד כדי שהזיהוי יעבוד
+        # טיפול בזמנים לטובת זיהוי כפילויות מדויק
         if 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
         
-        # ניקוי כפילויות: אם יש אותו תלמיד באותו זמן בדיוק - תשמור רק את האחרון
-        # זה מונע כפילויות שנוצרות בזמן סנכרון או לחיצות כפולות
+        # ניקוי כפילויות (השיפור של Copilot)
         df = df.drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
         
-        # הוספת עמודות עזר לחיפוש
+        # סידור שמות
         if 'student_name' in df.columns:
             df['student_name'] = df['student_name'].astype(str).str.strip()
             df['name_clean'] = df['student_name'].apply(normalize_name)
@@ -566,6 +566,7 @@ with tab4: render_tab_interview(svc, full_df) # השורה שמוסיפה את �
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
