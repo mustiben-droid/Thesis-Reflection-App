@@ -1,5 +1,5 @@
 streamlit
-google-generativeai>=0.8.3
+google-genai>=0.3.0
 google-api-python-client
 google-auth
 google-auth-httplib2
@@ -9,5 +9,6 @@ openpyxl
 pillow
 streamlit-mic-recorder
 tenacity
+
 
 
