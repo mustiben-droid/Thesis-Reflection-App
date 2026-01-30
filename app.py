@@ -501,7 +501,7 @@ def render_tab_interview(svc, full_df):
                     st.balloons()
 
 def drive_upload_file(svc, file_obj, folder_id):
-    """מעלה קובץ (כמו תמונה) מה-Uploader של סטרימליט - משמש לטאב 1"""
+    """מעלה קובץ (כמו תמונה) מה-Uploader - משמש לטאב 1"""
     try:
         from googleapiclient.http import MediaIoBaseUpload
         import io
@@ -509,37 +509,46 @@ def drive_upload_file(svc, file_obj, folder_id):
         file_obj.seek(0) 
         media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype=file_obj.type, resumable=True)
         file_metadata = {'name': file_obj.name, 'parents': [folder_id]}
-        result = svc.files().create(body=file_metadata, media_body=media, fields='id, webViewLink', supportsAllDrives=True).execute()
+        
+        result = svc.files().create(
+            body=file_metadata, 
+            media_body=media, 
+            fields='id, webViewLink', 
+            supportsAllDrives=True
+        ).execute()
+        
         return result.get('webViewLink', '')
     except Exception as e:
-        st.error(f"❌ שגיאה בהעלאת תמונה: {e}")
+        # דיווח מפורט על התקלה
+        st.error(f"❌ העלאת התמונה '{file_obj.name}' נכשלה.")
+        st.exception(e) 
         return ""
-                    
+
 def drive_upload_bytes(svc, content, filename, folder_id, is_text=False):
+    """מעלה תוכן (אודיו או טקסט) מהזיכרון - משמש לטאב 4"""
     try:
         from googleapiclient.http import MediaIoBaseUpload
         import io
-        
-        # הגדרת סוג הקובץ
         mime = 'text/plain' if is_text else 'audio/wav'
-        
-        # אם זה טקסט (הניתוח), הופכים אותו ל-Bytes
         if is_text and isinstance(content, str):
             content = content.encode('utf-8')
-            
+        
         media = MediaIoBaseUpload(io.BytesIO(content), mimetype=mime, resumable=True)
         file_metadata = {'name': filename, 'parents': [folder_id] if folder_id else []}
         
         f = svc.files().create(
             body=file_metadata, 
             media_body=media, 
-            fields='id, webViewLink',
+            fields='id, webViewLink', 
             supportsAllDrives=True
         ).execute()
         
         return f.get('webViewLink')
     except Exception as e:
-        st.error(f"❌ תקלה בהעלאה לדרייב: {e}")
+        # התראה קריטית לראיונות
+        type_str = "הניתוח" if is_text else "הקלטת האודיו"
+        st.error(f"❌ תקלה קריטית: {type_str} לא נשמר בדרייב!")
+        st.exception(e)
         return "שגיאת העלאה"
         
 # ==========================================
@@ -566,6 +575,7 @@ with tab4: render_tab_interview(svc, full_df) # השורה שמוסיפה את �
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
