@@ -186,6 +186,19 @@ def call_gemini(prompt, audio_bytes=None):
 # --- 2. פונקציות ממשק משתמש (Tabs) ---
 # ==========================================
 
+def validate_entry(entry):
+    errors = []
+    if not entry.get('student_name') or entry.get('student_name') == "תלמיד אחר...":
+        errors.append("חובה לבחור שם תלמיד")
+    if entry.get('duration_min', 0) <= 0:
+        errors.append("זמן עבודה חייב להיות גדול מ-0")
+    
+    if errors:
+        for err in errors:
+            st.warning(f"⚠️ {err}")
+        return False
+    return True
+
 def render_tab_entry(svc, full_df):
     it = st.session_state.it
     
@@ -262,59 +275,68 @@ def render_tab_entry(svc, full_df):
                 else:
                     st.warning("תיבת התובנות ריקה.")
 
-        with c_btns[1]:
+       with c_btns[1]:
             if st.button("💾 שמור תצפית", type="primary", key=f"save_btn_{st.session_state.it}"):
                 final_ch = st.session_state.get("field_obs_input", "").strip()
                 final_ins = st.session_state.get("insight_input", "").strip()
                 
-                if final_ch or final_ins:
-                    with st.spinner("שומר לאקסל..."):
-                        img_links = []
-                        if up_files:
-                            for f in up_files:
-                                try:
+                # 1. יצירת ה-entry לבדיקה (חשוב שהשם והזמן יהיו כאן)
+                entry = {
+                    "type": "reflection",
+                    "date": date.today().isoformat(),
+                    "student_name": student_name,
+                    "difficulty": difficulty,
+                    "duration_min": duration,
+                    "drawings_count": drawings,
+                    "work_method": work_method,
+                    "score_proj": score_proj,
+                    "score_spatial": score_spatial,
+                    "score_conv": score_conv,
+                    "score_model": score_model,
+                    "score_views": score_views,
+                    "challenge": final_ch,
+                    "insight": final_ins,
+                    "tags": str(tags),
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                # 2. בדיקת תקינות - עוצר כאן אם שכחת שם תלמיד
+                if validate_entry(entry):
+                    # בדיקה שיש תוכן כלשהו לשמור
+                    if final_ch or final_ins or up_files:
+                        with st.spinner("שומר לאקסל ומעלה קבצים..."):
+                            img_links = []
+                            if up_files:
+                                for f in up_files:
                                     link = drive_upload_file(svc, f, GDRIVE_FOLDER_ID)
-                                    img_links.append(link)
-                                except: pass
-
-                        entry = {
-                            "type": "reflection",
-                            "date": date.today().isoformat(),
-                            "student_name": student_name,
-                            "difficulty": difficulty,
-                            "duration_min": duration,
-                            "drawings_count": drawings,
-                            "work_method": work_method,
-                            "score_proj": score_proj,
-                            "score_spatial": score_spatial,
-                            "score_conv": score_conv,
-                            "score_model": score_model,
-                            "score_views": score_views,
-                            "challenge": final_ch,
-                            "insight": final_ins,
-                            "tags": str(tags),
-                            "images": ", ".join(img_links),
-                            "timestamp": datetime.now().isoformat()
-                        }
+                                    if link:
+                                        img_links.append(link)
+                            
+                            # הוספת הקישורים ל-entry רק אחרי שהועלו
+                            entry["images"] = ", ".join(img_links)
+                            
+                            # 3. כתיבה לקובץ המקומי (JSONL)
+                            with open(DATA_FILE, "a", encoding="utf-8") as f:
+                                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                            
+                            # החלק האהוב עליך - הבלונים וההצלחה!
+                            st.balloons()
+                            st.success("✅ נשמר בהצלחה!")
+                            
+                            # 4. ניקוי ה-Session State כדי לעבור לתלמיד הבא
+                            st.session_state.pop("field_obs_input", None)
+                            st.session_state.pop("insight_input", None)
+                            st.session_state.last_feedback = ""
+                            for k in list(st.session_state.keys()):
+                                if any(k.startswith(p) for p in ["field_obs_input_", "insight_input_", "t_", "up_"]):
+                                    st.session_state.pop(k, None)
+                            
+                            st.session_state.it += 1
+                            time.sleep(1.8)
+                            st.rerun()
+                    else:
+                        st.warning("⚠️ לא ניתן לשמור תצפית ריקה. אנא מלא את ה-Challenge או את התובנות.")
                         
-                        with open(DATA_FILE, "a", encoding="utf-8") as f:
-                            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                        
-                        st.balloons()
-                        st.success("✅ נשמר בהצלחה!")
-                        
-                        # ניקוי זיכרון
-                        st.session_state.pop("field_obs_input", None)
-                        st.session_state.pop("insight_input", None)
-                        st.session_state.last_feedback = ""
-                        for k in list(st.session_state.keys()):
-                            if any(k.startswith(p) for p in ["field_obs_input_", "insight_input_", "t_", "up_"]):
-                                st.session_state.pop(k, None)
-                        
-                        st.session_state.it += 1
-                        import time
-                        time.sleep(1.8)
-                        st.rerun()
         # הצגת המשוב מתחת לכפתורים
         if st.session_state.last_feedback:
             st.markdown("---")
@@ -575,6 +597,7 @@ with tab4: render_tab_interview(svc, full_df) # השורה שמוסיפה את �
 
 st.sidebar.button("🔄 רענן נתונים", on_click=lambda: st.cache_data.clear())
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+
 
 
 
