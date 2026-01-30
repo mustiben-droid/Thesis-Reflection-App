@@ -149,34 +149,32 @@ def load_full_dataset(_svc):
 def call_gemini(prompt, audio_bytes=None):
     try:
         api_key = st.secrets.get("GOOGLE_API_KEY")
-        if not api_key: return "שגיאה: חסר API Key"
-        
-        # אתחול ה-Client החדש (v1)
-        client = genai.Client(api_key=api_key)
-        model_id = "gemini-1.5-flash"
-        
-        if audio_bytes:
-            # שלב 1: העלאת הקובץ
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp:
-                tmp.write(audio_bytes)
-                tmp_path = tmp.name
+        if not api_key:
+            return "שגיאה: חסר API Key ב-Secrets"
             
-            try:
-                # ב-SDK החדש ההעלאה והקריאה פשוטות יותר
-                with open(tmp_path, "rb") as f:
-                    audio_part = {"data": f.read(), "mime_type": "audio/wav"}
-                
-                response = client.models.generate_content(
-                    model=model_id,
-                    contents=[prompt, audio_part]
-                )
-                return response.text
-            finally:
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+
+        if audio_bytes:
+            # המבנה הזה הוא היחיד שעובר את הולידציה בספרייה היציבה
+            contents = [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": "audio/wav",
+                                "data": audio_bytes
+                            }
+                        }
+                    ]
+                }
+            ]
+            response = model.generate_content(contents)
+            return response.text
         else:
-            # טקסט בלבד
-            response = client.models.generate_content(model=model_id, contents=prompt)
+            response = model.generate_content(prompt)
             return response.text
             
     except Exception as e:
@@ -668,6 +666,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
