@@ -490,6 +490,7 @@ def render_tab_interview(svc, full_df):
     
     if audio_data:
         audio_bytes = audio_data['bytes']
+        st.session_state[f"audio_bytes_{it}"] = audio_bytes
         st.audio(audio_bytes, format="audio/wav")
         
         # כפתור הניתוח
@@ -656,3 +657,4 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
