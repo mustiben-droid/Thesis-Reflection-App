@@ -152,34 +152,46 @@ def call_gemini(prompt, audio_bytes=None):
         if not api_key:
             return "שגיאה: חסר API Key ב-Secrets"
 
-        # יצירת הלקוח בשיטה החדשה
-        client = genai.Client(api_key=api_key)
+        # הכתובת היציבה והמעודכנת ביותר ל-2026
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
         
-        # בחירת המודל (בתיעוד ראית gemini-3, אבל נשתמש ב-flash היציב)
-        model_id = "gemini-1.5-flash" 
+        headers = {'Content-Type': 'application/json'}
         
+        # בניית גוף ההודעה
         if audio_bytes:
-            # שליחה עם אודיו בפורמט החדש
-            response = client.models.generate_content(
-                model=model_id,
-                contents=[
-                    prompt,
-                    {"inline_data": {
-                        "mime_type": "audio/wav", 
-                        "data": base64.b64encode(audio_bytes).decode('utf-8')
-                    }}
-                ]
-            )
+            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": "audio/wav",
+                                "data": audio_base64
+                            }
+                        }
+                    ]
+                }]
+            }
         else:
-            response = client.models.generate_content(
-                model=model_id, 
-                contents=prompt
-            )
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}]
+            }
 
-        return response.text
+        # שליחת הבקשה
+        response = requests.post(url, headers=headers, json=payload)
+        res_json = response.json()
+
+        # בדיקת שגיאות מהשרת
+        if response.status_code != 200:
+            error_msg = res_json.get('error', {}).get('message', 'Unknown error')
+            return f"שגיאה מה-API: {error_msg}"
+
+        # שליפת התוצאה
+        return res_json['candidates'][0]['content']['parts'][0]['text']
 
     except Exception as e:
-        return f"שגיאה בחיבור החדש: {str(e)}"
+        return f"שגיאה בתהליך הניתוח: {str(e)}"
         
 # ==========================================
 # --- 2. פונקציות ממשק משתמש (Tabs) ---
@@ -676,6 +688,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
