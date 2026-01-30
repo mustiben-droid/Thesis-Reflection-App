@@ -485,12 +485,12 @@ def render_tab_interview(svc, full_df):
     
     student_name = st.selectbox("בחר סטודנט לראיון:", CLASS_ROSTER, key=f"int_sel_{it}")
     
-    # 1. הקלטת אודיו
+    # 1. הקלטת אודיו ושמירה ל-Session State
     audio_data = mic_recorder(start_prompt="התחל הקלטה ⏺️", stop_prompt="עצור ונתח ⏹️", key=f"mic_int_{it}")
     
     if audio_data:
         audio_bytes = audio_data['bytes']
-        st.session_state[f"audio_bytes_{it}"] = audio_bytes
+        st.session_state[f"audio_bytes_{it}"] = audio_bytes # שמירה בזיכרון
         st.audio(audio_bytes, format="audio/wav")
         
         # כפתור הניתוח
@@ -507,61 +507,45 @@ def render_tab_interview(svc, full_df):
                     status.update(label="✅ הושלם!", state="complete")
                     st.rerun()
 
-   # 2. הצגת התוצאה וכפתור השמירה
+    # 2. הצגת התוצאה וכפתור השמירה (מחוץ לבלוק האודיו, מיושר ל-it)
     analysis_key = f"last_analysis_{it}"
     if analysis_key in st.session_state and st.session_state[analysis_key]:
         st.markdown(f'<div class="feedback-box">{st.session_state[analysis_key]}</div>', unsafe_allow_html=True)
         
+        # כפתור השמירה - מיושר בדיוק מתחת ל-markdown
         if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
-            # שליפת האודיו מהזיכרון
             saved_audio = st.session_state.get(f"audio_bytes_{it}")
-            
             if not saved_audio:
-                st.error("ההקלטה אבדה בזיכרון. אנא הקלט שוב.")
+                st.error("ההקלטה אבדה. אנא הקלט שוב.")
             else:
                 prog_bar = st.progress(0)
                 msg = st.empty()
                 try:
                     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    analysis_text = st.session_state.get(f"last_analysis_{it}", "")
+                    msg.text("📤 מעלה נתונים לדרייב ול-JSONL...")
                     
-                    # שימוש ב-INTERVIEW_FOLDER_ID (השם הנכון שהגדרת למעלה)
-                    msg.text("🎤 מעלה הקלטת אודיו לדרייב...")
-                    audio_link = drive_upload_bytes(svc, saved_audio, f"Interview_{student_name}_{ts}.wav", INTERVIEW_FOLDER_ID)
+                    # העלאה לדרייב
+                    a_link = drive_upload_bytes(svc, saved_audio, f"Interview_{student_name}_{ts}.wav", RESEARCH_FOLDER_ID)
                     prog_bar.progress(40)
-                    
-                    msg.text("📄 מעלה ניתוח טקסטואלי לדרייב...")
-                    analysis_link = drive_upload_bytes(svc, analysis_text, f"Analysis_{student_name}_{ts}.txt", INTERVIEW_FOLDER_ID, is_text=True)
+                    t_link = drive_upload_bytes(svc, st.session_state[analysis_key], f"Analysis_{student_name}_{ts}.txt", RESEARCH_FOLDER_ID, is_text=True)
                     prog_bar.progress(70)
                     
-                    # רישום מקומי (JSONL) כדי שיסונכרן לאקסל הראשי בטאב 2
-                    interview_entry = {
-                        "type": "interview_analysis",
-                        "date": date.today().isoformat(),
-                        "student_name": student_name,
-                        "timestamp": datetime.now().isoformat(),
-                        "audio_link": audio_link,
-                        "analysis_link": analysis_link,
-                        "challenge": "ראיון עומק מוקלט",
-                        "insight": analysis_text[:1000] # שומרים טקסט חלקי לאקסל
+                    # רישום מקומי ב-JSONL
+                    entry = {
+                        "type": "interview_analysis", "date": date.today().isoformat(),
+                        "student_name": student_name, "timestamp": datetime.now().isoformat(),
+                        "audio_link": a_link, "text_link": t_link, "insight": st.session_state[analysis_key][:500]
                     }
-                    
                     with open(DATA_FILE, "a", encoding="utf-8") as f:
-                        f.write(json.dumps(interview_entry, ensure_ascii=False) + "\n")
+                        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                     
                     prog_bar.progress(100)
-                    st.success("✅ הכל נשמר וסונכרן לקובץ המקומי ולדרייב!")
+                    st.success("✅ נשמר וסונכרן בהצלחה!")
                     st.balloons()
-                    
-                    # ניקוי זיכרון
-                    st.session_state[f"last_analysis_{it}"] = ""
-                    st.session_state[f"audio_bytes_{it}"] = None
-                    
                     time.sleep(2)
                     st.rerun()
-                    
                 except Exception as e:
-                    st.error(f"שגיאה קריטית בשמירה: {e}")
+                    st.error(f"שגיאה בשמירה: {e}")
 
 def drive_upload_file(svc, file_obj, folder_id):
     """מעלה קובץ (כמו תמונה) מה-Uploader - משמש לטאב 1"""
@@ -657,6 +641,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
