@@ -148,8 +148,12 @@ def load_full_dataset(_svc):
 def call_gemini(prompt, audio_bytes=None):
     try:
         api_key = st.secrets.get("GOOGLE_API_KEY")
-        # המעבר לגרסה היציבה v1 ללא ה-beta
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+        if not api_key:
+            return "שגיאה: חסר API Key ב-Secrets"
+
+        # זה ה-URL היחיד שגוגל מקבלת ב-HTTP עבור פלאש כרגע
+        # שים לב: המודל חייב להתחיל ב-models/ בתוך ה-URL
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
         
         headers = {'Content-Type': 'application/json'}
         
@@ -174,16 +178,18 @@ def call_gemini(prompt, audio_bytes=None):
         response = requests.post(url, headers=headers, json=payload, timeout=60)
         res_json = response.json()
 
-        # השארתי את הדיבאג כדי שנוכל לראות הצלחה (200)
+        # אם יש שגיאה, נציג אותה בצורה ברורה לדיבאג
         if response.status_code != 200:
-            st.error(f"❌ שגיאת API (קוד {response.status_code})")
-            st.write("DEBUG FULL BODY:", res_json)
-            return f"שגיאה: {res_json.get('error', {}).get('message', 'Unknown error')}"
+            error_msg = res_json.get('error', {}).get('message', 'Unknown error')
+            # אם קיבלנו 404, זה אומר שגוגל עדיין לא מזהה את ה-endpoint
+            if response.status_code == 404:
+                return f"שגיאה 404: המודל לא נמצא בכתובת הזו. נסה לשנות ל-v1beta/models/gemini-1.5-flash"
+            return f"שגיאת API ({response.status_code}): {error_msg}"
 
         return res_json['candidates'][0]['content']['parts'][0]['text']
 
     except Exception as e:
-        return f"שגיאה טכנית: {str(e)}"
+        return f"שגיאה טכנית קריטית: {str(e)}"
         
 # ==========================================
 # --- 2. פונקציות ממשק משתמש (Tabs) ---
@@ -613,6 +619,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
