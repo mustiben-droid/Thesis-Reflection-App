@@ -478,6 +478,71 @@ def render_tab_analysis(svc):
                     st.success(f"הניתוח נשמר בדרייב.")
                 except Exception as e:
                     st.error(f"הניתוח הופק אך נכשלה השמירה: {e}")
+                    def render_tab_interview(svc, full_df):
+    it = st.session_state.it
+    st.subheader("🎙️ ראיון עומק וניתוח תמות למחקר")
+    
+    student_name = st.selectbox("בחר סטודנט לראיון:", CLASS_ROSTER, key=f"int_sel_{it}")
+    
+    # 1. הקלטת אודיו
+    audio_data = mic_recorder(start_prompt="התחל הקלטה ⏺️", stop_prompt="עצור ונתח ⏹️", key=f"mic_int_{it}")
+    
+    if audio_data:
+        audio_bytes = audio_data['bytes']
+        st.session_state[f"audio_bytes_{it}"] = audio_bytes
+        st.audio(audio_bytes, format="audio/wav")
+        
+        if st.button("✨ בצע תמלול וניתוח תמות עומק", key=f"btn_an_{it}"):
+            with st.status("🤖 ג'ימיני מנתח...", expanded=True) as status:
+                prompt = f"נתח ראיון של {student_name}. תמלל ונתח תפיסה מרחבית."
+                analysis_res = call_gemini(prompt, audio_bytes)
+                
+                if "שגיאה" in analysis_res:
+                    status.update(label="❌ נכשל", state="error")
+                    st.error(analysis_res)
+                else:
+                    st.session_state[f"last_analysis_{it}"] = analysis_res
+                    status.update(label="✅ הושלם!", state="complete")
+                    st.rerun()
+
+    # 2. הצגת תוצאות ושמירה
+    analysis_key = f"last_analysis_{it}"
+    if analysis_key in st.session_state and st.session_state[analysis_key]:
+        st.markdown(f'<div class="feedback-box">{st.session_state[analysis_key]}</div>', unsafe_allow_html=True)
+        
+        # השורה הבעייתית (514) נמצאת כאן, עכשיו היא מיושרת מושלם
+        if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
+            saved_audio = st.session_state.get(f"audio_bytes_{it}")
+            if not saved_audio:
+                st.error("ההקלטה לא נמצאה בזיכרון.")
+            else:
+                prog_bar = st.progress(0)
+                try:
+                    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    # העלאה לדרייב
+                    a_link = drive_upload_bytes(svc, saved_audio, f"Int_{student_name}_{ts}.wav", RESEARCH_FOLDER_ID)
+                    prog_bar.progress(50)
+                    t_link = drive_upload_bytes(svc, st.session_state[analysis_key], f"An_{student_name}_{ts}.txt", RESEARCH_FOLDER_ID, is_text=True)
+                    
+                    # רישום ב-JSONL
+                    entry = {
+                        "type": "interview", 
+                        "date": date.today().isoformat(),
+                        "student": student_name, 
+                        "audio": a_link, 
+                        "text": t_link,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    with open(DATA_FILE, "a", encoding="utf-8") as f:
+                        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                    
+                    prog_bar.progress(100)
+                    st.success("✅ נשמר בהצלחה!")
+                    st.balloons()
+                    time.sleep(2)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"שגיאה בשמירה: {e}")
                     
 def render_tab_interview(svc, full_df):
     it = st.session_state.it
@@ -493,10 +558,9 @@ def render_tab_interview(svc, full_df):
         st.session_state[f"audio_bytes_{it}"] = audio_bytes
         st.audio(audio_bytes, format="audio/wav")
         
-        # כפתור הניתוח
         if st.button("✨ בצע תמלול וניתוח תמות עומק", key=f"btn_an_{it}"):
             with st.status("🤖 ג'ימיני מנתח...", expanded=True) as status:
-                prompt = f"נתח ראיון של הסטודנט {student_name}. תמלל ונתח תפיסה מרחבית באופן אקדמי."
+                prompt = f"נתח ראיון של {student_name}. תמלל ונתח תפיסה מרחבית."
                 analysis_res = call_gemini(prompt, audio_bytes)
                 
                 if "שגיאה" in analysis_res:
@@ -507,60 +571,44 @@ def render_tab_interview(svc, full_df):
                     status.update(label="✅ הושלם!", state="complete")
                     st.rerun()
 
-    # 2. הצגת התוצאה וכפתור השמירה
+    # 2. הצגת תוצאות ושמירה
     analysis_key = f"last_analysis_{it}"
     if analysis_key in st.session_state and st.session_state[analysis_key]:
         st.markdown(f'<div class="feedback-box">{st.session_state[analysis_key]}</div>', unsafe_allow_html=True)
-   
+        
+        # השורה הבעייתית (514) נמצאת כאן, עכשיו היא מיושרת מושלם
         if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
             saved_audio = st.session_state.get(f"audio_bytes_{it}")
-            
             if not saved_audio:
-                st.error("ההקלטה אבדה בזיכרון. אנא הקלט שוב.")
+                st.error("ההקלטה לא נמצאה בזיכרון.")
             else:
                 prog_bar = st.progress(0)
-                msg = st.empty()
                 try:
                     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    analysis_text = st.session_state.get(analysis_key, "")
+                    # העלאה לדרייב
+                    a_link = drive_upload_bytes(svc, saved_audio, f"Int_{student_name}_{ts}.wav", RESEARCH_FOLDER_ID)
+                    prog_bar.progress(50)
+                    t_link = drive_upload_bytes(svc, st.session_state[analysis_key], f"An_{student_name}_{ts}.txt", RESEARCH_FOLDER_ID, is_text=True)
                     
-                    # העלאה לתיקיית ראיונות בלבד (INTERVIEW_FOLDER_ID)
-                    msg.text("🎤 מעלה הקלטת אודיו...")
-                    audio_link = drive_upload_bytes(svc, saved_audio, f"Interview_{student_name}_{ts}.wav", INTERVIEW_FOLDER_ID)
-                    prog_bar.progress(40)
-                    
-                    msg.text("📄 מעלה ניתוח טקסטואלי...")
-                    analysis_link = drive_upload_bytes(svc, analysis_text, f"Analysis_{student_name}_{ts}.txt", INTERVIEW_FOLDER_ID, is_text=True)
-                    prog_bar.progress(70)
-                    
-                    # רישום ל-JSONL המקומי
-                    interview_entry = {
-                        "type": "interview_analysis",
+                    # רישום ב-JSONL
+                    entry = {
+                        "type": "interview", 
                         "date": date.today().isoformat(),
-                        "student_name": student_name,
-                        "timestamp": datetime.now().isoformat(),
-                        "audio_link": audio_link,
-                        "analysis_link": analysis_link,
-                        "challenge": "ראיון עומק מוקלט",
-                        "insight": analysis_text[:1000] 
+                        "student": student_name, 
+                        "audio": a_link, 
+                        "text": t_link,
+                        "timestamp": datetime.now().isoformat()
                     }
-                    
                     with open(DATA_FILE, "a", encoding="utf-8") as f:
-                        f.write(json.dumps(interview_entry, ensure_ascii=False) + "\n")
+                        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                     
                     prog_bar.progress(100)
-                    st.success("✅ נשמר בהצלחה בתיקיית הראיונות!")
+                    st.success("✅ נשמר בהצלחה!")
                     st.balloons()
-                    
-                    # ניקוי זיכרון
-                    st.session_state[analysis_key] = ""
-                    st.session_state[f"audio_bytes_{it}"] = None
-                    
                     time.sleep(2)
                     st.rerun()
-                    
                 except Exception as e:
-                    st.error(f"שגיאה קריטית בשמירה: {e}")
+                    st.error(f"שגיאה בשמירה: {e}")   
 
 def drive_upload_file(svc, file_obj, folder_id):
     """מעלה קובץ (כמו תמונה) מה-Uploader - משמש לטאב 1"""
