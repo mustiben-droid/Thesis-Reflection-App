@@ -493,7 +493,7 @@ def render_tab_interview(svc, full_df):
 
         st.audio(audio_bytes, format="audio/wav")
         
-       if st.button("✨ בצע תמלול וניתוח תמות עומק", key=f"btn_an_{it}"):
+   if st.button("✨ בצע תמלול וניתוח תמות עומק", key=f"btn_an_{it}"):
             with st.status("🤖 ג'ימיני מנתח את ההקלטה...", expanded=True) as status:
                 st.write("📤 מעלה אודיו לעיבוד...")
                 prompt = f"""
@@ -678,5 +678,6 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
