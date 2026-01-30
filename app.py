@@ -151,32 +151,50 @@ def call_gemini(prompt, audio_bytes=None):
         api_key = st.secrets.get("GOOGLE_API_KEY")
         if not api_key:
             return "שגיאה: חסר API Key ב-Secrets"
-            
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
 
+        # פנייה ישירה ל-API ללא שימוש ב-SDK הבעייתי
+        # שימוש בגרסת v1beta עם המודל הספציפי
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        
+        headers = {'Content-Type': 'application/json'}
+        
         if audio_bytes:
-            # המבנה הזה הוא היחיד שעובר את הולידציה בספרייה היציבה
-            contents = [
-                {
-                    "role": "user",
+            # המרה של האודיו ל-Base64 כפי שה-API דורש
+            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+            
+            payload = {
+                "contents": [{
                     "parts": [
                         {"text": prompt},
                         {
                             "inline_data": {
                                 "mime_type": "audio/wav",
-                                "data": audio_bytes
+                                "data": audio_base64
                             }
                         }
                     ]
-                }
-            ]
-            response = model.generate_content(contents)
-            return response.text
+                }]
+            }
         else:
-            response = model.generate_content(prompt)
-            return response.text
-            
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}]
+            }
+
+        # שליחת הבקשה
+        response = requests.post(url, headers=headers, json=payload)
+        res_json = response.json()
+
+        # בדיקת תקינות התשובה
+        if response.status_code != 200:
+            error_details = res_json.get('error', {}).get('message', 'Unknown error')
+            return f"שגיאה מה-API של גוגל: {error_details}"
+
+        # שליפת הטקסט מהמבנה של ה-JSON
+        if 'candidates' in res_json and len(res_json['candidates']) > 0:
+            return res_json['candidates'][0]['content']['parts'][0]['text']
+        else:
+            return "לא התקבלה תשובה מהמודל. בדוק את תוכן הקלט."
+
     except Exception as e:
         return f"שגיאה בתהליך הניתוח: {str(e)}"
         
@@ -666,6 +684,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
