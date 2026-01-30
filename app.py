@@ -151,9 +151,9 @@ def call_gemini(prompt, audio_bytes=None):
         if not api_key:
             return "שגיאה: חסר API Key ב-Secrets"
 
-        # זה ה-URL היחיד שגוגל מקבלת ב-HTTP עבור פלאש כרגע
-        # שים לב: המודל חייב להתחיל ב-models/ בתוך ה-URL
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
+        # ינואר 2026: שימוש ב-Alias המעודכן למודל Gemini 3 Flash
+        model_id = "gemini-flash-latest" 
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
         
         headers = {'Content-Type': 'application/json'}
         
@@ -163,10 +163,12 @@ def call_gemini(prompt, audio_bytes=None):
                 "contents": [{
                     "parts": [
                         {"text": prompt},
-                        {"inline_data": {
-                            "mime_type": "audio/wav",
-                            "data": audio_base64
-                        }}
+                        {
+                            "inlineData": {  # תיקון קריטי ל-2026: inlineData ב-CamelCase
+                                "mimeType": "audio/wav", # תיקון: mimeType
+                                "data": audio_base64
+                            }
+                        }
                     ]
                 }]
             }
@@ -175,15 +177,12 @@ def call_gemini(prompt, audio_bytes=None):
                 "contents": [{"parts": [{"text": prompt}]}]
             }
 
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        # שליחת הבקשה עם Timeout מורחב לאודיו
+        response = requests.post(url, headers=headers, json=payload, timeout=90)
         res_json = response.json()
 
-        # אם יש שגיאה, נציג אותה בצורה ברורה לדיבאג
         if response.status_code != 200:
             error_msg = res_json.get('error', {}).get('message', 'Unknown error')
-            # אם קיבלנו 404, זה אומר שגוגל עדיין לא מזהה את ה-endpoint
-            if response.status_code == 404:
-                return f"שגיאה 404: המודל לא נמצא בכתובת הזו. נסה לשנות ל-v1beta/models/gemini-1.5-flash"
             return f"שגיאת API ({response.status_code}): {error_msg}"
 
         return res_json['candidates'][0]['content']['parts'][0]['text']
@@ -619,6 +618,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
