@@ -509,7 +509,7 @@ def render_tab_interview(svc, full_df):
 
         st.audio(audio_bytes, format="audio/wav")
         
-        if st.button("✨ בצע תמלול וניתוח תמות עומק", key=f"btn_an_{it}"):
+       if st.button("✨ בצע תמלול וניתוח תמות עומק", key=f"btn_an_{it}"):
             with st.status("🤖 ג'ימיני מנתח את ההקלטה...", expanded=True) as status:
                 st.write("📤 מעלה אודיו לעיבוד...")
                 prompt = f"""
@@ -521,22 +521,25 @@ def render_tab_interview(svc, full_df):
                 החזר הכל בעברית עם כותרות ברורות.
                 """
                 
-                # הקריאה לפונקציה החדשה שעוקפת את ה-SDK
                 analysis_res = call_gemini(prompt, audio_bytes)
                 
-                # בדיקה אם התוצאה היא שגיאה טכנית
                 if "שגיאה" in analysis_res or "Error" in analysis_res:
                     status.update(label="❌ הניתוח נכשל", state="error", expanded=True)
                     st.error(analysis_res)
                 else:
+                    # שמירה ל-Session State
                     st.session_state[f"last_analysis_{it}"] = analysis_res
                     status.update(label="✅ הניתוח הושלם!", state="complete", expanded=False)
-            
-            # הצגת התוצאה רק אם היא תקינה
-            if f"last_analysis_{it}" in st.session_state:
-                st.markdown(f'<div class="feedback-box">{st.session_state[f"last_analysis_{it}"]}</div>', unsafe_allow_html=True)
+                    # חשוב: רענון כדי שהכפתור הבא יופיע בוודאות
+                    st.rerun()
 
-        if f"last_analysis_{it}" in st.session_state:
+        # 2. הצגת התוצאה וכפתור השמירה (מחוץ לבלוק של כפתור הניתוח)
+        analysis_key = f"last_analysis_{it}"
+        if analysis_key in st.session_state and st.session_state[analysis_key]:
+            # תיבת הטקסט עם הניתוח
+            st.markdown(f'<div class="feedback-box">{st.session_state[analysis_key]}</div>', unsafe_allow_html=True)
+            
+            # כפתור השמירה הסופי
             if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
                 prog_bar = st.progress(0)
                 msg = st.empty()
@@ -686,31 +689,8 @@ if st.sidebar.button("🔄 רענן נתונים"):
     st.cache_data.clear()
     st.rerun()
 
-st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
-st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+st.sidebar.markdown("---")
+        st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
+        st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# וודא שאין כלום מתחת לשורה הזו!
