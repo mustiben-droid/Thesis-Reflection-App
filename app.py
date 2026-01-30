@@ -145,49 +145,45 @@ def load_full_dataset(_svc):
 def call_gemini(prompt, audio_bytes=None):
     try:
         api_key = st.secrets.get("GOOGLE_API_KEY")
-        if not api_key: 
-            return "שגיאה: חסר API Key ב-Secrets"
-            
+        if not api_key: return "שגיאה: חסר API Key"
+        
+        # אתחול ה-SDK
         genai.configure(api_key=api_key)
         
-        # שימוש בשם המודל היציב ביותר ל-SDK
-        model = genai.GenerativeModel(model_name="models/gemini-1.5-flash-latest")
+        # שימוש במודל היציב בגרסת v1
+        # שים לב: בלי models/ ובלי v1beta
+        model = genai.GenerativeModel("gemini-1.5-flash-latest")
         
         if audio_bytes:
-            # יצירת קובץ זמני לאודיו
             with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp:
                 tmp.write(audio_bytes)
                 tmp_path = tmp.name
             
             try:
-                # העלאה דרך ה-SDK המובנה
+                # העלאה
                 uploaded_file = genai.upload_file(path=tmp_path, mime_type="audio/wav")
                 
-                # המתנה לעיבוד בשרתי גוגל
+                # המתנה
                 while uploaded_file.state.name == "PROCESSING":
-                    time.sleep(2)
+                    time.sleep(1)
                     uploaded_file = genai.get_file(uploaded_file.name)
                 
-                if uploaded_file.state.name == "FAILED":
-                    return "שגיאה: עיבוד הקובץ בשרתי גוגל נכשל."
-
-                # יצירת התוכן
+                # קריאה למודל בשיטה החדשה
                 response = model.generate_content([prompt, uploaded_file])
                 
-                # מחיקת הקובץ מהשרת (חשוב לפרטיות וניקיון)
+                # ניקוי
                 genai.delete_file(uploaded_file.name)
-                
                 return response.text
             finally:
                 if os.path.exists(tmp_path):
                     os.remove(tmp_path)
         else:
-            # מצב טקסט בלבד
             response = model.generate_content(prompt)
             return response.text
             
     except Exception as e:
         return f"שגיאה בתהליך הניתוח: {str(e)}"
+        
 # ==========================================
 # --- 2. פונקציות ממשק משתמש (Tabs) ---
 # ==========================================
@@ -674,6 +670,7 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
+
 
 
 
