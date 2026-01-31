@@ -203,6 +203,12 @@ def validate_entry(entry):
             st.warning(f"⚠️ {err}")
         return False
     return True
+def get_student_summary(student_name, full_df):
+    """מחלצת מהאקסל את היסטוריית הביצועים של הסטודנט עבור ה-AI"""
+    if full_df.empty:
+        return "אין נתונים קודמים במערכת."
+    # ... שאר הקוד של הפונקציה שכתבת ...
+    return summary
 
 def render_tab_entry(svc, full_df):
     it = st.session_state.it
@@ -479,15 +485,20 @@ def render_tab_analysis(svc):
                 except Exception as e:
                     st.error(f"הניתוח הופק אך נכשלה השמירה: {e}")
 
-# --- שים לב: השורה הבאה חייבת להתחיל צמוד לשמאל (ללא רווחים בכלל!) ---
-
 def render_tab_interview(svc, full_df):
     it = st.session_state.it
-    st.subheader("🎙️ ראיון עומק וניתוח תמות הנדסי משודרג")
+    st.subheader("🎙️ ראיון עומק וניתוח תמות משולב")
     
-    student_name = st.selectbox("בחר סטודנט לראיון:", CLASS_ROSTER, key=f"int_sel_{it}")
+    # 1. בחירת סטודנט והצגת ההקשר מהאקסל
+    student_name = st.selectbox("👤 בחר סטודנט לראיון:", CLASS_ROSTER, key=f"int_sel_{it}")
     
-    # 1. הקלטת אודיו
+    # שימוש בפונקציה שהכנסת הרגע!
+    student_summary = get_student_summary(student_name, full_df)
+    
+    # הצגת הסיכום בתיבה כחולה לנוחותך
+    st.info(f"🧠 **רקע מחקרי מהאקסל:**\n{student_summary}")
+    
+    # 2. הקלטת אודיו
     audio_data = mic_recorder(start_prompt="התחל הקלטה ⏺️", stop_prompt="עצור ונתח ⏹️", key=f"mic_int_{it}")
     
     if audio_data:
@@ -496,86 +507,53 @@ def render_tab_interview(svc, full_df):
         st.audio(audio_bytes, format="audio/wav")
         
         if st.button("✨ בצע תמלול וניתוח תמות עומק", key=f"btn_an_{it}"):
-            with st.status("🤖 ג'ימיני מנתח ברמה אקדמית...", expanded=True) as status:
+            with st.status("🤖 ג'ימיני מנתח על סמך נתוני העבר...", expanded=True) as status:
                 
-                # ה-Prompt המקצועי המשודרג שלך
+                # הפרומפט שמשתמש בסיכום שהכנו
                 prompt = f"""
-                אתה מנתח מחקר אקדמי בכיר המתמחה בחינוך טכנולוגי ובפסיכולוגיה של תפיסה מרחבית (Spatial Perception).
-                עליך לנתח ראיון שבו הסטודנט {student_name} מתאר תהליך של שרטוט הנדסי (מעבר מאיזומטריה להיטלים או להיפך).
+                אתה מנתח מחקר אקדמי בכיר המתמחה בחינוך טכנולוגי ובפסיכולוגיה של תפיסה מרחבית.
+                עליך לנתח ראיון שבו הסטודנט {student_name} מתאר תהליך של שרטוט הנדסי.
 
-                משימות הניתוח (בצע בסדר זה):
+                📊 **רקע על הסטודנט מתוך תצפיות קודמות (אקסל):**
+                {student_summary}
 
-                1. תמלול מלא: 
-                תמלל את הראיון במדויק. אם הסטודנט משתמש במילים כמו "כזה", "פה", "הקו הזה" - שמור עליהן, הן מעידות על הצבעה על דגם פיזי.
+                **משימות הניתוח:**
+                1. תמלול מלא: שמור על מילים כמו "כזה", "פה" (הצבעה על דגם).
+                2. איתור מושגים: זהה והדגש ב-**Bold** את המונחים: "היטל פנים/על/צד", "קווים נסתרים", "קווי עזר".
+                3. השוואה להיסטוריה: האם הראיון מעיד על שיפור או פתרון קשיים שתועדו ברקע המצורף לעיל?
+                4. סיכום מחקרי: רמת שליטה נוכחית והמלצה פדגוגית.
 
-                2. איתור ומיפוי מושגים הנדסיים:
-                זהה והדגש ב-**Bold** את המונחים הבאים: "היטל פנים", "היטל על", "היטל צד", "קווי עזר", "קווים נסתרים", "פרופורציה", "מידות", "ציר", "קנה מידה".
-
-                3. ניתוח רמת התפיסה המרחבית:
-                - זיהוי מעברים: האם הסטודנט מצליח להסביר איך הוא הופך גוף תלת-ממדי לדו-ממדי?
-                - תפיסת עומק: האם יש הבנה של משמעות הקווים הנסתרים (Hidden Lines)?
-                - נקודות כשל: זהה מקרים בהם הסטודנט מתקשה להגדיר מבט מסוים או מתבלבל בין היטלים (למשל: מצייר היטל צד במקום היטל על).
-
-                4. סיכום מחקרי קצר:
-                כתוב משפט אחד על רמת השליטה הכללית של {student_name} בחומר הנלמד.
-
-                ⚠️ איסור קטגורי: 
-                - אל תנתח ניווט במרחב, כיווני נסיעה, מפות, תצורות שטח או גיאוגרפיה. 
-                - אם הסטודנט אומר "מבט מלמעלה", הכוונה היא ל'היטל על' הנדסי, ולא למבט מרחפן או מטוס.
-                - אם התוכן אינו קשור לשרטוט הנדסי - החזר הודעה: "התוכן אינו רלוונטי לניתוח הנדסי".
+                ⚠️ איסור קטגורי: אל תנתח ניווט במרחב או מפות. "מבט מלמעלה" = היטל על הנדסי.
                 """
                 
                 analysis_res = call_gemini(prompt, audio_bytes)
                 
                 if "שגיאה" in analysis_res:
-                    status.update(label="❌ נכשל", state="error")
                     st.error(analysis_res)
                 else:
                     st.session_state[f"last_analysis_{it}"] = analysis_res
-                    status.update(label="✅ הניתוח הושלם", state="complete")
                     st.rerun()
 
-    # 2. הצגת תוצאות ושמירה
+    # 3. הצגת התוצאה וכפתור שמירה לדרייב
     analysis_key = f"last_analysis_{it}"
-    if analysis_key in st.session_state and st.session_state[analysis_key]:
+    if st.session_state.get(analysis_key):
         st.markdown(f'<div class="feedback-box">{st.session_state[analysis_key]}</div>', unsafe_allow_html=True)
         
-        if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
-            saved_audio = st.session_state.get(f"audio_bytes_{it}")
-            if not saved_audio:
-                st.error("ההקלטה אבדה. אנא הקלט שוב.")
-            else:
-                prog_bar = st.progress(0)
-                try:
-                    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    # העלאה לדרייב לתיקיית המחקר (INTERVIEW_FOLDER_ID)
-                    a_link = drive_upload_bytes(svc, saved_audio, f"Int_{student_name}_{ts}.wav", INTERVIEW_FOLDER_ID)
-                    prog_bar.progress(50)
-                    t_link = drive_upload_bytes(svc, st.session_state[analysis_key], f"An_{student_name}_{ts}.txt", INTERVIEW_FOLDER_ID, is_text=True)
-                    
-                    # רישום ב-JSONL
-                    entry = {
-                        "type": "interview_analysis", 
-                        "date": date.today().isoformat(),
-                        "student_name": student_name, 
-                        "audio_link": a_link, 
-                        "analysis_link": t_link,
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    with open(DATA_FILE, "a", encoding="utf-8") as f:
-                        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                    
-                    prog_bar.progress(100)
-                    st.success(f"✅ הראיון של {student_name} נשמר וסונכרן!")
-                    st.balloons()
-                    
-                    # ניקוי הזיכרון לאחר שמירה מוצלחת
-                    st.session_state[analysis_key] = ""
-                    st.session_state[f"audio_bytes_{it}"] = None
-                    time.sleep(2)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"שגיאה בשמירה: {e}")
+        if st.button("💾 שמור קבצים לדרייב", type="primary", key=f"save_int_{it}"):
+            try:
+                ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+                # שמירת WAV
+                a_link = drive_upload_bytes(svc, st.session_state[f"audio_bytes_{it}"], f"Int_{student_name}_{ts}.wav", INTERVIEW_FOLDER_ID)
+                # שמירת TXT (הניתוח המלא)
+                t_link = drive_upload_bytes(svc, st.session_state[analysis_key], f"An_{student_name}_{ts}.txt", INTERVIEW_FOLDER_ID, is_text=True)
+                
+                st.success("✅ הקבצים נשמרו בהצלחה!")
+                st.balloons()
+                st.session_state[analysis_key] = ""
+                time.sleep(2)
+                st.rerun()
+            except Exception as e:
+                st.error(f"שגיאה בשמירה: {e}")
 
 # --- סיום טאב ראיונות (כאן מתחילה הפונקציה הבאה שלך, וודא שהיא צמודה לשמאל) ---
 def drive_upload_file(svc, file_obj, folder_id):
@@ -672,6 +650,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
