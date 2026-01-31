@@ -203,11 +203,57 @@ def validate_entry(entry):
             st.warning(f"⚠️ {err}")
         return False
     return True
+    
 def get_student_summary(student_name, full_df):
-    """מחלצת מהאקסל את היסטוריית הביצועים של הסטודנט עבור ה-AI"""
+    """🆕 מחלצת מהאקסל את היסטוריית הביצועים של הסטודנט עבור ה-AI"""
     if full_df.empty:
         return "אין נתונים קודמים במערכת."
-    # ... שאר הקוד של הפונקציה שכתבת ...
+    
+    # נרמול השם לחיפוש מדויק באקסל
+    target = normalize_name(student_name)
+    student_df = full_df[full_df['name_clean'] == target]
+    
+    if student_df.empty:
+        return f"⚠️ {student_name} - תלמיד חדש ללא היסטוריה מתועדת."
+    
+    # חישוב ממוצעים למדדי השרטוט
+    metrics = ['score_proj', 'score_views', 'score_model', 'score_spatial', 'score_conv']
+    available_metrics = [m for m in metrics if m in student_df.columns]
+    
+    summary = f"📊 **פרופיל {student_name}** ({len(student_df)} תצפיות):\n\n"
+    
+    if available_metrics:
+        summary += "**ממוצעי ביצועים (1-5):**\n"
+        for metric in available_metrics:
+            avg = student_df[metric].mean()
+            metric_names = {
+                'score_proj': 'המרת ייצוגים',
+                'score_views': 'מעבר בין היטלים',
+                'score_model': 'שימוש במודל',
+                'score_spatial': 'תפיסה מרחבית',
+                'score_conv': 'פרופורציות'
+            }
+            summary += f"- {metric_names.get(metric, metric)}: {avg:.1f}\n"
+    
+    # ניתוח תגיות נפוצות (אתגרים עיקריים)
+    if 'tags' in student_df.columns:
+        from collections import Counter
+        all_tags = []
+        for tags_str in student_df['tags'].dropna():
+            if isinstance(tags_str, str):
+                # ניקוי פורמט הרשימה מהטקסט
+                clean_tags = tags_str.strip('[]').replace("'", "").split(',')
+                all_tags.extend([t.strip() for t in clean_tags if t.strip()])
+        if all_tags:
+            top_tags = Counter(all_tags).most_common(3)
+            summary += f"\n**אתגרים עיקריים:** {', '.join([t[0] for t in top_tags if t[0]])}\n"
+    
+    # תצפית אחרונה מהשטח
+    if 'timestamp' in student_df.columns:
+        last_obs = student_df.sort_values('timestamp', ascending=False).iloc[0]
+        if 'challenge' in last_obs and pd.notna(last_obs['challenge']):
+            summary += f"\n**תצפית אחרונה:** {last_obs['challenge'][:120]}...\n"
+    
     return summary
 
 def render_tab_entry(svc, full_df):
@@ -650,6 +696,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
