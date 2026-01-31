@@ -483,75 +483,94 @@ def render_tab_analysis(svc):
 
 def render_tab_interview(svc, full_df):
     it = st.session_state.it
-    st.subheader("🎙️ ראיון עומק וניתוח תמות למחקר")
+    st.subheader("🎙️ ראיון עומק - שמירה אוטומטית וניתוח חסין")
     
     student_name = st.selectbox("בחר סטודנט לראיון:", CLASS_ROSTER, key=f"int_sel_{it}")
     
     # 1. הקלטת אודיו
-    audio_data = mic_recorder(start_prompt="התחל הקלטה ⏺️", stop_prompt="עצור ונתח ⏹️", key=f"mic_int_{it}")
+    audio_data = mic_recorder(start_prompt="התחל הקלטה ⏺️", stop_prompt="עצור וגבה אוטומטית ⏹️", key=f"mic_int_{it}")
     
     if audio_data:
         audio_bytes = audio_data['bytes']
-        st.session_state[f"audio_bytes_{it}"] = audio_bytes
+        
+        # בדיקה שהקובץ לא ריק
+        if len(audio_bytes) < 1000:
+            st.error("❌ ההקלטה קצרה מדי. אנא הקלט שוב.")
+            return
+        
+        # --- צעד א': גיבוי אוטומטי מיידי לדרייב (מניעת אובדן נתונים) ---
+        if f"audio_link_{it}" not in st.session_state:
+            with st.status("☁️ מגבה הקלטה לדרייב המחקר...", expanded=False) as status:
+                try:
+                    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    filename = f"Audio_{student_name}_{ts}.wav"
+                    # העלאה מיידית לתיקיית הראיונות
+                    link = drive_upload_bytes(svc, audio_bytes, filename, INTERVIEW_FOLDER_ID)
+                    
+                    if link and "שגיאה" not in link:
+                        st.session_state[f"audio_link_{it}"] = link
+                        st.session_state[f"ts_{it}"] = ts
+                        status.update(label="✅ ההקלטה גובתה בדרייב!", state="complete")
+                    else:
+                        st.error("⚠️ הגיבוי נכשל, אך האודיו שמור זמנית בזיכרון.")
+                except Exception as e:
+                    st.error(f"שגיאת גיבוי: {e}")
+
         st.audio(audio_bytes, format="audio/wav")
         
-        if st.button("✨ בצע תמלול וניתוח תמות עומק", key=f"btn_an_{it}"):
-            with st.status("🤖 ג'ימיני מנתח...", expanded=True) as status:
-                prompt = f"נתח ראיון של הסטודנט {student_name}. תמלל ונתח תפיסה מרחבית."
+        # --- צעד ב': ניתוח AI ---
+        if st.button("✨ בצע תמלול וניתוח תמות", key=f"btn_an_{it}"):
+            with st.status("🤖 ג'ימיני מנתח את הראיון...", expanded=True) as status:
+                prompt = f"נתח ראיון של הסטודנט {student_name}. תמלל ונתח תפיסה מרחבית באופן אקדמי."
                 analysis_res = call_gemini(prompt, audio_bytes)
                 
                 if "שגיאה" in analysis_res:
-                    status.update(label="❌ נכשל", state="error")
+                    status.update(label="❌ ניתוח נכשל", state="error")
                     st.error(analysis_res)
                 else:
                     st.session_state[f"last_analysis_{it}"] = analysis_res
-                    status.update(label="✅ הושלם!", state="complete")
+                    status.update(label="✅ הניתוח מוכן!", state="complete")
                     st.rerun()
 
-    # 2. הצגת התוצאה וכפתור השמירה
+    # --- צעד ג': הצגת תוצאות ושמירה סופית לאקסל ---
     analysis_key = f"last_analysis_{it}"
-    if analysis_key in st.session_state and st.session_state[analysis_key]:
+    if st.session_state.get(analysis_key):
         st.markdown(f'<div class="feedback-box">{st.session_state[analysis_key]}</div>', unsafe_allow_html=True)
         
-        if st.button("💾 שמור וסנכרן לתיקיית המחקר ולאקסל", type="primary", key=f"save_int_{it}"):
-            saved_audio = st.session_state.get(f"audio_bytes_{it}")
+        if st.button("💾 סיום ושמירת ניתוח למאסטר", type="primary", key=f"save_int_{it}"):
+            # שליפת הקישור לאודיו שכבר הועלה קודם
+            audio_link = st.session_state.get(f"audio_link_{it}", "אין קישור")
+            ts = st.session_state.get(f"ts_{it}", datetime.now().strftime('%H%M%S'))
             
-            if not saved_audio:
-                st.error("ההקלטה אבדה בזיכרון. אנא הקלט שוב.")
-            else:
-                prog_bar = st.progress(0)
-                try:
-                    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    analysis_text = st.session_state.get(analysis_key, "")
-                    
-                    # העלאה לדרייב לתיקיית המחקר
-                    a_link = drive_upload_bytes(svc, saved_audio, f"Interview_{student_name}_{ts}.wav", INTERVIEW_FOLDER_ID)
-                    prog_bar.progress(40)
-                    t_link = drive_upload_bytes(svc, analysis_text, f"Analysis_{student_name}_{ts}.txt", INTERVIEW_FOLDER_ID, is_text=True)
-                    prog_bar.progress(70)
-                    
-                    # רישום ב-JSONL
-                    entry = {
-                        "type": "interview_analysis",
-                        "date": date.today().isoformat(),
-                        "student_name": student_name,
-                        "audio_link": a_link,
-                        "analysis_link": t_link,
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    with open(DATA_FILE, "a", encoding="utf-8") as f:
-                        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                    
-                    prog_bar.progress(100)
-                    st.success("✅ הראיון נשמר בהצלחה בתיקיית המחקר!")
-                    st.balloons()
-                    
-                    st.session_state[analysis_key] = ""
-                    st.session_state[f"audio_bytes_{it}"] = None
-                    time.sleep(2)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"שגיאה בשמירה: {e}")
+            try:
+                # העלאת קובץ הניתוח (טקסט)
+                t_link = drive_upload_bytes(svc, st.session_state[analysis_key], f"Analysis_{student_name}_{ts}.txt", INTERVIEW_FOLDER_ID, is_text=True)
+                
+                # רישום ב-JSONL
+                entry = {
+                    "type": "interview_analysis",
+                    "date": date.today().isoformat(),
+                    "student_name": student_name,
+                    "audio_link": audio_link,
+                    "analysis_link": t_link,
+                    "insight": st.session_state[analysis_key][:1000],
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                with open(DATA_FILE, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                
+                st.success("✅ הכל נשמר בהצלחה בתיקיית המחקר!")
+                st.balloons()
+                
+                # ניקוי הזיכרון
+                st.session_state.pop(analysis_key, None)
+                st.session_state.pop(f"audio_link_{it}", None)
+                
+                time.sleep(2)
+                st.rerun()
+            except Exception as e:
+                st.error(f"שגיאה בשמירה הסופית: {e}")
 
 # --- סיום טאב ראיונות (כאן מתחילה הפונקציה הבאה שלך, וודא שהיא צמודה לשמאל) ---
 def drive_upload_file(svc, file_obj, folder_id):
@@ -648,5 +667,6 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
