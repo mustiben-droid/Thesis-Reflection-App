@@ -321,24 +321,25 @@ def render_tab_entry(svc, full_df):
                 final_ins = st.session_state.get("insight_input", "").strip()
                 
                 # 1. יצירת ה-entry לבדיקה (חשוב שהשם והזמן יהיו כאן)
-                entry = {
-                    "type": "reflection",
-                    "date": date.today().isoformat(),
-                    "student_name": student_name,
-                    "difficulty": difficulty,
-                    "duration_min": duration,
-                    "drawings_count": drawings,
-                    "work_method": work_method,
-                    "score_proj": score_proj,
-                    "score_spatial": score_spatial,
-                    "score_conv": score_conv,
-                    "score_model": score_model,
-                    "score_views": score_views,
-                    "challenge": final_ch,
-                    "insight": final_ins,
-                    "tags": str(tags),
-                    "timestamp": datetime.now().isoformat()
-                }
+               entry = {
+                "type": "reflection",
+                "date": date.today().isoformat(),
+                "student_name": student_name,
+                "difficulty": difficulty,
+                "duration_min": duration,
+                "drawings_count": drawings,
+                "work_method": work_method,
+                "score_proj": score_proj,
+                "score_spatial": score_spatial,
+                "score_conv": score_conv,
+                "score_model": score_model,
+                "score_views": score_views,
+                "score_efficacy": score_efficacy, # המדד שחזר למערכת
+                "challenge": final_ch,
+                "insight": final_ins,
+                "tags": str(tags),
+                "timestamp": datetime.now().isoformat()
+            }
                 
                 # 2. בדיקת תקינות - עוצר כאן אם שכחת שם תלמיד
                 if validate_entry(entry):
@@ -463,6 +464,7 @@ def render_tab_analysis(svc):
             'score_model': 'שימוש במודל 3D',
             'score_spatial': 'תפיסה מרחבית',
             'score_conv': 'פרופורציות'
+            'score_efficacy': 'מסוגלות עצמית'
         }
         
         # בדיקה אילו מדדים באמת קיימים בנתונים (השיפור של Perplexity)
@@ -679,6 +681,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
