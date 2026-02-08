@@ -463,7 +463,7 @@ def render_tab_analysis(svc):
             'score_views': 'מעבר בין היטלים',
             'score_model': 'שימוש במודל 3D',
             'score_spatial': 'תפיסה מרחבית',
-            'score_conv': 'פרופורציות'
+            'score_conv': 'פרופורציות',  # וודא שיש כאן פסיק!
             'score_efficacy': 'מסוגלות עצמית'
         }
         
@@ -681,6 +681,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
