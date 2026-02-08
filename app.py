@@ -316,30 +316,30 @@ def render_tab_entry(svc, full_df):
                     st.warning("תיבת התובנות ריקה.")
 
     with c_btns[1]:
-            if st.button("💾 שמור תצפית", type="primary", key=f"save_btn_{st.session_state.it}"):
+            if st.button("💾 שמור תצפית", type="primary", key=f"save_btn_{it}"):
                 final_ch = st.session_state.get("field_obs_input", "").strip()
                 final_ins = st.session_state.get("insight_input", "").strip()
                 
-                # 1. יצירת ה-entry לבדיקה (חשוב שהשם והזמן יהיו כאן)
-               entry = {
-                "type": "reflection",
-                "date": date.today().isoformat(),
-                "student_name": student_name,
-                "difficulty": difficulty,
-                "duration_min": duration,
-                "drawings_count": drawings,
-                "work_method": work_method,
-                "score_proj": score_proj,
-                "score_spatial": score_spatial,
-                "score_conv": score_conv,
-                "score_model": score_model,
-                "score_views": score_views,
-                "score_efficacy": score_efficacy, # המדד שחזר למערכת
-                "challenge": final_ch,
-                "insight": final_ins,
-                "tags": str(tags),
-                "timestamp": datetime.now().isoformat()
-            }
+                # יצירת המילון עם הזחה אחידה
+                entry = {
+                    "type": "reflection",
+                    "date": date.today().isoformat(),
+                    "student_name": student_name,
+                    "difficulty": difficulty,
+                    "duration_min": duration,
+                    "drawings_count": drawings,
+                    "work_method": work_method,
+                    "score_proj": score_proj,
+                    "score_spatial": score_spatial,
+                    "score_conv": score_conv,
+                    "score_model": score_model,
+                    "score_views": score_views,
+                    "score_efficacy": score_efficacy,
+                    "challenge": final_ch,
+                    "insight": final_ins,
+                    "tags": str(tags),
+                    "timestamp": datetime.now().isoformat()
+                }
                 
                 # 2. בדיקת תקינות - עוצר כאן אם שכחת שם תלמיד
                 if validate_entry(entry):
@@ -681,6 +681,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
