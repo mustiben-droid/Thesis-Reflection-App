@@ -1,12 +1,19 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
+
+# ייבוא זהיר של ספריות כבדות
+try:
+    import plotly.express as px
+    import statsmodels.api as sm
+    from statsmodels.formula.api import ols
+    from scipy import stats
+except ImportError as e:
+    st.error(f"חסרה ספרייה סטטיסטית בשרת: {e}")
+
 import google.generativeai as genai
 import re
 import json
-import statsmodels.api as sm
-from statsmodels.formula.api import ols
 
 # --- כלים (Tools) שה-Agent יכול להפעיל ---
 
