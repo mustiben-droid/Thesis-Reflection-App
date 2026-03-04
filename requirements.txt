@@ -1,14 +1,16 @@
 streamlit
-google-genai
+pandas
+google-generativeai
 google-api-python-client
 google-auth
-google-auth-httplib2
 google-auth-oauthlib
-pandas
+google-auth-httplib2
 openpyxl
-pillow
+plotly
+statsmodels
+scipy
 streamlit-mic-recorder
-tenacity
+requests
 
 
 
