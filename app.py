@@ -11,6 +11,7 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from streamlit_mic_recorder import mic_recorder
+from ai_engine import render_ai_agent_tab
 
 # ==========================================
 # --- 0. הגדרות מערכת ועיצוב ---
@@ -658,17 +659,18 @@ if "last_feedback" not in st.session_state:
 if "chat_history" not in st.session_state: 
     st.session_state.chat_history = []
 
-# יצירת הטאבים בממשק
-tab1, tab2, tab3, tab4 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח", "🎙️ ראיון עומק"])
+# עדכון הגדרת הטאבים
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח", "🎙️ ראיון עומק", "🤖 סוכן חכם"])
 
-with tab1: 
-    render_tab_entry(svc, full_df)
-with tab2: 
-    render_tab_sync(svc, full_df)
-with tab3: 
-    render_tab_analysis(svc)
-with tab4: 
-    render_tab_interview(svc, full_df)
+# ... (כל הקוד של טאבים 1 עד 4 נשאר אותו דבר) ...
+
+# הוספת התוכן לטאב 5 בסוף
+with tab5:
+    if not full_df.empty:
+        # שליחת קובץ המאסטר לסוכן החכם
+        render_ai_agent_tab(full_df)
+    else:
+        st.warning("המערכת לא זיהתה נתונים זמינים. בצע סנכרון בטאב 2 כדי להתחיל.")
 
 # סיידבר - כפתורי בקרה
 st.sidebar.markdown("---")
@@ -681,6 +683,7 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
 
 
 
