@@ -12,6 +12,13 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from streamlit_mic_recorder import mic_recorder
 
+# --- חיבור למנוע הסטטיסטי (ai_engine.py) ---
+try:
+    from ai_engine import render_ai_agent_tab
+except ImportError:
+    def render_ai_agent_tab(df):
+        st.warning("⚠️ קובץ ai_engine.py לא נמצא. הטאב הזה מושבת.")
+
 # ==========================================
 # --- 0. הגדרות מערכת ועיצוב ---
 # ==========================================
@@ -649,7 +656,7 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 # יצירת הטאבים בממשק
-tab1, tab2, tab3, tab4 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח", "🎙️ ראיון עומק"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח", "🎙️ ראיון עומק", "🤖 סוכן סטטיסטי"])
 
 with tab1: 
     render_tab_entry(svc, full_df)
@@ -659,6 +666,8 @@ with tab3:
     render_tab_analysis(svc)
 with tab4: 
     render_tab_interview(svc, full_df)
+with tab5:
+    render_ai_agent_tab(full_df)
 
 # סיידבר - כפתורי בקרה
 st.sidebar.markdown("---")
@@ -671,3 +680,4 @@ st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
 
 # וודא שאין כלום מתחת לשורה הזו!
+
