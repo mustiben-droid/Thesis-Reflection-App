@@ -1,14 +1,7 @@
 streamlit
 pandas
-google-generativeai
 google-api-python-client
 google-auth
-plotly==5.18.0
-statsmodels==0.14.1
-scipy==1.11.4
 streamlit-mic-recorder
 openpyxl
 requests
-
-
-
