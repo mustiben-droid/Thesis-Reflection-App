@@ -8,3 +8,5 @@ openpyxl
 requests
 statsmodels>=0.14.0
 scipy
+google-generativeai
+
