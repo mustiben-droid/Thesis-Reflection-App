@@ -173,15 +173,63 @@ def render_tab_entry(svc, full_df):
                 st.session_state.it += 1
                 st.rerun()
 
+    1. איפה להדביק?
+
+חפש בתוך הקובץ הראשי (main.py) את הפונקציה render_tab_entry.
+בתוך הפונקציה הזו, חפש את השורה:
+with col_chat:
+
+מחק את כל מה שמופיע מתחת ל-with col_chat: (כרגע יש שם כנראה רק כפתור "בקש ניתוח AI") והדבק במקומו את הקוד הבא.
+
+2. הקוד להדבקה:
+
     with col_chat:
-        st.subheader("🤖 סיוע AI")
-        if st.button("🔍 בקש ניתוח AI לתובנה"):
-            if ins:
-                with st.spinner("מנתח..."):
-                    res = call_gemini(f"נתח תצפית על {student_name}: {ins}")
-                    st.markdown(f'<div class="feedback-box">{res}</div>', unsafe_allow_html=True)
-            else:
-                st.warning("כתוב תובנה תחילה")
+        st.subheader(f"🤖 שיחה חכמה: {student_name}")
+        
+        # ניהול היסטוריית צ'אט מקומית לטאב התצפית
+        if "entry_chat_history" not in st.session_state:
+            st.session_state.entry_chat_history = []
+
+        # כפתור ניקוי שיחה
+        if st.button("🗑️ נקה שיחה"):
+            st.session_state.entry_chat_history = []
+            st.rerun()
+
+        # תצוגת ההודעות במיכל גולל
+        chat_placeholder = st.container(height=350)
+        with chat_placeholder:
+            for msg in st.session_state.entry_chat_history:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
+
+        # קלט מהמשתמש
+        if user_msg := st.chat_input("שאל את הבוט על התלמיד או התובנה...", key="entry_bot_input"):
+            # הוספת הודעת המשתמש להיסטוריה
+            st.session_state.entry_chat_history.append({"role": "user", "content": user_msg})
+            
+            # יצירת הקשר (Context) לבוט - שואב את הנתונים מהטופס שמעל
+            context = f"""
+            אתה עוזר מחקר פדגוגי. 
+            סטודנט נוכחי: {student_name}
+            תובנה נוכחית שכתב המורה: {ins}
+            תצפית (אתגרים): {obs}
+            מדדים: המרת ייצוגים={score_proj}, מסוגלות={score_efficacy}
+            
+            השאלה של המורה: {user_msg}
+            אנא ענה בעברית מקצועית ומעודדת.
+            """
+            
+            with chat_placeholder:
+                with st.chat_message("user"):
+                    st.markdown(user_msg)
+                
+                with st.chat_message("assistant"):
+                    with st.spinner("מנתח..."):
+                        # קריאה לפונקציה call_gemini הקיימת ב-main.py
+                        response = call_gemini(context)
+                        st.markdown(response)
+                        st.session_state.entry_chat_history.append({"role": "assistant", "content": response})
+
 
 def render_tab_interview(svc, full_df):
     st.subheader("🎙️ הקלטת ראיון עומק")
@@ -229,3 +277,4 @@ st.sidebar.write(f"חיבור דרייב: {'✅' if svc else '❌'}")
 if st.sidebar.button("🔄 רענן הכל"):
     st.cache_data.clear()
     st.rerun()
+
