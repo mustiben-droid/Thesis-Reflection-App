@@ -205,34 +205,36 @@ def validate_entry(entry):
     return True
 
 def render_tab_entry(svc, full_df):
+    # שימוש ב-it כדי לאפשר איפוס טופס, אך עם תוספת לשם המפתח למניעת התנגשויות
     it = st.session_state.it
     
-    # 1. בחירת סטודנט - מחוץ לעמודות (לכל רוחב המסך)
-    student_name = st.selectbox("👤 בחר סטודנט", CLASS_ROSTER, key=f"sel_{it}")
+    # שימוש ב-key ייחודי יותר כדי למנוע את שגיאת ה-DuplicateKey
+    student_name = st.selectbox(
+        "👤 בחר סטודנט", 
+        CLASS_ROSTER, 
+        key=f"entry_student_selector_{it}"
+    )
     
-    # 2. לוגיקה של הפס הירוק
+    # לוגיקה לעדכון היסטוריה ובדיקת שינוי סטודנט ללא rerun מיותר
     if student_name != st.session_state.last_selected_student:
         target = normalize_name(student_name)
         match = full_df[full_df['name_clean'] == target] if not full_df.empty else pd.DataFrame()
         st.session_state.show_success_bar = not match.empty
         st.session_state.student_context = match.tail(15).to_string() if not match.empty else ""
         st.session_state.last_selected_student = student_name
-        st.session_state.chat_history = []
+        # איפוס הצ'אט הספציפי לתלמיד במידה והתחלף
+        st.session_state.entry_chat_history = []
         st.rerun()
 
-    # 3. הפס הירוק - עכשיו הוא לכל רוחב המסך ולא יחתוך את הטלפון
+    # הצגת הודעת מצב (הפס הירוק/כחול)
     if st.session_state.show_success_bar:
         st.success(f"✅ נמצאה היסטוריה עבור {student_name}.")
     else:
         st.info(f"ℹ️ {student_name}: אין תצפיות קודמות.")
 
-    # 4. עכשיו פותחים את העמודות עבור שאר הטופס
     col_in, col_chat = st.columns([1.2, 1])
     
     with col_in:
-        # כאן ממשיך שאר הקוד שלך (זמן עבודה, מספר שרטוטים וכו')
-
-        # הוספת תיבות למספר שרטוטים וזמן - מעל ה-multiselect
         c_metrics1, c_metrics2 = st.columns(2)
         with c_metrics1:
             duration = st.number_input("⏱️ זמן עבודה (בדקות):", min_value=0, value=45, step=5, key=f"dur_{it}")
@@ -240,128 +242,58 @@ def render_tab_entry(svc, full_df):
             drawings = st.number_input("📋 מספר שרטוטים שבוצעו:", min_value=0, value=1, step=1, key=f"drw_{it}")
         
         st.markdown("---")
-        work_method = st.radio("🛠️ צורת עבודה:", ["🧊 בעזרת גוף מודפס", "🎨 ללא גוף (דמיון)"], key=f"wm_{it}", horizontal=True)
-
-# --- 2. מדדים כמותיים (1-5) ---
+        
         st.markdown("### 📊 מדדים כמותיים (1-5)")
         m1, m2 = st.columns(2)
         with m1:
-            score_proj = st.slider("📐 המרת ייצוגים (הטלה)", 1, 5, 3, key=f"s1_{st.session_state.it}")
-            score_views = st.slider("🔄 מעבר בין היטלים", 1, 5, 3, key=f"s2_{st.session_state.it}")
-            score_model = st.slider("🧊 שימוש במודל 3D", 1, 5, 3, key=f"s3_{st.session_state.it}")
+            score_proj = st.slider("📐 המרת ייצוגים", 1, 5, 3, key=f"s1_{it}")
         with m2:
-            score_spatial = st.slider("🧠 תפיסה מרחבית", 1, 5, 3, key=f"s4_{st.session_state.it}")
-            score_conv = st.slider("📏 פרופורציות ומוסכמות", 1, 5, 3, key=f"s5_{st.session_state.it}")
-            difficulty = st.slider("📉 רמת קושי התרגיל", 1, 5, 3, key=f"sd_{st.session_state.it}")
+            score_spatial = st.slider("🧠 תפיסה מרחבית", 1, 5, 3, key=f"s4_{it}")
 
-        st.markdown("---")
+        tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
+        obs = st.text_area("🗣️ תצפית שדה (Challenge):", height=150, key=f"obs_input_{it}")
+        ins = st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key=f"ins_input_{it}")
         
-        # --- 3. תיבות טקסט ותמונות (החזרתי אותן!) ---
-        tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{st.session_state.it}")
-        
-        # תיבות הטקסט שומרות על Key קבוע כדי שה-AI וה-Pop יעבדו
-        st.text_area("🗣️ תצפית שדה (Challenge):", height=150, key="field_obs_input")
-        st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key="insight_input")
-        
-        up_files = st.file_uploader("📷 צרף תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{st.session_state.it}")
-        
-        # --- 4. כפתורי פעולה ---
-        st.markdown("---")
-        c_btns = st.columns(2)
-        
-        with c_btns[0]:
-            if st.button("🔍 בקש רפלקציה (AI)", key=f"ai_btn_{st.session_state.it}"):
-                raw_ins = st.session_state.get("insight_input", "")
-                if raw_ins.strip():
-                    with st.spinner("היועץ מנתח..."):
-                        res = call_gemini(f"פנה אלי בלשון זכר. נתח תצפית על {student_name}: {raw_ins}")
-                        st.session_state.last_feedback = res
-                        st.rerun()
-                else:
-                    st.warning("תיבת התובנות ריקה.")
-
-    with c_btns[1]:
-            if st.button("💾 שמור תצפית", type="primary", key=f"save_btn_{st.session_state.it}"):
-                final_ch = st.session_state.get("field_obs_input", "").strip()
-                final_ins = st.session_state.get("insight_input", "").strip()
-                
-                # 1. יצירת ה-entry לבדיקה (חשוב שהשם והזמן יהיו כאן)
+        if st.button("💾 שמור תצפית", type="primary", key=f"save_btn_{it}"):
+            if student_name != "תלמיד אחר...":
                 entry = {
-                    "type": "reflection",
-                    "date": date.today().isoformat(),
                     "student_name": student_name,
-                    "difficulty": difficulty,
+                    "date": date.today().isoformat(),
                     "duration_min": duration,
                     "drawings_count": drawings,
-                    "work_method": work_method,
                     "score_proj": score_proj,
                     "score_spatial": score_spatial,
-                    "score_conv": score_conv,
-                    "score_model": score_model,
-                    "score_views": score_views,
-                    "challenge": final_ch,
-                    "insight": final_ins,
+                    "challenge": obs,
+                    "insight": ins,
                     "tags": str(tags),
                     "timestamp": datetime.now().isoformat()
                 }
-                
-                # 2. בדיקת תקינות - עוצר כאן אם שכחת שם תלמיד
-                if validate_entry(entry):
-                    # בדיקה שיש תוכן כלשהו לשמור
-                    if final_ch or final_ins or up_files:
-                        with st.spinner("שומר לאקסל ומעלה קבצים..."):
-                            img_links = []
-                            if up_files:
-                                for f in up_files:
-                                    link = drive_upload_file(svc, f, GDRIVE_FOLDER_ID)
-                                    if link:
-                                        img_links.append(link)
-                            
-                            # הוספת הקישורים ל-entry רק אחרי שהועלו
-                            entry["images"] = ", ".join(img_links)
-                            
-                            # 3. כתיבה לקובץ המקומי (JSONL)
-                            with open(DATA_FILE, "a", encoding="utf-8") as f:
-                                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                            
-                            # החלק האהוב עליך - הבלונים וההצלחה!
-                            st.balloons()
-                            st.success("✅ נשמר בהצלחה!")
-                            
-                            # 4. ניקוי ה-Session State כדי לעבור לתלמיד הבא
-                            st.session_state.pop("field_obs_input", None)
-                            st.session_state.pop("insight_input", None)
-                            st.session_state.last_feedback = ""
-                            for k in list(st.session_state.keys()):
-                                if any(k.startswith(p) for p in ["field_obs_input_", "insight_input_", "t_", "up_"]):
-                                    st.session_state.pop(k, None)
-                            
-                            st.session_state.it += 1
-                            time.sleep(1.8)
-                            st.rerun()
-                    else:
-                        st.warning("⚠️ לא ניתן לשמור תצפית ריקה. אנא מלא את ה-Challenge או את התובנות.")
-                        
-        # הצגת המשוב מתחת לכפתורים
-    if st.session_state.last_feedback:
-            st.markdown("---")
-            st.markdown(f'<div class="feedback-box"><b>💡 משוב יועץ AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)           
-            if st.button("🗑️ נקה משוב"):
-                st.session_state.last_feedback = ""
+                with open(DATA_FILE, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                st.balloons()
+                st.session_state.it += 1
                 st.rerun()
 
     with col_chat:
-        st.subheader(f"🤖 יועץ: {student_name}")
-        chat_cont = st.container(height=450)
-        for q, a in st.session_state.chat_history:
-            with chat_cont:
-                st.chat_message("user").write(q); st.chat_message("assistant").write(a)
+        st.subheader(f"🤖 שיחה חכמה: {student_name}")
+        if "entry_chat_history" not in st.session_state:
+            st.session_state.entry_chat_history = []
         
-        u_q = st.chat_input("שאל על הסטודנט...")
-        if u_q:
-            resp = call_gemini(f"היסטוריה: {st.session_state.student_context}. שאלה: {u_q}")
-            st.session_state.chat_history.append((u_q, resp)); st.rerun()
+        chat_placeholder = st.container(height=400)
+        with chat_placeholder:
+            for msg in st.session_state.entry_chat_history:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
 
+        if user_msg := st.chat_input("שאל את הבוט...", key=f"chat_input_{it}"):
+            st.session_state.entry_chat_history.append({"role": "user", "content": user_msg})
+            context = f"תלמיד: {student_name}, תובנה: {ins}, אתגר: {obs}. שאלה: {user_msg}"
+            with chat_placeholder:
+                with st.chat_message("user"): st.markdown(user_msg)
+                with st.chat_message("assistant"):
+                    response = call_gemini(context)
+                    st.markdown(response)
+                    st.session_state.entry_chat_history.append({"role": "assistant", "content": response})
 def render_tab_sync(svc, full_df):
     st.header("🔄 סנכרון לדרייב")
     # שליפת ה-ID מה-Secrets שהגדרת
@@ -940,6 +872,7 @@ st.sidebar.write(f"חיבור דרייב: {'✅' if svc else '❌'}")
 if st.sidebar.button("🔄 רענן הכל"):
     st.cache_data.clear()
     st.rerun()
+
 
 
 
