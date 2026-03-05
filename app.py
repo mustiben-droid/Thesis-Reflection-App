@@ -173,16 +173,6 @@ def render_tab_entry(svc, full_df):
                 st.session_state.it += 1
                 st.rerun()
 
-    1. איפה להדביק?
-
-חפש בתוך הקובץ הראשי (main.py) את הפונקציה render_tab_entry.
-בתוך הפונקציה הזו, חפש את השורה:
-with col_chat:
-
-מחק את כל מה שמופיע מתחת ל-with col_chat: (כרגע יש שם כנראה רק כפתור "בקש ניתוח AI") והדבק במקומו את הקוד הבא.
-
-2. הקוד להדבקה:
-
     with col_chat:
         st.subheader(f"🤖 שיחה חכמה: {student_name}")
         
@@ -277,4 +267,5 @@ st.sidebar.write(f"חיבור דרייב: {'✅' if svc else '❌'}")
 if st.sidebar.button("🔄 רענן הכל"):
     st.cache_data.clear()
     st.rerun()
+
 
