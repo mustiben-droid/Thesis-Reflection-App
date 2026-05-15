@@ -270,7 +270,7 @@ def render_tab_entry(svc, full_df):
         st.text_area("🗣️ תצפית שדה (Challenge):", height=150, key=f"field_obs_input_{it}")
 st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key=f"insight_input_{it}")
         
-        up_files = st.file_uploader("📷 צרף תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{st.session_state.it}")
+up_files = st.file_uploader("📷 צרף תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{st.session_state.it}")
         
         # --- 4. כפתורי פעולה ---
         st.markdown("---")
