@@ -267,18 +267,19 @@ def render_tab_entry(svc, full_df):
         tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{st.session_state.it}")
         
         # תיבות הטקסט שומרות על Key קבוע כדי שה-AI וה-Pop יעבדו
+       # שים לב שכל השורות כאן מתחילות באותו קו אנכי (4 או 8 רווחים מהקצה)
         st.text_area("🗣️ תצפית שדה (Challenge):", height=150, key=f"field_obs_input_{it}")
-st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key=f"insight_input_{it}")
+        st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key=f"insight_input_{it}")
         
-up_files = st.file_uploader("📷 צרף תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{st.session_state.it}")
+        up_files = st.file_uploader("📷 צרף תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{it}")
         
-        # --- 4. כפתורי פעולה ---
-st.markdown("---")
+        st.markdown("---")
+        
         c_btns = st.columns(2)
         
         with c_btns[0]:
-            if st.button("🔍 בקש רפלקציה (AI)", key=f"ai_btn_{st.session_state.it}"):
-                raw_ins = st.session_state.get("insight_input", "")
+            if st.button("🔍 בקש רפלקציה (AI)", key=f"ai_btn_{it}"):
+                raw_ins = st.session_state.get(f"insight_input_{it}", "")
                 if raw_ins.strip():
                     with st.spinner("היועץ מנתח..."):
                         res = call_gemini(f"פנה אלי בלשון זכר. נתח תצפית על {student_name}: {raw_ins}")
@@ -286,7 +287,6 @@ st.markdown("---")
                         st.rerun()
                 else:
                     st.warning("תיבת התובנות ריקה.")
-
     with c_btns[1]:
             if st.button("💾 שמור תצפית", type="primary", key=f"save_btn_{st.session_state.it}"):
                 final_ch = st.session_state.get("field_obs_input", "").strip()
