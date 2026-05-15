@@ -273,7 +273,7 @@ st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key=f"insigh
 up_files = st.file_uploader("📷 צרף תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{st.session_state.it}")
         
         # --- 4. כפתורי פעולה ---
-        st.markdown("---")
+ st.markdown("---")
         c_btns = st.columns(2)
         
         with c_btns[0]:
