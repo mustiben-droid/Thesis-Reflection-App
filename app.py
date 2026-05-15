@@ -267,8 +267,8 @@ def render_tab_entry(svc, full_df):
         tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{st.session_state.it}")
         
         # תיבות הטקסט שומרות על Key קבוע כדי שה-AI וה-Pop יעבדו
-        st.text_area("🗣️ תצפית שדה (Challenge):", height=150, key="field_obs_input")
-        st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key="insight_input")
+        st.text_area("🗣️ תצפית שדה (Challenge):", height=150, key=f"field_obs_input_{it}")
+st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key=f"insight_input_{it}")
         
         up_files = st.file_uploader("📷 צרף תמונות", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{st.session_state.it}")
         
