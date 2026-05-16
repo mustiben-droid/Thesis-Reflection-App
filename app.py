@@ -237,9 +237,7 @@ def render_tab_entry(svc, full_df):
     col_in, col_chat = st.columns([1.2, 1])
     
     with col_in:
-        # כאן ממשיך שאר הקוד שלך (זמן עבודה, מספר שרטוטים וכו')
-
-        # הוספת תיבות למספר שרטוטים וזמן - מעל ה-multiselect
+        # מדדי זמן ומספר מטלות
         c_metrics1, c_metrics2 = st.columns(2)
         with c_metrics1:
             duration = st.number_input("⏱️ זמן עבודה (בדקות):", min_value=0, value=45, step=5, key=f"dur_{it}")
@@ -249,25 +247,23 @@ def render_tab_entry(svc, full_df):
         st.markdown("---")
         work_method = st.radio("🛠️ צורת עבודה:", ["🧊 בעזרת גוף מודפס", "🎨 ללא גוף (דמיון)"], key=f"wm_{it}", horizontal=True)
 
-# --- 2. מדדים כמותיים (1-5) ---
+        # המדדים הכמותיים (1-5)
         st.markdown("### 📊 מדדים כמותיים (1-5)")
         m1, m2 = st.columns(2)
         with m1:
-            score_proj = st.slider("📐 המרת ייצוגים (הטלה)", 1, 5, 3, key=f"s1_{st.session_state.it}")
-            score_views = st.slider("🔄 מעבר בין היטלים", 1, 5, 3, key=f"s2_{st.session_state.it}")
-            score_model = st.slider("🧊 שימוש במודל 3D", 1, 5, 3, key=f"s3_{st.session_state.it}")
+            score_proj = st.slider("📐 המרת ייצוגים (הטלה)", 1, 5, 3, key=f"s1_{it}")
+            score_views = st.slider("🔄 מעבר בין היטלים", 1, 5, 3, key=f"s2_{it}")
+            score_model = st.slider("🧊 שימוש במודל 3D", 1, 5, 3, key=f"s3_{it}")
         with m2:
-            score_spatial = st.slider("🧠 תפיסה מרחבית", 1, 5, 3, key=f"s4_{st.session_state.it}")
-            score_conv = st.slider("📏 פרופורציות ומוסכמות", 1, 5, 3, key=f"s5_{st.session_state.it}")
-            difficulty = st.slider("📉 רמת קושי התרגיל", 1, 5, 3, key=f"sd_{st.session_state.it}")
+            score_spatial = st.slider("🧠 תפיסה מרחבית", 1, 5, 3, key=f"s4_{it}")
+            score_conv = st.slider("📏 פרופורציות ומוסכמות", 1, 5, 3, key=f"s5_{it}")
+            difficulty = st.slider("📉 רמת קושי התרגיל", 1, 5, 3, key=f"sd_{it}")
 
         st.markdown("---")
         
-        # --- 3. תיבות טקסט ותמונות (החזרתי אותן!) ---
-        tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{st.session_state.it}")
+        # תגיות אבחון ותיבות הטקסט הדינמיות (שמתנקות מעצמן)
+        tags = st.multiselect("🏷️ תגיות אבחון", TAGS_OPTIONS, key=f"t_{it}")
         
-        # תיבות הטקסט שומרות על Key קבוע כדי שה-AI וה-Pop יעבדו
-       # שים לב שכל השורות כאן מתחילות באותו קו אנכי (4 או 8 רווחים מהקצה)
         st.text_area("🗣️ תצפית שדה (Challenge):", height=150, key=f"field_obs_input_{it}")
         st.text_area("🧠 תובנה/פרשנות (Insight):", height=100, key=f"insight_input_{it}")
         
@@ -277,22 +273,40 @@ def render_tab_entry(svc, full_df):
         
         c_btns = st.columns(2)
         
+        # --- כפתור 1: בקשת רפלקציה ממוקדת מה-AI ---
         with c_btns[0]:
             if st.button("🔍 בקש רפלקציה (AI)", key=f"ai_btn_{it}"):
-                raw_ins = st.session_state.get(f"insight_input_{it}", "")
-                if raw_ins.strip():
-                    with st.spinner("היועץ מנתח..."):
-                        res = call_gemini(f"פנה אלי בלשון זכר. נתח תצפית על {student_name}: {raw_ins}")
+                raw_ch = st.session_state.get(f"field_obs_input_{it}", "").strip()
+                raw_ins = st.session_state.get(f"insight_input_{it}", "").strip()
+                
+                if raw_ins or raw_ch:
+                    with st.spinner("היועץ מנתח את מקרה הבוחן..."):
+                        # בניית פרומפט ממוקד שבוחן את תהליך ההוראה והלמידה הספציפי
+                        prompt = f"""
+                        נתח כמנתח מחקר פעולה אקדמי (Action Research) את התצפית הבאה על הסטודנט {student_name}:
+                        - קושי שנצפה (Challenge): {raw_ch}
+                        - תובנת המורה (Insight): {raw_ins}
+                        - מדדים כמותיים שהוזנו: הטלה={score_proj}, מעבר היטלים={score_views}, תפיסה מרחבית={score_spatial}, פרופורציות={score_conv}.
+                        - שיטת עבודה: {work_method} (ברמת קושי {difficulty}).
+                        
+                        תנחומות/דגשים לניתוח:
+                        1. האם פרשנות המורה עקבית ומבוססת ביחס למדדים ולתצפית הגולמית?
+                        2. מה זה מלמד על הפדגוגיה הנדסית הנדרשת לשלב זה (שימוש במודל מול דמיון)?
+                        3. ספק תובנה קצרה לקידום דרך ההוראה של נושא השרטוט הטכני במקרה זה.
+                        """
+                        res = call_gemini(prompt)
                         st.session_state.last_feedback = res
                         st.rerun()
                 else:
-                    st.warning("תיבת התובנות ריקה.")
-    with c_btns[1]:
-            if st.button("💾 שמור תצפית", type="primary", key=f"save_btn_{st.session_state.it}"):
-                final_ch = st.session_state.get("field_obs_input", "").strip()
-                final_ins = st.session_state.get("insight_input", "").strip()
+                    st.warning("אנא מלא את תיבת התצפית או התובנות לפני בקשת רפלקציה.")
+
+        # --- כפתור 2: שמירת התצפית + הרפלקציה של ה-AI ---
+        with c_btns[1]:
+            if st.button("💾 שמור תצפית", type="primary", key=f"save_btn_{it}"):
+                final_ch = st.session_state.get(f"field_obs_input_{it}", "").strip()
+                final_ins = st.session_state.get(f"insight_input_{it}", "").strip()
                 
-                # 1. יצירת ה-entry לבדיקה (חשוב שהשם והזמן יהיו כאן)
+                # בניית האובייקט שישמר - שים לב לתוספת של ai_reflection
                 entry = {
                     "type": "reflection",
                     "date": date.today().isoformat(),
@@ -309,12 +323,11 @@ def render_tab_entry(svc, full_df):
                     "challenge": final_ch,
                     "insight": final_ins,
                     "tags": str(tags),
+                    "ai_reflection": st.session_state.get("last_feedback", ""), # שמירת הרפלקציה המדויקת של אותו הרגע
                     "timestamp": datetime.now().isoformat()
                 }
                 
-                # 2. בדיקת תקינות - עוצר כאן אם שכחת שם תלמיד
                 if validate_entry(entry):
-                    # בדיקה שיש תוכן כלשהו לשמור
                     if final_ch or final_ins or up_files:
                         with st.spinner("שומר לאקסל ומעלה קבצים..."):
                             img_links = []
@@ -324,30 +337,22 @@ def render_tab_entry(svc, full_df):
                                     if link:
                                         img_links.append(link)
                             
-                            # הוספת הקישורים ל-entry רק אחרי שהועלו
                             entry["images"] = ", ".join(img_links)
                             
-                            # 3. כתיבה לקובץ המקומי (JSONL)
+                            # כתיבה לקובץ המקומי לקראת הסנכרון הבא
                             with open(DATA_FILE, "a", encoding="utf-8") as f:
                                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                             
-                            # החלק האהוב עליך - הבלונים וההצלחה!
                             st.balloons()
-                            st.success("✅ נשמר בהצלחה!")
+                            st.success("✅ התצפית והרפלקציה המחקרית נשמרו בהצלחה!")
                             
-                            # 4. ניקוי ה-Session State כדי לעבור לתלמיד הבא
-                            st.session_state.pop("field_obs_input", None)
-                            st.session_state.pop("insight_input", None)
+                            # איפוס מוחלט של המשוב והזכרונות הזמניים כדי שהתלמיד הבא ייפתח חלק לחלוטינ
                             st.session_state.last_feedback = ""
-                            for k in list(st.session_state.keys()):
-                                if any(k.startswith(p) for p in ["field_obs_input_", "insight_input_", "t_", "up_"]):
-                                    st.session_state.pop(k, None)
-                            
                             st.session_state.it += 1
-                            time.sleep(1.8)
+                            time.sleep(1.2)
                             st.rerun()
                     else:
-                        st.warning("⚠️ לא ניתן לשמור תצפית ריקה. אנא מלא את ה-Challenge או את התובנות.")
+                        st.warning("⚠️ לא ניתן לשמור תצפית ריקה.")  
                         
         # הצגת המשוב מתחת לכפתורים
     if st.session_state.last_feedback:
