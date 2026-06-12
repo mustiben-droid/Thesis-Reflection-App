@@ -14,14 +14,10 @@ try:
 except ImportError as e:
     st.error(f"Error: Missing library for statistical engine: {e}")
 
-def get_ai_model():
-    """אתחול והגדרת מודל ה-Gemini מתוך ה-Secrets"""
-    api_key = st.secrets.get("GOOGLE_API_KEY", "")
-    if not api_key:
-        st.error("⚠️ חסר מפתח API (GOOGLE_API_KEY) ב-Secrets.")
-        return None
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel('gemini-1.5-flash')
+api_key = st.secrets.get("GOOGLE_API_KEY", "")
+import google.generativeai as genai
+genai.configure(api_key=api_key)
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 # --- פונקציות חישוב סטטיסטי (SPSS-like) ---
 
