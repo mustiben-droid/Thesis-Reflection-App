@@ -86,7 +86,6 @@ def render_ai_agent_tab(df):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            # פנייה ישירה למודל 2.0 המעודכן שמצטיין בניתוח נתונים ואקסל
             api_key = st.secrets.get("GOOGLE_API_KEY", "")
             if not api_key:
                 st.error("⚠️ חסר מפתח API (GOOGLE_API_KEY) ב-Secrets.")
@@ -95,8 +94,8 @@ def render_ai_agent_tab(df):
             import google.generativeai as genai
             genai.configure(api_key=api_key)
             
-            # שימוש בגרסה 2.0 החדשה
-            model = genai.GenerativeModel('gemini-2.0-flash')
+            # תיקון השם לדגם העדכני והנתמך ביותר של גוגל למשימות מורכבות
+            model = genai.GenerativeModel('gemini-2.0-flash-exp')
 
             with st.spinner("מחשב נתונים ומפיק דוח סטטיסטי..."):
                 # סינון נתונים לפי שם הסטודנט אם מופיע בבקשה
@@ -145,7 +144,6 @@ def render_ai_agent_tab(df):
                 7. אל תכתוב קוד פייטון בתשובה.
                 """
                 
-                # שליחת הבקשה בצורה מוגנת
                 try:
                     response = model.generate_content(report_prompt)
                     ai_reply = response.text
@@ -153,7 +151,8 @@ def render_ai_agent_tab(df):
                     ai_reply = f"⚠️ שגיאה בהפקת הדוח הסטטיסטי מול שרתי גוגל. פרטי השגיאה: {str(api_err)}"
                 
                 st.markdown(ai_reply)
-                st.session_state.agent_messages.append({"role": "assistant", "content": ai_reply})                
+                st.session_state.agent_messages.append({"role": "assistant", "content": ai_reply})
+                
                 # שלב 2: הפקת הדוח הסופי (Report)
                 report_prompt = f"""
                 אתה יועץ סטטיסטי אקדמי. עליך לדווח על הממצאים הבאים שנמצאו בחישוב המערכת.
