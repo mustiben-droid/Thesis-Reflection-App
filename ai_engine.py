@@ -21,7 +21,7 @@ def get_ai_model():
         st.error("⚠️ חסר מפתח API (GOOGLE_API_KEY) ב-Secrets.")
         return None
     genai.configure(api_key=api_key)
-    return genai.GenerativeModel('gemini-2.0-flash')
+    return genai.GenerativeModel('gemini-1.5-flash')
 
 # --- פונקציות חישוב סטטיסטי (SPSS-like) ---
 
