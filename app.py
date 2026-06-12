@@ -157,6 +157,7 @@ def call_gemini(prompt, audio_bytes=None):
         api_key = st.secrets.get("GOOGLE_API_KEY")
         if not api_key: return "שגיאה: חסר API Key"
 
+        # החלפת השורה למודל היציב 1.5
         model_id = "gemini-1.5-flash" 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
         
@@ -490,8 +491,6 @@ def render_tab_analysis(svc):
                 except Exception as e:
                     st.error(f"הניתוח הופק אך נכשלה השמירה: {e}")
 
-# --- שים לב: השורה הבאה חייבת להתחיל צמוד לשמאל (ללא רווחים בכלל!) ---
-
 def render_tab_interview(svc, full_df):
     it = st.session_state.it
     st.subheader("🎙️ ראיון עומק וניתוח תמות הנדסי משודרג")
@@ -659,6 +658,19 @@ if "last_feedback" not in st.session_state:
     st.session_state.last_feedback = ""
 if "chat_history" not in st.session_state: 
     st.session_state.chat_history = []
+
+# --------------------------------------------------------
+# הדבקה של הפונקציה החסרה - חובה כדי שטאב 5 יעבוד!
+# --------------------------------------------------------
+def get_ai_model():
+    """אתחול והגדרת מודל ה-Gemini מתוך ה-Secrets עבור הטאב הסטטיסטי"""
+    api_key = st.secrets.get("GOOGLE_API_KEY", "")
+    if not api_key:
+        st.error("⚠️ חסר מפתח API (GOOGLE_API_KEY) ב-Secrets.")
+        return None
+    import google.generativeai as genai
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel('gemini-1.5-flash')
 
 # יצירת הטאבים בממשק
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח", "🎙️ ראיון עומק", "🤖 סוכן סטטיסטי"])
