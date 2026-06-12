@@ -16,8 +16,7 @@ except ImportError as e:
 api_key = st.secrets.get("GOOGLE_API_KEY", "")
 genai.configure(api_key=api_key)
 
-MODEL_NAME = "gemini-2.0-flash"
-
+MODEL_NAME = "gemini-1.5-flash"
 
 def run_smart_comparison(df, group_col, val_col):
     """
