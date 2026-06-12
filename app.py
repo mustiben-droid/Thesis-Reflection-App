@@ -157,7 +157,7 @@ def call_gemini(prompt, audio_bytes=None):
         api_key = st.secrets.get("GOOGLE_API_KEY")
         if not api_key: return "שגיאה: חסר API Key"
 
-        # החלפת השורה למודל היציב 1.5
+        # השורה המעודכנת והיציבה שמחליפה את gemini-flash-latest
         model_id = "gemini-1.5-flash" 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
         
@@ -195,6 +195,15 @@ def call_gemini(prompt, audio_bytes=None):
     except Exception as e:
         return f"שגיאה טכנית: {str(e)}"
         
+def get_ai_model():
+    """אתחול והגדרת מודל ה-Gemini מתוך ה-Secrets עבור הטאב הסטטיסטי"""
+    api_key = st.secrets.get("GOOGLE_API_KEY", "")
+    if not api_key:
+        st.error("⚠️ חסר מפתח API (GOOGLE_API_KEY) ב-Secrets.")
+        return None
+    import google.generativeai as genai
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel('gemini-1.5-flash')        
 # ==========================================
 # --- 2. פונקציות ממשק משתמש (Tabs) ---
 # ==========================================
