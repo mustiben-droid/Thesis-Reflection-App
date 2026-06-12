@@ -4,71 +4,69 @@ import numpy as np
 import re
 import json
 
-try:
-    import plotly.express as px
-    import google.generativeai as genai
-    from scipy import stats
-    import statsmodels.api as sm
-    from statsmodels.formula.api import ols
-except ImportError as e:
-    st.error(f"Error: Missing library for statistical engine: {e}")
-
-api_key = st.secrets.get("GOOGLE_API_KEY", "")
-genai.configure(api_key=api_key)
-
-MODEL_NAME = "gemini-1.5-flash"
-
-def run_smart_comparison(df, group_col, val_col):
+def render_ai_agent_tab():
     """
-    בוחר אוטומטית בין T-test למבחן Mann-Whitney
-    בהתאם לגודל המדגם והנחות היסוד.
+    טאב 5: מעבדת מחקר וסוכן חכם לריבוי קבצים (Triangulation Lab)
+    שים לב: הפונקציה כבר לא מקבלת משתנים בסוגריים! היא טוענת הכל מהמחשב.
     """
-    groups = df[group_col].dropna().unique()
-    if len(groups) != 2:
-        return {"error": f"השוואה דורשת בדיוק 2 קבוצות בעמודה '{group_col}'. נמצאו: {list(groups)}"}
-
-    g1 = df[df[group_col] == groups[0]][val_col].dropna()
-    g2 = df[df[group_col] == groups[1]][val_col].dropna()
-
-    if len(g1) < 2 or len(g2) < 2:
-        return {"error": f"אין מספיק תצפיות לביצוע מבחן (נמצאו {len(g1)} ו-{len(g2)} תצפיות). נדרשות לפחות 2 לכל קבוצה."}
-
-    use_non_parametric = len(g1) < 20 or len(g2) < 20
-
-    res = {
-        "group1": {"name": str(groups[0]), "M": round(g1.mean(), 2), "SD": round(g1.std(), 2), "N": len(g1), "Md": round(g1.median(), 2)},
-        "group2": {"name": str(groups[1]), "M": round(g2.mean(), 2), "SD": round(g2.std(), 2), "N": len(g2), "Md": round(g2.median(), 2)}
-    }
-
-    if use_non_parametric:
-        u_stat, p_val = stats.mannwhitneyu(g1, g2, alternative='two-sided')
-        res.update({
-            "test_type": "Mann-Whitney U Test (Non-parametric)",
-            "stat_name": "U",
-            "stat_val": round(u_stat, 3),
-            "p": round(p_val, 4),
-            "note": "נעשה שימוש במבחן לא-פרמטרי בשל גודל מדגם קטן."
-        })
-    else:
-        t_stat, p_val = stats.ttest_ind(g1, g2)
-        res.update({
-            "test_type": "Independent Samples T-Test",
-            "stat_name": "t",
-            "stat_val": round(t_stat, 3),
-            "p": round(p_val, 4),
-            "df": len(g1) + len(g2) - 2,
-            "note": "נעשה שימוש במבחן t למדגמים בלתי תלויים."
-        })
-
-    return res
-
-def render_ai_agent_tab(df):
-    st.header("🤖 יועץ סטטיסטי ומחקרי (APA7 & SPSS)")
+    st.header("🤖 סוכן חכם - הצלבת נתונים מרובים (Triangulation Lab)")
+    st.subheader("📋 שלב א': טעינת קבצי המחקר מהמחשב")
     
-    if df is None or df.empty:
-        st.info("אין נתונים זמינים לניתוח.")
+    # תיבת העלאה אחת גדולה שקולטת כמה קבצים שתרצה בבת אחת
+    uploaded_files = st.file_uploader(
+        "גרור והשלך לכאן את כל קבצי המחקר שלך (מאסטר, שאלונים, מבחנים וכו')", 
+        type=["csv", "xlsx"], 
+        accept_multiple_files=True
+    )
+    
+    df_master = None
+    df_quest = None
+    other_dfs = {}
+
+    if uploaded_files:
+        for file in uploaded_files:
+            try:
+                # קריאת הקובץ לפי הסיומת
+                if file.name.endswith('.csv'):
+                    current_df = pd.read_csv(file)
+                else:
+                    current_df = pd.read_excel(file)
+                
+                # 1. זיהוי אוטומטי של קובץ התצפיות (Master)
+                if 'work_method' in current_df.columns or 'student_name' in current_df.columns:
+                    df_master = current_df
+                    st.success(f"✅ קובץ התצפיות (Master) זוהה ונטען: {file.name}")
+                
+                # 2. זיהוי אוטומטי של קובץ השאלונים (Pre/Post)
+                elif any('pre' in str(col).lower() or 'post' in str(col).lower() for col in current_df.columns):
+                    file.seek(0)
+                    if file.name.endswith('.csv'):
+                        df_quest = pd.read_csv(file, header=1)
+                    else:
+                        df_quest = pd.read_excel(file, header=1)
+                    st.success(f"✅ קובץ השאלונים (Pre/Post) זוהה ונטען: {file.name}")
+                
+                # 3. כל קובץ אחר (ציוני בגרות, מבחנים וכו')
+                else:
+                    other_dfs[file.name] = current_df
+                    st.info(f"📁 נטען קובץ נתונים נוסף: {file.name}")
+                    
+            except Exception as e:
+                st.error(f"שגיאה בטעינת הקובץ {file.name}: {e}")
+                
+    # עצירה: אם המשתמש עוד לא העלה את שני קבצי הבסיס, לא מראים את הצ'אט
+    if df_master is None or df_quest is None:
+        st.info("💡 המערכת מוכנה. אנא העלה את קובץ המאסטר וקובץ השאלונים יחד כדי להתחיל בניתוח המוצלב.")
         return
 
+    # פונקציית עזר פנימית לניקוי והשוואת שמות (מסירה רווחים, נקודות וסימנים)
+    def clean_name_string(val):
+        if pd.isna(val): return ""
+        val = str(val).strip().lower()
+        val = re.sub(r'[^\w\s]', '', val)
+        return val
+
+    # ניהול היסטוריית ההודעות בצ'אט
     if "agent_messages" not in st.session_state:
         st.session_state.agent_messages = []
 
@@ -76,7 +74,8 @@ def render_ai_agent_tab(df):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if prompt := st.chat_input("הזן בקשה לניתוח (למשל: השוואת תפיסה מרחבית בין שיטות עבודה)"):
+    # תיבת הקלט של הצ'אט
+    if prompt := st.chat_input("שאל על תלמיד (למשל: נתח את הפרופיל והפרשנויות של עילאי)"):
         st.session_state.agent_messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -84,92 +83,140 @@ def render_ai_agent_tab(df):
         with st.chat_message("assistant"):
             api_key = st.secrets.get("GOOGLE_API_KEY", "")
             if not api_key:
-                st.error("⚠️ חסר מפתח API (GOOGLE_API_KEY) ב-Secrets.")
+                st.error("⚠️ חסר מפתח API ב-Secrets.")
                 return
                 
             import google.generativeai as genai
             genai.configure(api_key=api_key)
-            
-            # סריקה דינמית למציאת מודל פעיל בשרת
-            selected_model_name = None
-            try:
-                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                for m_name in available_models:
-                    if 'flash' in m_name.lower(): selected_model_name = m_name; break
-                if not selected_model_name and available_models: selected_model_name = available_models[0]
-            except:
-                selected_model_name = 'models/gemini-1.5-flash'
+            model = genai.GenerativeModel('models/gemini-1.5-flash')
 
-            model = genai.GenerativeModel(selected_model_name)
-
-            with st.spinner("מחשב נתונים ומפיק דוח סטטיסטי..."):
-                # יצירת עותק נקי וסינון שורות ריקות לחלוטין באקסל
-                analysis_df = df.copy()
-                if 'student_name' in analysis_df.columns:
-                    analysis_df['student_name'] = analysis_df['student_name'].astype(str).str.strip()
+            with st.spinner("מצליב נתונים ומנתח את קבצי המחקר..."):
                 
-                # תיקון מנגנון סינון השמות - סינון יתבצע רק אם המילה היא שם מדויק באקסל
-                words_in_prompt = [w.strip() for w in re.split(r'[\s,.\s]+', prompt)]
-                valid_names = [name for name in analysis_df['student_name'].dropna().unique() if name not in ['nan', 'None', '']]
+                # ניקוי שמות בקובץ המאסטר
+                master_clean = df_master.copy()
+                master_clean['name_key'] = master_clean['student_name'].apply(clean_name_string)
                 
-                mentioned_names = [name for name in valid_names if name in words_in_prompt]
-                if mentioned_names:
-                    analysis_df = analysis_df[analysis_df['student_name'].isin(mentioned_names)]
+                # ניקוי שמות בקובץ השאלונים
+                quest_col_name = 'name' if 'name' in df_quest.columns else df_quest.columns[0]
+                quest_clean = df_quest.copy()
+                quest_clean['name_key'] = quest_clean[quest_col_name].apply(clean_name_string)
 
+                # זיהוי אוטומטי של שם התלמיד מתוך הפרומפט שכתבת
+                selected_student = None
+                all_master_names = master_clean['student_name'].dropna().unique()
+                for name in all_master_names:
+                    if str(name).strip() in prompt:
+                        selected_student = name
+                        break
+                
+                if not selected_student:
+                    all_quest_names = df_quest[quest_col_name].dropna().unique()
+                    for name in all_quest_names:
+                        if str(name).strip().replace('.', '') in prompt:
+                            selected_student = name
+                            break
+
+                if not selected_student:
+                    st.error("🔍 לא זיהיתי שם של תלמיד מוכר מהקבצים (לדוגמה, נסה לכתוב במפורש: 'עילאי')")
+                    return
+
+                student_key = clean_name_string(selected_student)
+                
                 # -----------------------------------------------------------
-                # מיפוי קשיח וחכם לפי מבנה האקסל האמיתי שלך!
+                # 📊 שליפת נתונים מקובץ 1: מאסטר תצפיות (כמותי + איכותני)
                 # -----------------------------------------------------------
-                group_col = 'work_method' # מוגדר קשיח כברירת מחדל לאקסל שלך
-                val_col = 'score_spatial'  # מוגדר קשיח כברירת מחדל לאקסל שלך
+                student_observations = master_clean[master_clean['name_key'] == student_key]
+                master_summary = {}
                 
-                # זיהוי מבוסס מילים בעברית מתוך הפרומפט כדי להחליף את המדד המספרי במידת הצורך
-                if 'הטלה' in prompt or 'ייצוג' in prompt: val_col = 'score_proj'
-                elif 'מעבר' in prompt or 'היטל' in prompt: val_col = 'score_views'
-                elif 'מודל' in prompt or 'תלת' in prompt: val_col = 'score_model'
-                elif 'פרופורצ' in prompt: val_col = 'score_conv'
-
-                # הרצת החישוב הסטטיסטי האמיתי
-                stats_result = None
-                if group_col in analysis_df.columns and val_col in analysis_df.columns:
-                    try:
-                        # הסרת ערכים חסרים ספציפית בעמודות הניתוח
-                        clean_df = analysis_df.dropna(subset=[group_col, val_col])
-                        # סינון ערכים ריקים או טקסטים ריקים שאינם קבוצה תקפה
-                        clean_df = clean_df[clean_df[group_col].astype(str).str.strip() != '']
+                if not student_observations.empty:
+                    # ממוצעי מדדים כמותיים
+                    num_data = student_observations.select_dtypes(include=[np.number])
+                    means = num_data.mean().round(2).to_dict()
+                    
+                    # איסוף היסטוריית הפרשנויות והקשיים מכל השיעורים
+                    raw_interpretations = []
+                    for idx, row in student_observations.iterrows():
+                        date_str = str(row.get('date', 'תאריך חסר'))
+                        diff_text = str(row.get('difficulty', '')).strip()
+                        interp_text = str(row.get('interpretation', '')).strip()
+                        method_text = str(row.get('work_method', 'לא צוין'))
                         
-                        stats_result = run_smart_comparison(clean_df, group_col, val_col)
-                    except Exception as calc_err:
-                        stats_result = {"error": f"תקלה בחישוב הסטטיסטי: {str(calc_err)}"}
+                        obs_block = f"תאריך: {date_str} | שיטה: {method_text}\n- קושי: {diff_text}\n- פרשנות חוקר: {interp_text}"
+                        raw_interpretations.append(obs_block)
+                    
+                    master_summary = {
+                        "total_observations": len(student_observations),
+                        "average_quantitative_scores": means,
+                        "detailed_qualitative_observations": raw_interpretations
+                    }
                 else:
-                    stats_result = {"error": f"לא נמצאו עמודות מתאימות להשוואה באקסל. נמצאו: group={group_col}, val={val_col}"}
+                    master_summary = {"status": "לא נמצאו תצפיות עבור תלמיד זה במאסטר"}
+
+                # -----------------------------------------------------------
+                # 📝 שליפת נתונים מקובץ 2: שאלוני עמדות ומסוגלות (Pre/Post)
+                # -----------------------------------------------------------
+                student_questionnaire = quest_clean[quest_clean['name_key'].str.contains(student_key, na=False)]
+                quest_summary = {}
                 
-                # שלב 2: הפקת הדוח הסופי על בסיס תוצאות האמת
+                if not student_questionnaire.empty:
+                    q_row = student_questionnaire.iloc[0].to_dict()
+                    pre_questions = {k: v for k, v in q_row.items() if 'pre' in k.lower()}
+                    post_questions = {k: v for k, v in q_row.items() if 'post' in k.lower()}
+                    
+                    quest_summary = {
+                        "has_questionnaire_data": True,
+                        "raw_name_in_file": str(q_row.get(quest_col_name)),
+                        "key_responses_pre": list(pre_questions.items())[:15], 
+                        "key_responses_post": list(post_questions.items())[:15]
+                    }
+                else:
+                    quest_summary = {"status": "התלמיד לא נמצא בקובץ שאלוני ה-Pre/Post"}
+
+                # -----------------------------------------------------------
+                # 📁 שליפת נתונים מקבצים נוספים במידה והועלו (אופציונלי)
+                # -----------------------------------------------------------
+                other_summary = {}
+                for f_name, other_df in other_dfs.items():
+                    # ניסיון לחפש את התלמיד גם בקבצים האחרים אם יש שם עמודת שם
+                    possible_name_cols = [c for c in other_df.columns if 'name' in c.lower() or 'שם' in c]
+                    if possible_name_cols:
+                        other_clean = other_df.copy()
+                        other_clean['name_key'] = other_clean[possible_name_cols[0]].apply(clean_name_string)
+                        sub_row = other_clean[other_clean['name_key'] == student_key]
+                        if not sub_row.empty:
+                            other_summary[f_name] = sub_row.iloc[0].drop(['name_key', possible_name_cols[0]], errors='ignore').to_dict()
+
+                # הרכבת תיק תלמיד דיגיטלי מושלם
+                student_profile_json = {
+                    "student_name": str(selected_student),
+                    "observations_master_data": master_summary,
+                    "questionnaire_survey_data": quest_summary,
+                    "additional_files_data": other_summary
+                }
+                
+                # הפרומפט האקדמי ל-AI
                 report_prompt = f"""
-                אתה יועץ סטטיסטי אקדמי בכיר ומנוסה. עליך לכתוב דוח מחקר מקיף ומקצועי על הממצאים הסטטיסטיים הבאים.
+                אתה יועץ סטטיסטי ומחקרי אקדמי בכיר המלווה תזות בחינוך ומחקר פעולה פדגוגי.
+                עליך להפיק דוח פרופיל מוצלב עמוק (Triangulation Report) המשלב בין המדדים הכמותיים לפרשנות האיכותנית של החוקר.
                 
-                נתוני החישוב האמיתיים שהופקו מקובץ המאסטר:
-                {json.dumps(stats_result, ensure_ascii=False)}
+                הנתונים הממוזגים האמיתיים של התלמיד מכל קבצי המחקר שהועלו:
+                {json.dumps(student_profile_json, ensure_ascii=False)}
                 
-                עמודת הקבוצות שנבדקה: {group_col}
-                עמודת המדד שנבדקה: {val_col}
-                
-                הנחיות קשיחות לדיווח:
-                1. אם יש הודעת שגיאה ב-JSON (כמו חוסר בתצפיות או עמודה חסרה), הסבר למשתמש בשפה אקדמית אדיבה ומפורשת מה חסר ואיך לתקן (למשל: לבצע סנכרון נתונים או להוסיף תצפיות לשיטת העבודה השנייה), ואל תבנה טבלאות ריקות עם הערות 'לא סופק'.
-                2. אם יש נתונים מספריים אמיתיים ב-JSON:
-                   - פתח בטבלה מעוצבת (Markdown) תחת הכותרת "Group Statistics" (עמודות: Group, N, Mean, Std. Deviation).
-                   - הצג טבלה שנייה תחת הכותרת "Test Results" במבנה SPSS (ערך המבחן ו-Sig. 2-tailed).
-                   - כתוב פסקה בפורמט APA 7th Edition בעברית רהוטה המדווחת על הממצאים (p, t/U, M, SD).
-                   - קבע מובהקות: p > 0.05 (אין הבדל מובהק) או p < 0.05 (יש הבדל מובהק).
-                   - ספק פרשנות פדגוגית מעמיקה ומקצועית המקשרת בין התוצאות לבין תהליכי הלמידה של שרטוט טכני ותפיסה מרחבית במחקר הפעולה שלך.
-                3. בשום אופן אל תמציא מספרים או נתונים שאינם מופיעים ב-JSON.
-                4. אל תכלול קוד פייטון בתשובה.
+                משימות הדיווח האקדמי (עליך לכתוב בעברית אקדמית רהוטה וגבוהה):
+                1. כותרת ראשית: "🕵️ דוח פרופיל מוצלב והערכת מגמה - [שם התלמיד]"
+                2. ניתוח המדדים הכמותיים: הצג את ממוצעי הציונים של התלמיד מהתצפיות (score_spatial, score_views וכו').
+                3. שילוב וניתוח פרשנויות המורה: קרא בעיון את ההערות תחת 'detailed_qualitative_observations'. סכם אילו תובנות פדגוגיות וקשיים מנטליים המורה תיעד בזמן אמת (בלבול בין היטלים, קווים נסתרים, שימוש במרקרים וכו').
+                4. הצלבה מול השאלונים (Triangulation): קשר בין 'תפיסת המסוגלות' של התלמיד בשאלון לבין המציאות בכיתה. האם מה שהוא אומר על עצמו בשאלון (Pre/Post) תואם את המדדים הכמותיים ואת הפרשנויות שאתה כחוקר רשמת עליו?
+                5. דיון פדגוגי עמוק למחקר הפעולה: כיצד פרשנויות המורה והמדדים הללו מעידים על ההתקדמות של התלמיד עקב ההתערבות החינוכית שלך (למשל, המעבר לשרטוט ידני או שימוש במודל)?
+                6. אל תמציא נתונים שאינם מופיעים בטקסט, ואל תכלול קוד פייטון בתשובה.
                 """
                 
                 try:
                     response = model.generate_content(report_prompt)
                     ai_reply = response.text
                 except Exception as api_err:
-                    ai_reply = f"⚠️ שגיאה בתקשורת מול שרתי גוגל: {str(api_err)}"
+                    ai_reply = f"⚠️ שגיאה בהפקת הפרומפט מול שרתי גוגל: {str(api_err)}"
                 
+                st.subheader(f"📊 פרופיל מחקרי מוצלב ופרשנות עומק: {selected_student}")
                 st.markdown(ai_reply)
                 st.session_state.agent_messages.append({"role": "assistant", "content": ai_reply})
