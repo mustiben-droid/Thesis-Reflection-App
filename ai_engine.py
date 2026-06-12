@@ -86,7 +86,11 @@ def render_ai_agent_tab(df):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            model = get_ai_model()
+          # אתחול ישיר וקשיח בתוך הטאב למניעת בלבול והתנגשויות מודלים
+            api_key = st.secrets.get("GOOGLE_API_KEY", "")
+            import google.generativeai as genai
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-1.5-flash')
             if not model: return
 
             with st.spinner("מחשב נתונים ומפיק דוח סטטיסטי..."):
