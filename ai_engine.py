@@ -65,7 +65,7 @@ def run_smart_comparison(df, group_col, val_col):
 
 def render_ai_agent_tab(df):
     st.header("🤖 יועץ סטטיסטי ומחקרי (APA7 & SPSS)")
-
+    
     if df is None or df.empty:
         st.info("אין נתונים זמינים לניתוח.")
         return
@@ -77,71 +77,111 @@ def render_ai_agent_tab(df):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    prompt = st.chat_input("הזן בקשה לניתוח (למשל: השוואת ביצועי נתנאל בין שיטות עבודה)")
-    if not prompt:
-        return
+    if prompt := st.chat_input("הזן בקשה לניתוח (למשל: השוואת ביצועי נתנאל בין שיטות עבודה)"):
+        st.session_state.agent_messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
-    st.session_state.agent_messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+        with st.chat_message("assistant"):
+            api_key = st.secrets.get("GOOGLE_API_KEY", "")
+            if not api_key:
+                st.error("⚠️ חסר מפתח API (GOOGLE_API_KEY) ב-Secrets.")
+                return
+                
+            import google.generativeai as genai
+            genai.configure(api_key=api_key)
+            
+            # -----------------------------------------------------------
+            # מנגנון סריקה אוטומטי לאיתור המודל הנתמך בשרת שלך
+            # -----------------------------------------------------------
+            selected_model_name = None
+            try:
+                available_models = []
+                for m in genai.list_models():
+                    # בודק שהמודל תומך ביצירת תוכן טקסטואלי
+                    if 'generateContent' in m.supported_generation_methods:
+                        available_models.append(m.name)
+                
+                # עדיפות 1: לחפש גרסת flash קיימת (1.5 או 2.0)
+                for model_name in available_models:
+                    if 'flash' in model_name.lower():
+                        selected_model_name = model_name
+                        break
+                
+                # עדיפות 2: אם אין פלאש, לחפש גרסת pro
+                if not selected_model_name:
+                    for model_name in available_models:
+                        if 'pro' in model_name.lower():
+                            selected_model_name = model_name
+                            break
+                
+                # עדיפות 3: ברירת מחדל מוחלטת - המודל הטקסטואלי הראשון שזמין
+                if not selected_model_name and available_models:
+                    selected_model_name = available_models[0]
+                    
+            except Exception as list_err:
+                # גיבוי קשיח קיצוני למקרה שגם רשימת המודלים חסומה
+                selected_model_name = 'models/gemini-1.5-flash'
 
-    with st.chat_message("assistant"):
-        if not api_key:
-            st.error("⚠️ חסר מפתח API (GOOGLE_API_KEY) ב-Secrets.")
-            return
+            # הדפסת הודעת בקרה קטנה בסיידבר כדי שתדע במה המערכת בחרה
+            st.sidebar.info(f"🤖 מודל AI פעיל בטאב 5: {selected_model_name}")
+            
+            # אתחול המודל שנמצא אוטומטית כמתאים ביותר
+            model = genai.GenerativeModel(selected_model_name)
+            # -----------------------------------------------------------
 
-        model = genai.GenerativeModel('gemini-1.5-flash')
-
-        with st.spinner("מחשב נתונים ומפיק דוח סטטיסטי..."):
-            analysis_df = df.copy()
-
-            if "student_name" in df.columns:
-                mentioned_names = [name for name in df["student_name"].unique() if str(name) in prompt]
+            with st.spinner("מחשב נתונים ומפיק דוח סטטיסטי..."):
+                # סינון נתונים לפי שם הסטודנט אם מופיע בבקשה
+                analysis_df = df.copy()
+                mentioned_names = [name for name in df['student_name'].unique() if str(name) in prompt]
                 if mentioned_names:
-                    analysis_df = df[df["student_name"].isin(mentioned_names)]
+                    analysis_df = df[df['student_name'].isin(mentioned_names)]
 
-            num_cols = analysis_df.select_dtypes(include=[np.number]).columns.tolist()
-            cat_cols = [c for c in analysis_df.columns if analysis_df[c].nunique() < 10 and c not in num_cols]
+                num_cols = analysis_df.select_dtypes(include=[np.number]).columns.tolist()
+                cat_cols = [c for c in analysis_df.columns if analysis_df[c].nunique() < 10 and c not in num_cols]
+                
+                # שלב 1: הבנת הכוונה הסטטיסטית (Intent)
+                intent_prompt = f"""
+                Analyze the user request: "{prompt}"
+                Available Columns: {list(analysis_df.columns)}
+                Numerical: {num_cols}
+                Categorical: {cat_cols}
+                Return ONLY JSON:
+                {{"type": "compare"|"correlation"|"general", "group_col": "string", "val_col": "string"}}
+                """
+                
+                try:
+                    raw_intent = model.generate_content(intent_prompt).text
+                    decision = json.loads(re.search(r'\{.*\}', raw_intent, re.DOTALL).group())
+                except:
+                    decision = {"type": "general"}
 
-            intent_prompt = f"""
-            Analyze the user request: "{prompt}"
-            Available Columns: {list(analysis_df.columns)}
-            Numerical: {num_cols}
-            Categorical: {cat_cols}
-            Return ONLY JSON:
-            {{"type": "compare"|"correlation"|"general", "group_col": "string", "val_col": "string"}}
-            """
-
-            try:
-                raw_intent = model.generate_content(intent_prompt).text
-                decision = json.loads(re.search(r'\{.*\}', raw_intent, re.DOTALL).group())
-            except Exception:
-                decision = {"type": "general"}
-
-            stats_result = None
-            if decision.get("type") == "compare" and decision.get("group_col") and decision.get("val_col"):
-                stats_result = run_smart_comparison(analysis_df, decision["group_col"], decision["val_col"])
-
-            report_prompt = f"""
-            אתה יועץ סטטיסטי אקדמי בכיר. עליך לדווח על הממצאים הסטטיסטיים הבאים שנמצאו במחקר הפעולה.
-
-            נתוני החישוב האמיתיים מתוך קובץ המאסטר:
-            {json.dumps(stats_result, ensure_ascii=False)}
-
-            הנחיות קשיחות לדיווח:
-            1. אל תמציא נתונים בשום אופן. השתמש רק בערכים המופיעים ב-JSON למעלה.
-            2. פתח בטבלה מעוצבת (Markdown) תחת הכותרת "Group Statistics" (כולל עמודות: Group, N, Mean, Std. Deviation).
-            3. הצג טבלה שנייה תחת הכותרת "Test Results" במבנה SPSS (כולל ערך המבחן ו-Sig. 2-tailed).
-            4. כתוב פסקה בפורמט APA 7th Edition בעברית רהוטה המדווחת על הממצאים (p, t/U, M, SD).
-            5. אם p > 0.05, ציין שאין הבדל מובהק. אם p < 0.05, ציין שיש הבדל מובהק.
-            6. תן פרשנות פדגוגית קצרה וממוקדת על בסיס התוצאה האמיתית בלבד.
-            7. אל תכתוב קוד פייטון בתשובה.
-            """
-
-            try:
-                ai_reply = model.generate_content(report_prompt).text
-            except Exception as api_err:
-                ai_reply = f"⚠️ שגיאה בהפקת הדוח הסטטיסטי מול שרתי גוגל. פרטי השגיאה: {str(api_err)}"
-
-            st.markdown(ai_reply)
-            st.session_state.agent_messages.append({"role": "assistant", "content": ai_reply})
+                stats_result = None
+                if decision.get("type") == "compare" and decision.get("group_col") and decision.get("val_col"):
+                    stats_result = run_smart_comparison(analysis_df, decision["group_col"], decision["val_col"])
+                
+                # שלב 2: הפקת הדוח הסופי (Report)
+                report_prompt = f"""
+                אתה יועץ סטטיסטי אקדמי בכיר. עליך לדווח על הממצאים הסטטיסטיים הבאים שנמצאו במחקר הפעולה.
+                
+                נתוני החישוב האמיתיים מתוך קובץ המאסטר:
+                {json.dumps(stats_result, ensure_ascii=False)}
+                
+                הנחיות קשיחות לדיווח:
+                1. אל תמציא נתונים בשום אופן. השתמש רק בערכים המופיעים ב-JSON למעלה.
+                2. פתח בטבלה מעוצבת (Markdown) תחת הכותרת "Group Statistics" (כולל עמודות: Group, N, Mean, Std. Deviation).
+                3. הצג טבלה שנייה תחת הכותרת "Test Results" במבנה SPSS (כולל ערך המבחן ו-Sig. 2-tailed).
+                4. כתוב פסקה בפורמט APA 7th Edition בעברית רהוטה המדווחת על הממצאים (p, t/U, M, SD).
+                5. אם p > 0.05, ציין שאין הבדל מובהק. אם p < 0.05, ציין שיש הבדל מובהק.
+                6. תן פרשנות פדגוגית קצרה וממוקדת על בסיס התוצאה האמיתית בלבד.
+                7. אל תכתוב קוד פייטון בתשובה.
+                """
+                
+                try:
+                    response = model.generate_content(report_prompt)
+                    ai_reply = response.text
+                except Exception as api_err:
+                    ai_reply = f"⚠️ שגיאה בהפקת הדוח הסטטיסטי מול שרתי גוגל. פרטי השגיאה: {str(api_err)}"
+                
+                st.markdown(ai_reply)
+                st.session_state.agent_messages.append({"role": "assistant", "content": ai_reply})
