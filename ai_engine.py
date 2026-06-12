@@ -86,17 +86,19 @@ def render_ai_agent_tab(df):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-          # אתחול ישיר וקשיח בתוך הטאב למניעת בלבול והתנגשויות מודלים
+            # הגדרה ישירה, קשיחה ומקומית של המודל האחיד
             api_key = st.secrets.get("GOOGLE_API_KEY", "")
+            if not api_key:
+                st.error("⚠️ חסר מפתח API (GOOGLE_API_KEY) ב-Secrets.")
+                return
+                
             import google.generativeai as genai
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-1.5-flash')
-            if not model: return
 
             with st.spinner("מחשב נתונים ומפיק דוח סטטיסטי..."):
                 # סינון נתונים לפי שם הסטודנט אם מופיע בבקשה
                 analysis_df = df.copy()
-                # זיהוי שמות עבריים בתוך הפרומפט
                 mentioned_names = [name for name in df['student_name'].unique() if str(name) in prompt]
                 if mentioned_names:
                     analysis_df = df[df['student_name'].isin(mentioned_names)]
@@ -124,6 +126,26 @@ def render_ai_agent_tab(df):
                 if decision.get("type") == "compare" and decision.get("group_col") and decision.get("val_col"):
                     stats_result = run_smart_comparison(analysis_df, decision["group_col"], decision["val_col"])
                 
+                # שלב 2: הפקת הדוח הסופי (Report)
+                report_prompt = f"""
+                אתה יועץ סטטיסטי אקדמי. עליך לדווח על הממצאים הבאים שנמצאו בחישוב המערכת.
+                
+                נתוני החישוב האמיתיים:
+                {json.dumps(stats_result, ensure_ascii=False)}
+                
+                הנחיות קשיחות:
+                1. אל תמציא נתונים. השתמש רק בערכים המופיעים ב-JSON למעלה.
+                2. פתח בטבלה מעוצבת (Markdown) תחת הכותרת "Group Statistics" (כולל עמודות: Group, N, Mean, Std. Deviation).
+                3. הצג טבלה שנייה תחת הכותרת "Test Results" במבנה SPSS (כולל ערך המבחן ו-Sig. 2-tailed).
+                4. כתוב פסקה בפורמט APA 7th Edition בעברית רהוטה המדווחת על הממצאים (p, t/U, M, SD).
+                5. אם p > 0.05, ציין שאין הבדל מובהק. אם p < 0.05, ציין שיש הבדל מובהק.
+                6. תן פרשנות פדגוגית קצרה על בסיס התוצאה האמיתית בלבד.
+                7. אל תכתוב קוד פייטון בתשובה.
+                """
+                
+                ai_reply = model.generate_content(report_prompt).text
+                st.markdown(ai_reply)
+                st.session_state.agent_messages.append({"role": "assistant", "content": ai_reply})                
                 # שלב 2: הפקת הדוח הסופי (Report)
                 # שימוש בהנחיות קשיחות למניעת נתונים מדומים
                 report_prompt = f"""
