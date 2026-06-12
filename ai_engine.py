@@ -77,7 +77,7 @@ def render_ai_agent_tab(df):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if prompt := st.chat_input("הזן בקשה לניתוח (למשל: השוואת ביצועי נתנאל בין שיטות עבודה)"):
+    if prompt := st.chat_input("הזן בקשה לניתוח (למשל: השוואת תפיסה מרחבית בין שיטות עבודה)"):
         st.session_state.agent_messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -91,97 +91,108 @@ def render_ai_agent_tab(df):
             import google.generativeai as genai
             genai.configure(api_key=api_key)
             
-            # -----------------------------------------------------------
-            # מנגנון סריקה אוטומטי לאיתור המודל הנתמך בשרת שלך
-            # -----------------------------------------------------------
+            # סריקה דינמית למציאת מודל פעיל בשרת
             selected_model_name = None
             try:
-                available_models = []
-                for m in genai.list_models():
-                    # בודק שהמודל תומך ביצירת תוכן טקסטואלי
-                    if 'generateContent' in m.supported_generation_methods:
-                        available_models.append(m.name)
-                
-                # עדיפות 1: לחפש גרסת flash קיימת (1.5 או 2.0)
-                for model_name in available_models:
-                    if 'flash' in model_name.lower():
-                        selected_model_name = model_name
-                        break
-                
-                # עדיפות 2: אם אין פלאש, לחפש גרסת pro
-                if not selected_model_name:
-                    for model_name in available_models:
-                        if 'pro' in model_name.lower():
-                            selected_model_name = model_name
-                            break
-                
-                # עדיפות 3: ברירת מחדל מוחלטת - המודל הטקסטואלי הראשון שזמין
-                if not selected_model_name and available_models:
-                    selected_model_name = available_models[0]
-                    
-            except Exception as list_err:
-                # גיבוי קשיח קיצוני למקרה שגם רשימת המודלים חסומה
+                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                for m_name in available_models:
+                    if 'flash' in m_name.lower(): selected_model_name = m_name; break
+                if not selected_model_name and available_models: selected_model_name = available_models[0]
+            except:
                 selected_model_name = 'models/gemini-1.5-flash'
 
-            # הדפסת הודעת בקרה קטנה בסיידבר כדי שתדע במה המערכת בחרה
-            st.sidebar.info(f"🤖 מודל AI פעיל בטאב 5: {selected_model_name}")
-            
-            # אתחול המודל שנמצא אוטומטית כמתאים ביותר
             model = genai.GenerativeModel(selected_model_name)
-            # -----------------------------------------------------------
 
             with st.spinner("מחשב נתונים ומפיק דוח סטטיסטי..."):
-                # סינון נתונים לפי שם הסטודנט אם מופיע בבקשה
                 analysis_df = df.copy()
+                
+                # סינון לפי שם סטודנט אם הוזכר בשאלה
                 mentioned_names = [name for name in df['student_name'].unique() if str(name) in prompt]
                 if mentioned_names:
                     analysis_df = df[df['student_name'].isin(mentioned_names)]
 
                 num_cols = analysis_df.select_dtypes(include=[np.number]).columns.tolist()
-                cat_cols = [c for c in analysis_df.columns if analysis_df[c].nunique() < 10 and c not in num_cols]
                 
-                # שלב 1: הבנת הכוונה הסטטיסטית (Intent)
+                # שלב 1: זיהוי כוונת הניתוח
                 intent_prompt = f"""
                 Analyze the user request: "{prompt}"
-                Available Columns: {list(analysis_df.columns)}
-                Numerical: {num_cols}
-                Categorical: {cat_cols}
-                Return ONLY JSON:
+                Available Columns in Excel: {list(analysis_df.columns)}
+                Return ONLY valid JSON:
                 {{"type": "compare"|"correlation"|"general", "group_col": "string", "val_col": "string"}}
                 """
                 
+                decision = {"type": "general"}
                 try:
                     raw_intent = model.generate_content(intent_prompt).text
-                    decision = json.loads(re.search(r'\{.*\}', raw_intent, re.DOTALL).group())
+                    match = re.search(r'\{.*\}', raw_intent, re.DOTALL)
+                    if match:
+                        decision = json.loads(match.group())
                 except:
-                    decision = {"type": "general"}
+                    pass
 
+                # -----------------------------------------------------------
+                # מיפוי קשיח וחכם לפי מבנה האקסל האמיתי שלך!
+                # -----------------------------------------------------------
+                group_col = decision.get("group_col")
+                val_col = decision.get("val_col")
+                
+                # הגנה קשיחה על עמודת הקבוצות (שיטת עבודה)
+                if not group_col or group_col not in analysis_df.columns:
+                    if 'work_method' in analysis_df.columns:
+                        group_col = 'work_method'
+                    elif 'physical_model' in analysis_df.columns:
+                        group_col = 'physical_model'
+                    else:
+                        group_col = 'work_method' if 'work_method' in analysis_df.columns else None
+
+                # הגנה קשיחה על עמודת המדד המספרי (ברירת מחדל: תפיסה מרחבית)
+                if not val_col or val_col not in analysis_df.columns:
+                    # מנסה לזהות מה המשתמש ביקש בעברית ולהתאים לעמודה הנכונה
+                    if 'הטלה' in prompt or 'ייצוג' in prompt: val_col = 'score_proj'
+                    elif 'מעבר' in prompt or 'היטל' in prompt: val_col = 'score_views'
+                    elif 'מודל' in prompt or 'תלת' in prompt: val_col = 'score_model'
+                    elif 'פרופורצ' in prompt: val_col = 'score_conv'
+                    else: val_col = 'score_spatial' # ברירת מחדל תפיסה מרחבית
+
+                # הרצת החישוב הסטטיסטי האמיתי
                 stats_result = None
-                if decision.get("type") == "compare" and decision.get("group_col") and decision.get("val_col"):
-                    stats_result = run_smart_comparison(analysis_df, decision["group_col"], decision["val_col"])
+                if group_col and val_col and group_col in analysis_df.columns and val_col in analysis_df.columns:
+                    try:
+                        # ניקוי ערכים ריקים או שורות פגומות לפני הניתוח
+                        clean_df = analysis_df.dropna(subset=[group_col, val_col])
+                        stats_result = run_smart_comparison(clean_df, group_col, val_col)
+                    except Exception as calc_err:
+                        stats_result = {"error": f"תקלה בחישוב הסטטיסטי: {str(calc_err)}"}
+                else:
+                    stats_result = {"error": f"לא נמצאו עמודות מתאימות להשוואה באקסל. נמצאו: group={group_col}, val={val_col}"}
                 
-                # שלב 2: הפקת הדוח הסופי (Report)
+                # שלב 2: הפקת הדוח הסופי על בסיס תוצאות האמת
                 report_prompt = f"""
-                אתה יועץ סטטיסטי אקדמי בכיר. עליך לדווח על הממצאים הסטטיסטיים הבאים שנמצאו במחקר הפעולה.
+                אתה יועץ סטטיסטי אקדמי בכיר ומנוסה. עליך לכתוב דוח מחקר מקיף ומקצועי על הממצאים הסטטיסטיים הבאים.
                 
-                נתוני החישוב האמיתיים מתוך קובץ המאסטר:
+                נתוני החישוב האמיתיים שהופקו מקובץ המאסטר:
                 {json.dumps(stats_result, ensure_ascii=False)}
                 
+                עמודת הקבוצות שנבדקה: {group_col}
+                עמודת המדד שנבדקה: {val_col}
+                
                 הנחיות קשיחות לדיווח:
-                1. אל תמציא נתונים בשום אופן. השתמש רק בערכים המופיעים ב-JSON למעלה.
-                2. פתח בטבלה מעוצבת (Markdown) תחת הכותרת "Group Statistics" (כולל עמודות: Group, N, Mean, Std. Deviation).
-                3. הצג טבלה שנייה תחת הכותרת "Test Results" במבנה SPSS (כולל ערך המבחן ו-Sig. 2-tailed).
-                4. כתוב פסקה בפורמט APA 7th Edition בעברית רהוטה המדווחת על הממצאים (p, t/U, M, SD).
-                5. אם p > 0.05, ציין שאין הבדל מובהק. אם p < 0.05, ציין שיש הבדל מובהק.
-                6. תן פרשנות פדגוגית קצרה וממוקדת על בסיס התוצאה האמיתית בלבד.
-                7. אל תכתוב קוד פייטון בתשובה.
+                1. אם יש הודעת שגיאה ב-JSON (כמו חוסר בתצפיות או עמודה חסרה), הסבר למשתמש בשפה אקדמית אדיבה ומפורשת מה חסר ואיך לתקן (למשל: לבצע סנכרון נתונים או להוסיף תצפיות לשיטת העבודה השנייה), ואל תבנה טבלאות ריקות עם הערות 'לא סופק'.
+                2. אם יש נתונים מספריים אמיתיים ב-JSON:
+                   - פתח בטבלה מעוצבת (Markdown) תחת הכותרת "Group Statistics" (עמודות: Group, N, Mean, Std. Deviation).
+                   - הצג טבלה שנייה תחת הכותרת "Test Results" במבנה SPSS (ערך המבחן ו-Sig. 2-tailed).
+                   - כתוב פסקה בפורמט APA 7th Edition בעברית רהוטה המדווחת על הממצאים (p, t/U, M, SD).
+                   - קבע מובהקות: p > 0.05 (אין הבדל מובהק) או p < 0.05 (יש הבדל מובהק).
+                   - ספק פרשנות פדגוגית מעמיקה ומקצועית המקשרת בין התוצאות לבין תהליכי הלמידה של שרטוט טכני ותפיסה מרחבית במחקר הפעולה שלך (למשל, היתרונות של שרטוט ידני לעומת מודל תלת-ממדי מודפס).
+                3. בשום אופן אל תמציא מספרים או נתונים שאינם מופיעים ב-JSON.
+                4. אל תכלול קוד פייטון בתשובה.
                 """
                 
                 try:
                     response = model.generate_content(report_prompt)
                     ai_reply = response.text
                 except Exception as api_err:
-                    ai_reply = f"⚠️ שגיאה בהפקת הדוח הסטטיסטי מול שרתי גוגל. פרטי השגיאה: {str(api_err)}"
+                    ai_reply = f"⚠️ שגיאה בתקשורת מול שרתי גוגל: {str(api_err)}"
                 
                 st.markdown(ai_reply)
                 st.session_state.agent_messages.append({"role": "assistant", "content": ai_reply})
