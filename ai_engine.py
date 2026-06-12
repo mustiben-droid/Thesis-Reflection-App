@@ -6,7 +6,7 @@ import json
 
 def render_ai_agent_tab():
     """
-    טאב 5: מעבדת מחקר וסוכן חכם לריבוי קבצים (Triangulation Lab) - גרסה חסינת שגיאות נומריות
+    טאב 5: מעבדת מחקר וסוכן חכם לריבוי קבצים (Triangulation Lab) - גרסה נקייה ויציבה
     """
     st.header("🤖 סוכן חכם - הצלבת נתונים מרובים (Triangulation Lab)")
     st.markdown("---")
@@ -28,13 +28,11 @@ def render_ai_agent_tab():
     if uploaded_files:
         for file in uploaded_files:
             try:
-                # קריאה ראשונית גמישה כטקסטים
                 if file.name.endswith('.csv'):
                     test_df = pd.read_csv(file, header=None).fillna("")
                 else:
                     test_df = pd.read_excel(file, header=None).fillna("")
                 
-                # תיקון קריטי: המרה בטוחה של כל הערכים למחרוזות טקסט (מונע את שגיאת ה-Float)
                 all_text_list = [str(x) for x in test_df.values.flatten() if pd.notna(x)]
                 combined_text = " ".join(all_text_list).lower()
                 
@@ -52,7 +50,6 @@ def render_ai_agent_tab():
                     file.seek(0)
                     header_line = 0
                     for idx, row in test_df.iterrows():
-                        # תיקון קריטי שני: המרה בטוחה של השורה הספציפית לטקסט
                         row_items = [str(item) for item in row.tolist() if pd.notna(item)]
                         row_str = " ".join(row_items).lower()
                         if 'name' in row_str or 'q1' in row_str:
@@ -228,4 +225,16 @@ def render_ai_agent_tab():
                 1. כותרת ראשית: "🕵️ דוח פרופיל מוצלב והערכת מגמה - [שם התלמיד]"
                 2. ניתוח המדדים הכמותיים: הצג את ממוצעי הציונים של התלמיד מהתצפיות (score_spatial, score_views וכו').
                 3. שילוב וניתוח פרשנויות המורה: קרא בעיון את ההערות תחת 'detailed_qualitative_observations'. סכם אילו תובנות פדגוגיות וקשיים מנטליים המורה תיעד בזמן אמת (בלבול בין היטלים, קווים נסתרים, שימוש במרקרים וכו').
-                4. הצלבה מול השאלונים (Triangulation): קשר בין 'תפיסת המסוגלות' של התלמיד בשאלון לבין המציאות בכיתה. האם מה שהוא אומר על עצמו בשאלון (Pre/Post) תואם את המדדים הכמותיים ואת הפרשנויות שאתה כח
+                4. הצלבה מול השאלונים (Triangulation): קשר בין 'תפיסת המסוגלות' של התלמיד בשאלון לבין המציאות בכיתה. האם מה שהוא אומר על עצמו בשאלון (Pre/Post) תואם את המדדים הכמותיים ואת הפרשנויות שאתה כחוקר רשמת עליו?
+                5. דיון פדגוגי עמוק למחקר הפעולה: כיצד פרשנויות המורה והמדדים הללו מעידים על ההתקדמות של התלמיד עקב ההתערבות החינוכית שלך (למשל, המעבר לשרטוט ידני או שימוש במודל)?
+                6. אל תמציא נתונים שאינם מופיעים בטקסט, ואל תכלול קוד פייטון בתשובה.
+                """
+                
+                try:
+                    response = model.generate_content(report_prompt)
+                    ai_reply = response.text
+                except Exception as api_err:
+                    ai_reply = f"⚠️ שגיאה בהפקת הפרומפט מול שרתי גוגל: {str(api_err)}"
+                
+                st.markdown(ai_reply)
+                st.session_state.agent_messages.append({"role": "assistant", "content": ai_reply})
