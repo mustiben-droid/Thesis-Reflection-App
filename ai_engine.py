@@ -91,7 +91,7 @@ def render_ai_agent_tab(df):
             st.error("⚠️ חסר מפתח API (GOOGLE_API_KEY) ב-Secrets.")
             return
 
-        model = genai.GenerativeModel(MODEL_NAME)
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         with st.spinner("מחשב נתונים ומפיק דוח סטטיסטי..."):
             analysis_df = df.copy()
