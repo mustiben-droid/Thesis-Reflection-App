@@ -62,7 +62,6 @@ def run_smart_comparison(df, group_col, val_col):
 
     return res
 
-
 def render_ai_agent_tab(df):
     st.header("🤖 יועץ סטטיסטי ומחקרי (APA7 & SPSS)")
     
@@ -104,62 +103,40 @@ def render_ai_agent_tab(df):
             model = genai.GenerativeModel(selected_model_name)
 
             with st.spinner("מחשב נתונים ומפיק דוח סטטיסטי..."):
+                # יצירת עותק נקי וסינון שורות ריקות לחלוטין באקסל
                 analysis_df = df.copy()
+                if 'student_name' in analysis_df.columns:
+                    analysis_df['student_name'] = analysis_df['student_name'].astype(str).str.strip()
                 
-                # סינון לפי שם סטודנט אם הוזכר בשאלה
-                mentioned_names = [name for name in df['student_name'].unique() if str(name) in prompt]
+                # תיקון מנגנון סינון השמות - סינון יתבצע רק אם המילה היא שם מדויק באקסל
+                words_in_prompt = [w.strip() for w in re.split(r'[\s,.\s]+', prompt)]
+                valid_names = [name for name in analysis_df['student_name'].dropna().unique() if name not in ['nan', 'None', '']]
+                
+                mentioned_names = [name for name in valid_names if name in words_in_prompt]
                 if mentioned_names:
-                    analysis_df = df[df['student_name'].isin(mentioned_names)]
-
-                num_cols = analysis_df.select_dtypes(include=[np.number]).columns.tolist()
-                
-                # שלב 1: זיהוי כוונת הניתוח
-                intent_prompt = f"""
-                Analyze the user request: "{prompt}"
-                Available Columns in Excel: {list(analysis_df.columns)}
-                Return ONLY valid JSON:
-                {{"type": "compare"|"correlation"|"general", "group_col": "string", "val_col": "string"}}
-                """
-                
-                decision = {"type": "general"}
-                try:
-                    raw_intent = model.generate_content(intent_prompt).text
-                    match = re.search(r'\{.*\}', raw_intent, re.DOTALL)
-                    if match:
-                        decision = json.loads(match.group())
-                except:
-                    pass
+                    analysis_df = analysis_df[analysis_df['student_name'].isin(mentioned_names)]
 
                 # -----------------------------------------------------------
                 # מיפוי קשיח וחכם לפי מבנה האקסל האמיתי שלך!
                 # -----------------------------------------------------------
-                group_col = decision.get("group_col")
-                val_col = decision.get("val_col")
+                group_col = 'work_method' # מוגדר קשיח כברירת מחדל לאקסל שלך
+                val_col = 'score_spatial'  # מוגדר קשיח כברירת מחדל לאקסל שלך
                 
-                # הגנה קשיחה על עמודת הקבוצות (שיטת עבודה)
-                if not group_col or group_col not in analysis_df.columns:
-                    if 'work_method' in analysis_df.columns:
-                        group_col = 'work_method'
-                    elif 'physical_model' in analysis_df.columns:
-                        group_col = 'physical_model'
-                    else:
-                        group_col = 'work_method' if 'work_method' in analysis_df.columns else None
-
-                # הגנה קשיחה על עמודת המדד המספרי (ברירת מחדל: תפיסה מרחבית)
-                if not val_col or val_col not in analysis_df.columns:
-                    # מנסה לזהות מה המשתמש ביקש בעברית ולהתאים לעמודה הנכונה
-                    if 'הטלה' in prompt or 'ייצוג' in prompt: val_col = 'score_proj'
-                    elif 'מעבר' in prompt or 'היטל' in prompt: val_col = 'score_views'
-                    elif 'מודל' in prompt or 'תלת' in prompt: val_col = 'score_model'
-                    elif 'פרופורצ' in prompt: val_col = 'score_conv'
-                    else: val_col = 'score_spatial' # ברירת מחדל תפיסה מרחבית
+                # זיהוי מבוסס מילים בעברית מתוך הפרומפט כדי להחליף את המדד המספרי במידת הצורך
+                if 'הטלה' in prompt or 'ייצוג' in prompt: val_col = 'score_proj'
+                elif 'מעבר' in prompt or 'היטל' in prompt: val_col = 'score_views'
+                elif 'מודל' in prompt or 'תלת' in prompt: val_col = 'score_model'
+                elif 'פרופורצ' in prompt: val_col = 'score_conv'
 
                 # הרצת החישוב הסטטיסטי האמיתי
                 stats_result = None
-                if group_col and val_col and group_col in analysis_df.columns and val_col in analysis_df.columns:
+                if group_col in analysis_df.columns and val_col in analysis_df.columns:
                     try:
-                        # ניקוי ערכים ריקים או שורות פגומות לפני הניתוח
+                        # הסרת ערכים חסרים ספציפית בעמודות הניתוח
                         clean_df = analysis_df.dropna(subset=[group_col, val_col])
+                        # סינון ערכים ריקים או טקסטים ריקים שאינם קבוצה תקפה
+                        clean_df = clean_df[clean_df[group_col].astype(str).str.strip() != '']
+                        
                         stats_result = run_smart_comparison(clean_df, group_col, val_col)
                     except Exception as calc_err:
                         stats_result = {"error": f"תקלה בחישוב הסטטיסטי: {str(calc_err)}"}
@@ -183,7 +160,7 @@ def render_ai_agent_tab(df):
                    - הצג טבלה שנייה תחת הכותרת "Test Results" במבנה SPSS (ערך המבחן ו-Sig. 2-tailed).
                    - כתוב פסקה בפורמט APA 7th Edition בעברית רהוטה המדווחת על הממצאים (p, t/U, M, SD).
                    - קבע מובהקות: p > 0.05 (אין הבדל מובהק) או p < 0.05 (יש הבדל מובהק).
-                   - ספק פרשנות פדגוגית מעמיקה ומקצועית המקשרת בין התוצאות לבין תהליכי הלמידה של שרטוט טכני ותפיסה מרחבית במחקר הפעולה שלך (למשל, היתרונות של שרטוט ידני לעומת מודל תלת-ממדי מודפס).
+                   - ספק פרשנות פדגוגית מעמיקה ומקצועית המקשרת בין התוצאות לבין תהליכי הלמידה של שרטוט טכני ותפיסה מרחבית במחקר הפעולה שלך.
                 3. בשום אופן אל תמציא מספרים או נתונים שאינם מופיעים ב-JSON.
                 4. אל תכלול קוד פייטון בתשובה.
                 """
