@@ -157,7 +157,7 @@ def call_gemini(prompt, audio_bytes=None):
         api_key = st.secrets.get("GOOGLE_API_KEY")
         if not api_key: return "שגיאה: חסר API Key"
 
-        model_id = "gemini-flash-latest" 
+        model_id = "gemini-1.5-flash" 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
         
         headers = {'Content-Type': 'application/json'}
