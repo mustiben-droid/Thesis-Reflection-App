@@ -693,7 +693,7 @@ with tab3:
 with tab4: 
     render_tab_interview(svc, full_df)
 with tab5:
-    render_ai_agent_tab(full_df)
+    render_ai_agent_tab()
 
 # סיידבר - כפתורי בקרה
 st.sidebar.markdown("---")
