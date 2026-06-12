@@ -86,7 +86,7 @@ def render_ai_agent_tab(df):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            # הגדרה ישירה, קשיחה ומקומית של המודל האחיד
+            # פנייה ישירה למודל 2.0 המעודכן שמצטיין בניתוח נתונים ואקסל
             api_key = st.secrets.get("GOOGLE_API_KEY", "")
             if not api_key:
                 st.error("⚠️ חסר מפתח API (GOOGLE_API_KEY) ב-Secrets.")
@@ -94,7 +94,9 @@ def render_ai_agent_tab(df):
                 
             import google.generativeai as genai
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            # שימוש בגרסה 2.0 החדשה
+            model = genai.GenerativeModel('gemini-2.0-flash')
 
             with st.spinner("מחשב נתונים ומפיק דוח סטטיסטי..."):
                 # סינון נתונים לפי שם הסטודנט אם מופיע בבקשה
@@ -126,6 +128,32 @@ def render_ai_agent_tab(df):
                 if decision.get("type") == "compare" and decision.get("group_col") and decision.get("val_col"):
                     stats_result = run_smart_comparison(analysis_df, decision["group_col"], decision["val_col"])
                 
+                # שלב 2: הפקת הדוח הסופי (Report)
+                report_prompt = f"""
+                אתה יועץ סטטיסטי אקדמי בכיר. עליך לדווח על הממצאים הסטטיסטיים הבאים שנמצאו במחקר הפעולה.
+                
+                נתוני החישוב האמיתיים מתוך קובץ המאסטר:
+                {json.dumps(stats_result, ensure_ascii=False)}
+                
+                הנחיות קשיחות לדיווח:
+                1. אל תמציא נתונים בשום אופן. השתמש רק בערכים המופיעים ב-JSON למעלה.
+                2. פתח בטבלה מעוצבת (Markdown) תחת הכותרת "Group Statistics" (כולל עמודות: Group, N, Mean, Std. Deviation).
+                3. הצג טבלה שנייה תחת הכותרת "Test Results" במבנה SPSS (כולל ערך המבחן ו-Sig. 2-tailed).
+                4. כתוב פסקה בפורמט APA 7th Edition בעברית רהוטה המדווחת על הממצאים (p, t/U, M, SD).
+                5. אם p > 0.05, ציין שאין הבדל מובהק. אם p < 0.05, ציין שיש הבדל מובהק.
+                6. תן פרשנות פדגוגית קצרה וממוקדת על בסיס התוצאה האמיתית בלבד.
+                7. אל תכתוב קוד פייטון בתשובה.
+                """
+                
+                # שליחת הבקשה בצורה מוגנת
+                try:
+                    response = model.generate_content(report_prompt)
+                    ai_reply = response.text
+                except Exception as api_err:
+                    ai_reply = f"⚠️ שגיאה בהפקת הדוח הסטטיסטי מול שרתי גוגל. פרטי השגיאה: {str(api_err)}"
+                
+                st.markdown(ai_reply)
+                st.session_state.agent_messages.append({"role": "assistant", "content": ai_reply})                
                 # שלב 2: הפקת הדוח הסופי (Report)
                 report_prompt = f"""
                 אתה יועץ סטטיסטי אקדמי. עליך לדווח על הממצאים הבאים שנמצאו בחישוב המערכת.
