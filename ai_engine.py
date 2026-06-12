@@ -6,13 +6,12 @@ import json
 
 def render_ai_agent_tab():
     """
-    טאב 5: מעבדת מחקר וסוכן חכם לריבוי קבצים (Triangulation Lab)
-    שים לב: הפונקציה כבר לא מקבלת משתנים בסוגריים! היא טוענת הכל מהמחשב.
+    טאב 5: מעבדת מחקר וסוכן חכם לריבוי קבצים (Triangulation Lab) - גרסה פתוחה
     """
     st.header("🤖 סוכן חכם - הצלבת נתונים מרובים (Triangulation Lab)")
     st.subheader("📋 שלב א': טעינת קבצי המחקר מהמחשב")
     
-    # תיבת העלאה אחת גדולה שקולטת כמה קבצים שתרצה בבת אחת
+    # תיבת העלאה
     uploaded_files = st.file_uploader(
         "גרור והשלך לכאן את כל קבצי המחקר שלך (מאסטר, שאלונים, מבחנים וכו')", 
         type=["csv", "xlsx"], 
@@ -26,7 +25,6 @@ def render_ai_agent_tab():
     if uploaded_files:
         for file in uploaded_files:
             try:
-                # קריאת הקובץ לפי הסיומת
                 if file.name.endswith('.csv'):
                     current_df = pd.read_csv(file)
                 else:
@@ -46,27 +44,30 @@ def render_ai_agent_tab():
                         df_quest = pd.read_excel(file, header=1)
                     st.success(f"✅ קובץ השאלונים (Pre/Post) זוהה ונטען: {file.name}")
                 
-                # 3. כל קובץ אחר (ציוני בגרות, מבחנים וכו')
+                # 3. קבצים אחרים
                 else:
                     other_dfs[file.name] = current_df
                     st.info(f"📁 נטען קובץ נתונים נוסף: {file.name}")
                     
             except Exception as e:
                 st.error(f"שגיאה בטעינת הקובץ {file.name}: {e}")
-                
-    # עצירה: אם המשתמש עוד לא העלה את שני קבצי הבסיס, לא מראים את הצ'אט
-    if df_master is None or df_quest is None:
-        st.info("💡 המערכת מוכנה. אנא העלה את קובץ המאסטר וקובץ השאלונים יחד כדי להתחיל בניתוח המוצלב.")
-        return
 
-    # פונקציית עזר פנימית לניקוי והשוואת שמות (מסירה רווחים, נקודות וסימנים)
+    # הודעת סטטוס קטנה (כבר לא חוסמת את המשך ריצת הדף!)
+    if df_master is None or df_quest is None:
+        st.warning("💡 שים לב: כדי לבצע קורלציה והצלבה מלאה, מומלץ להעלות את קובץ המאסטר וקובץ השאלונים בתיבה למעלה.")
+
+    # פונקציית עזר פנימית לניקוי שמות
     def clean_name_string(val):
         if pd.isna(val): return ""
         val = str(val).strip().lower()
         val = re.sub(r'[^\w\s]', '', val)
         return val
 
-    # ניהול היסטוריית ההודעות בצ'אט
+    # -----------------------------------------------------------
+    # 💬 חלק הצ'אט וההתכתבות - מופיע תמיד על המסך!
+    # -----------------------------------------------------------
+    st.subheader("💬 התכתבות עם הסוכן הסטטיסטי")
+
     if "agent_messages" not in st.session_state:
         st.session_state.agent_messages = []
 
@@ -74,13 +75,20 @@ def render_ai_agent_tab():
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # תיבת הקלט של הצ'אט
+    # תיבת הקלט פתוחה וזמינה לשימוש מהרגע הראשון
     if prompt := st.chat_input("שאל על תלמיד (למשל: נתח את הפרופיל והפרשנויות של עילאי)"):
         st.session_state.agent_messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
+            # הגנה: אם המשתמש מנסה לשאול שאלות מורכבות בלי להעלות קבצים
+            if df_master is None or df_quest is None:
+                ai_reply = "⚠️ לא ניתן לבצע ניתוח או הצלבה מכיוון שלא העלית את קבצי המחקר (מאסטר ושאלונים) בתיבת ההעלאה בראש העמוד. אנא גרור את הקבצים ונסה שוב."
+                st.warning(ai_reply)
+                st.session_state.agent_messages.append({"role": "assistant", "content": ai_reply})
+                return
+
             api_key = st.secrets.get("GOOGLE_API_KEY", "")
             if not api_key:
                 st.error("⚠️ חסר מפתח API ב-Secrets.")
@@ -92,16 +100,16 @@ def render_ai_agent_tab():
 
             with st.spinner("מצליב נתונים ומנתח את קבצי המחקר..."):
                 
-                # ניקוי שמות בקובץ המאסטר
+                # ניקוי שמות במאסטר
                 master_clean = df_master.copy()
                 master_clean['name_key'] = master_clean['student_name'].apply(clean_name_string)
                 
-                # ניקוי שמות בקובץ השאלונים
+                # ניקוי שמות בשאלונים
                 quest_col_name = 'name' if 'name' in df_quest.columns else df_quest.columns[0]
                 quest_clean = df_quest.copy()
                 quest_clean['name_key'] = quest_clean[quest_col_name].apply(clean_name_string)
 
-                # זיהוי אוטומטי של שם התלמיד מתוך הפרומפט שכתבת
+                # זיהוי אוטומטי של שם התלמיד מתוך הפרומפט
                 selected_student = None
                 all_master_names = master_clean['student_name'].dropna().unique()
                 for name in all_master_names:
@@ -122,18 +130,14 @@ def render_ai_agent_tab():
 
                 student_key = clean_name_string(selected_student)
                 
-                # -----------------------------------------------------------
-                # 📊 שליפת נתונים מקובץ 1: מאסטר תצפיות (כמותי + איכותני)
-                # -----------------------------------------------------------
+                # 📊 שליפת נתונים מקובץ 1: מאסטר
                 student_observations = master_clean[master_clean['name_key'] == student_key]
                 master_summary = {}
                 
                 if not student_observations.empty:
-                    # ממוצעי מדדים כמותיים
                     num_data = student_observations.select_dtypes(include=[np.number])
                     means = num_data.mean().round(2).to_dict()
                     
-                    # איסוף היסטוריית הפרשנויות והקשיים מכל השיעורים
                     raw_interpretations = []
                     for idx, row in student_observations.iterrows():
                         date_str = str(row.get('date', 'תאריך חסר'))
@@ -152,9 +156,7 @@ def render_ai_agent_tab():
                 else:
                     master_summary = {"status": "לא נמצאו תצפיות עבור תלמיד זה במאסטר"}
 
-                # -----------------------------------------------------------
-                # 📝 שליפת נתונים מקובץ 2: שאלוני עמדות ומסוגלות (Pre/Post)
-                # -----------------------------------------------------------
+                # 📝 שליפת נתונים מקובץ 2: שאלונים
                 student_questionnaire = quest_clean[quest_clean['name_key'].str.contains(student_key, na=False)]
                 quest_summary = {}
                 
@@ -172,12 +174,9 @@ def render_ai_agent_tab():
                 else:
                     quest_summary = {"status": "התלמיד לא נמצא בקובץ שאלוני ה-Pre/Post"}
 
-                # -----------------------------------------------------------
-                # 📁 שליפת נתונים מקבצים נוספים במידה והועלו (אופציונלי)
-                # -----------------------------------------------------------
+                # 📁 שליפת נתונים מקבצים נוספים
                 other_summary = {}
                 for f_name, other_df in other_dfs.items():
-                    # ניסיון לחפש את התלמיד גם בקבצים האחרים אם יש שם עמודת שם
                     possible_name_cols = [c for c in other_df.columns if 'name' in c.lower() or 'שם' in c]
                     if possible_name_cols:
                         other_clean = other_df.copy()
@@ -186,7 +185,6 @@ def render_ai_agent_tab():
                         if not sub_row.empty:
                             other_summary[f_name] = sub_row.iloc[0].drop(['name_key', possible_name_cols[0]], errors='ignore').to_dict()
 
-                # הרכבת תיק תלמיד דיגיטלי מושלם
                 student_profile_json = {
                     "student_name": str(selected_student),
                     "observations_master_data": master_summary,
@@ -194,7 +192,7 @@ def render_ai_agent_tab():
                     "additional_files_data": other_summary
                 }
                 
-                # הפרומפט האקדמי ל-AI
+                # הפרומפט האקדמי
                 report_prompt = f"""
                 אתה יועץ סטטיסטי ומחקרי אקדמי בכיר המלווה תזות בחינוך ומחקר פעולה פדגוגי.
                 עליך להפיק דוח פרופיל מוצלב עמוק (Triangulation Report) המשלב בין המדדים הכמותיים לפרשנות האיכותנית של החוקר.
@@ -207,7 +205,7 @@ def render_ai_agent_tab():
                 2. ניתוח המדדים הכמותיים: הצג את ממוצעי הציונים של התלמיד מהתצפיות (score_spatial, score_views וכו').
                 3. שילוב וניתוח פרשנויות המורה: קרא בעיון את ההערות תחת 'detailed_qualitative_observations'. סכם אילו תובנות פדגוגיות וקשיים מנטליים המורה תיעד בזמן אמת (בלבול בין היטלים, קווים נסתרים, שימוש במרקרים וכו').
                 4. הצלבה מול השאלונים (Triangulation): קשר בין 'תפיסת המסוגלות' של התלמיד בשאלון לבין המציאות בכיתה. האם מה שהוא אומר על עצמו בשאלון (Pre/Post) תואם את המדדים הכמותיים ואת הפרשנויות שאתה כחוקר רשמת עליו?
-                5. דיון פדגוגי עמוק למחקר הפעולה: כיצד פרשנויות המורה והמדדים הללו מעידים על ההתקדמות של התלמיד עקב ההתערבות החינוכית שלך (למשל, המעבר לשרטוט ידני או שימוש במודל)?
+                5. דיון פדגוגי עמוק למחקר הפעולה: כיצד פרשנויות המורה והמדדים הללו מעידים על ההתקדמות של התלמיד עקב ההתערבות החינוכית שלך (למשל, המעבר לשרטוט ידני או שימוש במותל)?
                 6. אל תמציא נתונים שאינם מופיעים בטקסט, ואל תכלול קוד פייטון בתשובה.
                 """
                 
