@@ -16,7 +16,7 @@ from streamlit_mic_recorder import mic_recorder
 try:
     from ai_engine import render_ai_agent_tab
 except ImportError:
-    def render_ai_agent_tab(df):
+    def render_ai_agent_tab():
         st.warning("⚠️ קובץ ai_engine.py לא נמצא. הטאב הזה מושבת.")
 
 # ==========================================
@@ -37,7 +37,7 @@ st.set_page_config(page_title="מערכת תצפית מחקרית - 54.0", layou
 
 st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Heebo:wght=300;400;700&display=swap');
         
         /* הגדרות כלליות */
         html, body, .stApp { 
@@ -88,7 +88,7 @@ def normalize_name(name):
     name = name.replace(" ", "")
     # 2. השארת רק אותיות ומספרים (ניקוי נקודות, מקפים וכו')
     clean = re.sub(r'[^א-תa-zA-Z0-9]', '', name)
-    return clean.strip()
+    return clean.strip().lower()
 
 @st.cache_resource
 def get_drive_service():
@@ -121,7 +121,6 @@ def load_full_dataset(_svc):
                 if cols:
                     df_drive.rename(columns={cols[0]: "student_name"}, inplace=True)
         except Exception as e:
-            # במקום pass - עכשיו אנחנו מדווחים על הבעיה
             st.error(f"❌ שגיאה בטעינת קובץ המאסטר מהדרייב: {e}")
 
     # 2. ניסיון משיכת נתונים מהמכשיר המקומי
@@ -131,7 +130,6 @@ def load_full_dataset(_svc):
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 df_local = pd.DataFrame([json.loads(l) for l in f if l.strip()])
         except Exception as e:
-            # מדווחים אם הקובץ המקומי פגום
             st.error(f"❌ שגיאה בקריאת הנתונים המקומיים (reflections.jsonl): {e}")
 
     # 3. איחוד וניקוי כפילויות
@@ -157,14 +155,12 @@ def call_gemini(prompt, audio_bytes=None):
         api_key = st.secrets.get("GOOGLE_API_KEY")
         if not api_key: return "שגיאה: חסר API Key"
 
-        # השורה המעודכנת והיציבה שמחליפה את gemini-flash-latest
         model_id = "gemini-1.5-flash" 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
         
         headers = {'Content-Type': 'application/json'}
         
         if audio_bytes:
-            # זיהוי אוטומטי של סוג האודיו (WebM לעומת WAV)
             mime_type = "audio/webm" if audio_bytes.startswith(b'\x1a\x45\xdf\xa3') else "audio/wav"
             audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
             
@@ -185,7 +181,6 @@ def call_gemini(prompt, audio_bytes=None):
         if response.status_code != 200:
             return f"שגיאת API ({response.status_code}): {res_json.get('error', {}).get('message', 'Unknown error')}"
 
-        # חילוץ בטוח של התשובה (מניעת IndexError)
         candidates = res_json.get('candidates', [])
         if not candidates:
             return "ג'ימיני לא החזיר תשובה. ייתכן שהתוכן נחסם עקב מגבלות בטיחות או רעש באודיו."
@@ -204,6 +199,7 @@ def get_ai_model():
     import google.generativeai as genai
     genai.configure(api_key=api_key)
     return genai.GenerativeModel('gemini-1.5-flash')        
+
 # ==========================================
 # --- 2. פונקציות ממשק משתמש (Tabs) ---
 # ==========================================
@@ -291,7 +287,6 @@ def render_tab_entry(svc, full_df):
                 
                 if raw_ins or raw_ch:
                     with st.spinner("היועץ מנתח את מקרה הבוחן..."):
-                        # בניית פרומפט ממוקד שבוחן את תהליך ההוראה והלמידה הספציפי
                         prompt = f"""
                         נתח כמנתח מחקר פעולה אקדמי (Action Research) את התצפית הבאה על הסטודנט {student_name}:
                         - קושי שנצפה (Challenge): {raw_ch}
@@ -316,7 +311,6 @@ def render_tab_entry(svc, full_df):
                 final_ch = st.session_state.get(f"field_obs_input_{it}", "").strip()
                 final_ins = st.session_state.get(f"insight_input_{it}", "").strip()
                 
-                # בניית האובייקט שישמר - שים לב לתוספת של ai_reflection
                 entry = {
                     "type": "reflection",
                     "date": date.today().isoformat(),
@@ -333,7 +327,7 @@ def render_tab_entry(svc, full_df):
                     "challenge": final_ch,
                     "insight": final_ins,
                     "tags": str(tags),
-                    "ai_reflection": st.session_state.get("last_feedback", ""), # שמירת הרפלקציה המדויקת של אותו הרגע
+                    "ai_reflection": st.session_state.get("last_feedback", ""),
                     "timestamp": datetime.now().isoformat()
                 }
                 
@@ -349,14 +343,12 @@ def render_tab_entry(svc, full_df):
                             
                             entry["images"] = ", ".join(img_links)
                             
-                            # כתיבה לקובץ המקומי לקראת הסנכרון הבא
                             with open(DATA_FILE, "a", encoding="utf-8") as f:
                                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                             
                             st.balloons()
                             st.success("✅ התצפית והרפלקציה המחקרית נשמרו בהצלחה!")
                             
-                            # איפוס מוחלט של המשוב והזכרונות הזמניים כדי שהתלמיד הבא ייפתח חלק לחלוטינ
                             st.session_state.last_feedback = ""
                             st.session_state.it += 1
                             time.sleep(1.2)
@@ -364,29 +356,29 @@ def render_tab_entry(svc, full_df):
                     else:
                         st.warning("⚠️ לא ניתן לשמור תצפית ריקה.")  
                         
-        # הצגת המשוב מתחת לכפתורים
     if st.session_state.last_feedback:
-            st.markdown("---")
-            st.markdown(f'<div class="feedback-box"><b>💡 משוב יועץ AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)           
-            if st.button("🗑️ נקה משוב"):
-                st.session_state.last_feedback = ""
-                st.rerun()
+        st.markdown("---")
+        st.markdown(f'<div class="feedback-box"><b>💡 משוב יועץ AI:</b><br>{st.session_state.last_feedback}</div>', unsafe_allow_html=True)           
+        if st.button("🗑️ נקה משוב"):
+            st.session_state.last_feedback = ""
+            st.rerun()
 
     with col_chat:
         st.subheader(f"🤖 יועץ: {student_name}")
         chat_cont = st.container(height=450)
         for q, a in st.session_state.chat_history:
             with chat_cont:
-                st.chat_message("user").write(q); st.chat_message("assistant").write(a)
+                st.chat_message("user").write(q)
+                st.chat_message("assistant").write(a)
         
         u_q = st.chat_input("שאל על הסטודנט...")
         if u_q:
             resp = call_gemini(f"היסטוריה: {st.session_state.student_context}. שאלה: {u_q}")
-            st.session_state.chat_history.append((u_q, resp)); st.rerun()
+            st.session_state.chat_history.append((u_q, resp))
+            st.rerun()
 
 def render_tab_sync(svc, full_df):
     st.header("🔄 סנכרון לדרייב")
-    # שליפת ה-ID מה-Secrets שהגדרת
     file_id = st.secrets.get("MASTER_FILE_ID")
     
     if os.path.exists(DATA_FILE) and st.button("🚀 סנכרן לקובץ המרכזי"):
@@ -396,26 +388,21 @@ def render_tab_sync(svc, full_df):
 
         try:
             with st.spinner("מתחבר לקובץ המאסטר וממזג נתונים..."):
-                # 1. קריאת התצפיות החדשות מהמכשיר
                 with open(DATA_FILE, "r", encoding="utf-8") as f:
                     locals_ = [json.loads(l) for l in f if l.strip()]
                 
-                # 2. איחוד עם המאסטר הקיים ומניעת כפילויות
                 df_new = pd.DataFrame(locals_)
                 df_combined = pd.concat([full_df, df_new], ignore_index=True)
                 df_combined = df_combined.drop_duplicates(subset=['student_name', 'timestamp'], keep='last')
                 
-                # 3. הכנת הקובץ למשלוח
                 buf = io.BytesIO()
                 with pd.ExcelWriter(buf, engine='openpyxl') as w:
                     df_combined.to_excel(w, index=False)
                 buf.seek(0)
                 
-                # 4. עדכון הקובץ הספציפי בדרייב (לפי ה-ID)
                 media = MediaIoBaseUpload(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 svc.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
                 
-                # 5. ניקוי וסיום
                 os.remove(DATA_FILE)
                 st.success("✅ הנתונים סונכרנו בהצלחה לקובץ המאסטר הראשי!")
                 st.cache_data.clear()
@@ -431,11 +418,9 @@ def render_tab_analysis(svc):
         st.info("אין עדיין מספיק נתונים לניתוח. בצע סנכרון בטאב 2 או הזן תצפיות חדשות.")
         return
 
-    # עיבוד תאריכים לשבועות
     df_v['date'] = pd.to_datetime(df_v['date'], errors='coerce')
     df_v['week'] = df_v['date'].dt.strftime('%Y - שבוע %U')
     
-    # --- חלק א: מעקב התקדמות אישי ---
     st.subheader("📈 מעקב התקדמות אישי")
     all_students = sorted(df_v['student_name'].dropna().unique())
     sel_student = st.selectbox("בחר תלמיד למעקב ויזואלי:", all_students)
@@ -443,7 +428,6 @@ def render_tab_analysis(svc):
     student_data = df_v[df_v['student_name'] == sel_student].sort_values('date')
     
     if len(student_data) >= 1:
-        # מיפוי המדדים לשמות החדשים והנכונים
         metrics = {
             'score_proj': 'המרת ייצוגים',
             'score_views': 'מעבר בין היטלים',
@@ -461,7 +445,6 @@ def render_tab_analysis(svc):
             st.line_chart(plot_df)
             st.caption("מגמת שינוי במדדים הכמותיים (1-5)")
             
-            # הצגת הערה אם חלק מהמדדים חסרים
             missing = [metrics[c] for c in metrics.keys() if c not in student_data.columns]
             if missing:
                 st.info(f"💡 הערה: המדדים הבאים טרם תועדו עבור תלמיד זה: {', '.join(missing)}")
@@ -471,8 +454,6 @@ def render_tab_analysis(svc):
         st.warning("אין מספיק נתונים להצגת גרף עבור תלמיד זה.")
 
     st.markdown("---")
-
-    # --- חלק ב: ניתוח כיתתי שבועי ---
     st.subheader("🧠 ניתוח תמות שבועי (AI)")
     weeks = sorted(df_v['week'].dropna().unique(), reverse=True)
     sel_w = st.selectbox("בחר שבוע לניתוח כיתתי:", weeks)
@@ -482,7 +463,6 @@ def render_tab_analysis(svc):
     
     with col_table:
         st.write(f"תצפיות בשבוע {sel_w}:")
-        # וידוי שהעמודות קיימות לפני הצגת הטבלה
         cols_to_show = [c for c in ['student_name', 'challenge', 'tags'] if c in w_df.columns]
         st.dataframe(w_df[cols_to_show], use_container_width=True)
     
@@ -505,8 +485,6 @@ def render_tab_interview(svc, full_df):
     st.subheader("🎙️ ראיון עומק וניתוח תמות הנדסי משודרג")
     
     student_name = st.selectbox("בחר סטודנט לראיון:", CLASS_ROSTER, key=f"int_sel_{it}")
-    
-    # 1. הקלטת אודיו
     audio_data = mic_recorder(start_prompt="התחל הקלטה ⏺️", stop_prompt="עצור ונתח ⏹️", key=f"mic_int_{it}")
     
     if audio_data:
@@ -516,34 +494,18 @@ def render_tab_interview(svc, full_df):
         
         if st.button("✨ בצע תמלול וניתוח תמות עומק", key=f"btn_an_{it}"):
             with st.status("🤖 ג'ימיני מנתח ברמה אקדמית...", expanded=True) as status:
-                
-                # ה-Prompt המקצועי המשודרג שלך
                 prompt = f"""
                 אתה מנתח מחקר אקדמי בכיר המתמחה בחינוך טכנולוגי ובפסיכולוגיה של תפיסה מרחבית (Spatial Perception).
                 עליך לנתח ראיון שבו הסטודנט {student_name} מתאר תהליך של שרטוט הנדסי (מעבר מאיזומטריה להיטלים או להיפך).
 
                 משימות הניתוח (בצע בסדר זה):
+                1. תמלול מלא: תמלל את הראיון במדויק. 
+                2. איתור ומיפוי מושגים הנדסיים: זהה והדגש ב-**Bold** את המונחים המקצועיים.
+                3. ניתוח רמת התפיסה המרחבית: זיהוי מעברים, תפיסת עומק ונקודות כשל.
+                4. סיכום מחקרי קצר.
 
-                1. תמלול מלא: 
-                תמלל את הראיון במדויק. אם הסטודנט משתמש במילים כמו "כזה", "פה", "הקו הזה" - שמור עליהן, הן מעידות על הצבעה על דגם פיזי.
-
-                2. איתור ומיפוי מושגים הנדסיים:
-                זהה והדגש ב-**Bold** את המונחים הבאים: "היטל פנים", "היטל על", "היטל צד", "קווי עזר", "קווים נסתרים", "פרופורציה", "מידות", "ציר", "קנה מידה".
-
-                3. ניתוח רמת התפיסה המרחבית:
-                - זיהוי מעברים: האם הסטודנט מצליח להסביר איך הוא הופך גוף תלת-ממדי לדו-ממדי?
-                - תפיסת עומק: האם יש הבנה של משמעות הקווים הנסתרים (Hidden Lines)?
-                - נקודות כשל: זהה מקרים בהם הסטודנט מתקשה להגדיר מבט מסוים או מתבלבל בין היטלים (למשל: מצייר היטל צד במקום היטל על).
-
-                4. סיכום מחקרי קצר:
-                כתוב משפט אחד על רמת השליטה הכללית של {student_name} בחומר הנלמד.
-
-                ⚠️ איסור קטגורי: 
-                - אל תנתח ניווט במרחב, כיווני נסיעה, מפות, תצורות שטח או גיאוגרפיה. 
-                - אם הסטודנט אומר "מבט מלמעלה", הכוונה היא ל'היטל על' הנדסי, ולא למבט מרחפן או מטוס.
-                - אם התוכן אינו קשור לשרטוט הנדסי - החזר הודעה: "התוכן אינו רלוונטי לניתוח הנדסי".
+                ⚠️ איסור קטגורי: אל תנתח ניווט במרחב, כיווני נסיעה, מפות, תצורות שטח או גיאוגרפיה.
                 """
-                
                 analysis_res = call_gemini(prompt, audio_bytes)
                 
                 if "שגיאה" in analysis_res:
@@ -554,7 +516,6 @@ def render_tab_interview(svc, full_df):
                     status.update(label="✅ הניתוח הושלם", state="complete")
                     st.rerun()
 
-    # 2. הצגת תוצאות ושמירה
     analysis_key = f"last_analysis_{it}"
     if analysis_key in st.session_state and st.session_state[analysis_key]:
         st.markdown(f'<div class="feedback-box">{st.session_state[analysis_key]}</div>', unsafe_allow_html=True)
@@ -567,12 +528,10 @@ def render_tab_interview(svc, full_df):
                 prog_bar = st.progress(0)
                 try:
                     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    # העלאה לדרייב לתיקיית המחקר (INTERVIEW_FOLDER_ID)
                     a_link = drive_upload_bytes(svc, saved_audio, f"Int_{student_name}_{ts}.wav", INTERVIEW_FOLDER_ID)
                     prog_bar.progress(50)
                     t_link = drive_upload_bytes(svc, st.session_state[analysis_key], f"An_{student_name}_{ts}.txt", INTERVIEW_FOLDER_ID, is_text=True)
                     
-                    # רישום ב-JSONL
                     entry = {
                         "type": "interview_analysis", 
                         "date": date.today().isoformat(),
@@ -588,7 +547,6 @@ def render_tab_interview(svc, full_df):
                     st.success(f"✅ הראיון של {student_name} נשמר וסונכרן!")
                     st.balloons()
                     
-                    # ניקוי הזיכרון לאחר שמירה מוצלחת
                     st.session_state[analysis_key] = ""
                     st.session_state[f"audio_bytes_{it}"] = None
                     time.sleep(2)
@@ -596,12 +554,8 @@ def render_tab_interview(svc, full_df):
                 except Exception as e:
                     st.error(f"שגיאה בשמירה: {e}")
 
-# --- סיום טאב ראיונות (כאן מתחילה הפונקציה הבאה שלך, וודא שהיא צמודה לשמאל) ---
 def drive_upload_file(svc, file_obj, folder_id):
-    """מעלה קובץ (כמו תמונה) מה-Uploader - משמש לטאב 1"""
     try:
-        from googleapiclient.http import MediaIoBaseUpload
-        import io
         file_content = file_obj.read()
         file_obj.seek(0) 
         media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype=file_obj.type, resumable=True)
@@ -613,19 +567,14 @@ def drive_upload_file(svc, file_obj, folder_id):
             fields='id, webViewLink', 
             supportsAllDrives=True
         ).execute()
-        
         return result.get('webViewLink', '')
     except Exception as e:
-        # דיווח מפורט על התקלה
         st.error(f"❌ העלאת התמונה '{file_obj.name}' נכשלה.")
         st.exception(e) 
         return ""
 
 def drive_upload_bytes(svc, content, filename, folder_id, is_text=False):
-    """מעלה תוכן (אודיו או טקסט) מהזיכרון - משמש לטאב 4"""
     try:
-        from googleapiclient.http import MediaIoBaseUpload
-        import io
         mime = 'text/plain' if is_text else 'audio/wav'
         if is_text and isinstance(content, str):
             content = content.encode('utf-8')
@@ -639,10 +588,8 @@ def drive_upload_bytes(svc, content, filename, folder_id, is_text=False):
             fields='id, webViewLink', 
             supportsAllDrives=True
         ).execute()
-        
         return f.get('webViewLink')
     except Exception as e:
-        # התראה קריטית לראיונות
         type_str = "הניתוח" if is_text else "הקלטת האודיו"
         st.error(f"❌ תקלה קריטית: {type_str} לא נשמר בדרייב!")
         st.exception(e)
@@ -656,30 +603,12 @@ def drive_upload_bytes(svc, content, filename, folder_id, is_text=False):
 svc = get_drive_service()
 full_df = load_full_dataset(svc)
 
-# אתחול ה-Session State (רק אם הם לא קיימים)
-if "it" not in st.session_state: 
-    st.session_state.it = 0
-if "last_selected_student" not in st.session_state: 
-    st.session_state.last_selected_student = ""
-if "show_success_bar" not in st.session_state: 
-    st.session_state.show_success_bar = False
-if "last_feedback" not in st.session_state: 
-    st.session_state.last_feedback = ""
-if "chat_history" not in st.session_state: 
-    st.session_state.chat_history = []
-
-# --------------------------------------------------------
-# הדבקה של הפונקציה החסרה - חובה כדי שטאב 5 יעבוד!
-# --------------------------------------------------------
-def get_ai_model():
-    """אתחול והגדרת מודל ה-Gemini מתוך ה-Secrets עבור הטאב הסטטיסטי"""
-    api_key = st.secrets.get("GOOGLE_API_KEY", "")
-    if not api_key:
-        st.error("⚠️ חסר מפתח API (GOOGLE_API_KEY) ב-Secrets.")
-        return None
-    import google.generativeai as genai
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel('gemini-1.5-flash')
+# אתחול ה-Session State
+if "it" not in st.session_state: st.session_state.it = 0
+if "last_selected_student" not in st.session_state: st.session_state.last_selected_student = ""
+if "show_success_bar" not in st.session_state: st.session_state.show_success_bar = False
+if "last_feedback" not in st.session_state: st.session_state.last_feedback = ""
+if "chat_history" not in st.session_state: st.session_state.chat_history = []
 
 # יצירת הטאבים בממשק
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 הזנה ומשוב", "🔄 סנכרון", "📊 ניתוח", "🎙️ ראיון עומק", "🤖 סוכן סטטיסטי"])
@@ -693,7 +622,7 @@ with tab3:
 with tab4: 
     render_tab_interview(svc, full_df)
 with tab5:
-    render_ai_agent_tab(full_df)
+    render_ai_agent_tab() # <-- התיקון הקריטי: קריאה ללא העברת full_df
 
 # סיידבר - כפתורי בקרה
 st.sidebar.markdown("---")
@@ -704,5 +633,3 @@ if st.sidebar.button("🔄 רענן נתונים"):
 st.sidebar.markdown("---")
 st.sidebar.write(f"מצב חיבור דרייב: {'✅' if svc else '❌'}")
 st.sidebar.caption(f"גרסת מערכת: 54.0 | {date.today()}")
-
-# וודא שאין כלום מתחת לשורה הזו!
