@@ -221,4 +221,7 @@ def render_tab_entry(svc, full_df):
     
     with col_in:
         c_metrics1, c_metrics2 = st.columns(2)
-        with c
+        with c_metrics1: # <--- כאן הקוד שלך נקטע! זה התיקון
+            duration = st.number_input("⏱️ זמן עבודה (בדקות):", min_value=0, value=45, step=5, key=f"dur_{it}")
+        with c_metrics2:
+            drawings = st.number_input("📋 מספר שרטוטים שבוצעו:", min_value=0, value=1, step=1, key=f"drw_{it}")
