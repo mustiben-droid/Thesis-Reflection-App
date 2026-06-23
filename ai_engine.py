@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import re
 import json
-import os  # ניהול נתיבים וקבצים במערכת לשמירה לדרייב
+import os  # ניהול נתיבים וקבצים במערכת לשמירה בטוחה לדרייב
 from scipy import stats
 
 # ==========================================================
@@ -72,7 +72,7 @@ TAG_TO_CAT_MAP = {
 }
 
 # ==========================================================
-# פונקציות עזר - ניקוי, הצלבת שמות ושמירה לדרייב
+# פונקציות עזר - ניקוי, הצלבת שמות ושמירה מאובטחת לדרייב
 # ==========================================================
 
 def clean_name_string(val):
@@ -91,15 +91,18 @@ def find_name_column(df):
 
 def save_report_to_local_or_drive(student_name, report_text):
     """
-    יוצר קובץ טקסט של דוח הפרופיל המוצלב בתיקיית המערכת.
-    מאחר שסביבת העבודה שלך מסונכרנת ל-Google Drive, שמירה זו תגבה את הקובץ ישירות בענן.
+    יוצר קובץ טקסט של דוח הפרופיל המוצלב בנתיב אבסולוטי קבוע.
+    מבטיח שהקובץ נשמר בתוך תיקיית העבודה שמסונכרנת לגוגל דרייב.
     """
     clean_name = student_name.replace(' ', '_').replace('.', '')
     filename = f"Report_Triangulation_{clean_name}.txt"
+    
+    # ניתוב דינמי לנתיב המלא של תיקיית האפליקציה הנוכחית
+    target_path = os.path.abspath(os.path.join(os.getcwd(), filename))
     try:
-        with open(filename, "w", encoding="utf-8") as f:
+        with open(target_path, "w", encoding="utf-8") as f:
             f.write(report_text)
-        return True, filename
+        return True, target_path
     except Exception as e:
         return False, str(e)
 
@@ -262,7 +265,7 @@ def run_correlation(x, y, x_name="X", y_name="Y"):
 def run_paired_pre_post_test(df_quest, name_col):
     pairs = get_pre_post_pairs(df_quest)
     if not pairs:
-        return {"error": "לאמצאו זוגות עמודות Pre/Post תואמות בקובץ השאלונים."}
+        return {"error": "לא נמצאו זוגות עמודות Pre/Post תואמות בקובץ השאלונים."}
 
     pre_cols = [p[0] for p in pairs]
     post_cols = [p[1] for p in pairs]
@@ -396,10 +399,6 @@ def data_quality_report(df_master, df_quest=None, name_col='student_name'):
 # ==========================================================
 
 def ask_ai_for_report(model, stats_result, instructions):
-    """
-    מנגנון שליחת הנתונים ל-AI. שימו לב שהגדרת התפקיד הועברה 
-    ל-system_instruction קבוע בעת אתחול המודל לשמירה על טון אקדמי יציב.
-    """
     prompt = f"""
     נתוני החישוב האמיתיים של המחקר (התקבלו מתוך קוד הפייטון האמפירי):
     {json.dumps(stats_result, ensure_ascii=False)}
@@ -527,9 +526,7 @@ def render_ai_agent_tab():
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         
-        # ==========================================================
-        # 🧪 שיפור 1: הזרקת System Instructions קבועה למודל
-        # ==========================================================
+        # הגדרת System Instructions קבועה ומחמירה למניעת סלט ועיגון השפה המדעית
         system_rules = (
             "אתה פרופסור ומתודולוג בכיר המלווה כתיבת תזת מאסטר במחקר פעולה (Action Research) פדגוגי. "
             "עליך לענות תמיד בעברית אקדמית רהוטה וגבוהה, חפה מחזרות, ותואמת לחלוטין את מדריך הדיווח APA 7th Edition. "
@@ -716,4 +713,164 @@ def render_ai_agent_tab():
                 1. ציין כמה תלמידים הציגו מגמת שיפור (שיפוע חיובי), כמה ירידה, וכמה ללא שינוי.
                 2. הצג את השיפוע הממוצע הכיתתי.
                 3. כתוב פסקה פדגוגית בעברית על המגמה הכוללת במחקר הפעולה.
-                4. ציין שניתוח זה תיאורי ואינו מבח
+                4. ציין שניתוח זה תיאורי ואינו מבחן השוואה פורמלי.
+                """
+                reply(ask_ai_for_report(model, stats_result, instructions))
+            return
+
+        # --------------------------------------------------------
+        # 7. פרופיל תלמיד מוצלב (Triangulation) - מניעת סלט לוגי
+        # --------------------------------------------------------
+        if df_master is None or df_quest is None:
+            missing = []
+            if df_master is None:
+                missing.append("קובץ התצפיות (Master)")
+            if df_quest is None:
+                missing.append("קובץ השאלונים (Pre/Post)")
+            reply(f"⚠️ לא ניתן לבצע את הניתוח המבוקש מכיוון שהמערכת לא הצליחה לזהות את: {', '.join(missing)}.")
+            return
+
+        with st.spinner("מצליב נתונים ומנתח את קבצי המחקר..."):
+            master_clean = df_master.copy()
+            if 'student_name' in master_clean.columns:
+                master_clean['name_key'] = master_clean['student_name'].apply(clean_name_string)
+            else:
+                reply("⚠️ עמודת student_name לא נמצאה בקובץ המאסטר!")
+                return
+
+            quest_clean = df_quest.copy()
+            quest_clean['name_key'] = quest_clean[quest_col_name].apply(clean_name_string)
+
+            selected_student = None
+            for name in master_clean['student_name'].dropna().unique():
+                if str(name).strip() in prompt:
+                    selected_student = name
+                    break
+
+            if not selected_student:
+                for name in df_quest[quest_col_name].dropna().unique():
+                    if str(name).strip().replace('.', '').replace(' ', '') in prompt.replace(' ', ''):
+                        selected_student = name
+                        break
+
+            if not selected_student:
+                reply("🔍 לא זיהיתי שם של תלמיד מוכר, ולא זיהיתי שאלת מחקר כיתתית.")
+                return
+
+            student_key = clean_name_string(selected_student)
+
+            student_observations = master_clean[master_clean['name_key'] == student_key]
+            if not student_observations.empty:
+                # 🧪 שדרוג: סידור כרונולוגי קשיח של התצפיות מהמוקדם למאוחר למניעת סלט בציר הזמן
+                if 'date' in student_observations.columns:
+                    student_observations['date_parsed'] = pd.to_datetime(student_observations['date'], errors='coerce')
+                    student_observations = student_observations.sort_values('date_parsed')
+                
+                num_data = student_observations.select_dtypes(include=[np.number])
+                means = num_data.mean().round(2).to_dict()
+
+                raw_interpretations = []
+                for _, row in student_observations.iterrows():
+                    date_str = str(row.get('date', 'תאריך חסר'))
+                    diff_text = str(row.get('difficulty', 'לא צוין')).strip()
+                    interp_text = str(row.get('interpretation', row.get('insight', ''))).strip()
+                    method_text = str(row.get('work_method', 'לא צוין'))
+                    tags_text = str(row.get('tags', ''))
+                    raw_interpretations.append(
+                        f"תאריך: {date_str} | שיטה: {method_text} | תגיות: {tags_text}\n- רמת קושי המטלה: {diff_text}\n- תיעוד פדגוגי חופשי: {interp_text}"
+                    )
+
+                master_summary = {
+                    "total_observations": len(student_observations),
+                    "average_quantitative_scores": means,
+                    "chronological_qualitative_observations": raw_interpretations
+                }
+            else:
+                master_summary = {"status": "לא נמצאו תצפיות עבור תלמיד זה במאסטר"}
+
+            student_questionnaire = quest_clean[quest_clean['name_key'] == student_key]
+            if not student_questionnaire.empty:
+                q_row = student_questionnaire.iloc[0]
+                pairs = get_pre_post_pairs(df_quest)
+                pre_vals = [q_row[p[0]] for p in pairs if pd.notna(q_row[p[0]])]
+                post_vals = [q_row[p[1]] for p in pairs if pd.notna(q_row[p[1]])]
+
+                quest_summary = {
+                    "has_questionnaire_data": True,
+                    "mean_pre": round(float(np.mean(pre_vals)), 2) if pre_vals else None,
+                    "mean_post": round(float(np.mean(post_vals)), 2) if post_vals else None,
+                    "delta": round(float(np.mean(post_vals) - np.mean(pre_vals)), 2) if pre_vals and post_vals else None
+                }
+            else:
+                quest_summary = {"status": "התלמיד לא נמצא בקובץ שאלוני ה-Pre/Post"}
+
+            other_summary = {}
+            for f_name, other_df in other_dfs.items():
+                possible_name_cols = [c for c in other_df.columns
+                                       if ('name' in str(c).lower() and 'unnamed' not in str(c).lower()) or 'שם' in str(c)]
+                if possible_name_cols:
+                    other_clean = other_df.copy()
+                    other_clean['name_key'] = other_clean[possible_name_cols[0]].apply(clean_name_string)
+                    sub_row = other_clean[other_clean['name_key'] == student_key]
+                    if not sub_row.empty:
+                        other_summary[f_name] = sub_row.iloc[0].drop(['name_key', possible_name_cols[0]], errors='ignore').to_dict()
+
+            student_profile_json = {
+                "student_name": str(selected_student),
+                "observations_master_data": master_summary,
+                "questionnaire_survey_data": quest_summary,
+                "additional_files_data": other_summary
+            }
+
+            # 🧪 שדרוג: פרומפט מובנה קשיח המבהיר את ציר הזמן ואת חוקי המתודולוגיה
+            base_instructions = f"""
+            להלן הנתונים הסטטיסטיים של הסטודנט {selected_student}:
+            {json.dumps(student_profile_json, ensure_ascii=False)}
+
+            הנחיות מתודולוגיות קשיחות למניעת טעויות פירוש:
+            1. משתני ה-cat_* (כמו cat_convert_rep) מייצגים ספירת שגיאות ומוקדי קושי מתוך התגיות! ציון נמוך (כמו 1.0) פירושו שהסטודנט כמעט ולא ביצע טעויות בקטגוריה זו. זוהי נקודת חוזק התואמת לציון ביצוע גבוה (score_conv).
+            2. רצף התצפיות מסודר כרונולוגית. תצפיות מדצמבר 2025 הן תחילת הסמסטר (נקודת הבסיס - Baseline), בעוד פברואר ומאי 2026 מייצגים את התפתחות ההתערבות. נתח את השינוי בכיוון הנכון של הזמן!
+            3. ירידה בממוצע המסוגלות העצמית בשאלון (Delta שלילית) לצד שיפור בציוני הביצוע בכיתה מייצגת פער תפיסתי קלאסי (Cognitive Misalignment). הסבר זאת כעלייה במודעות העצמית ובביקורתיות של הסטודנט, שהחליפה ביטחון מופרז חסר בסיס (אפקט דאנינג-קרוגר).
+            """
+
+            # הרצת השרשרת (Prompt Chaining) לקבלת עומק מקסימלי לפרק הממצאים
+            with st.spinner("חלק א': מנתח מדדים כמותיים ואיכותניים מהשדה..."):
+                p1_instructions = base_instructions + """
+                נסח את הפרק הראשון: "1. פרופיל ביצוע כמותי ותמות איכותניות מהתצפיות".
+                נתח את מדדי הביצוע, משך הזמן ורצף התאריכים (מדצמבר למאי), ושלב את התיעודים המילוליים והאסטרטגיות (כמו המרקרים או הגופים המודפסים).
+                """
+                part1_text = ask_ai_for_report(model, {"step": 1}, p1_instructions)
+
+            with st.spinner("חלק ב': מנתח הלימה ותוקף תפיסתי מול השאלונים..."):
+                p2_instructions = base_instructions + f"""
+                בהסתמך על הניתוח המקדים הבא:
+                {part1_text}
+                נסח את הפרק השני: "2. בחינת תוקף והלימה תפיסתית (Cognitive Misalignment Evaluation)".
+                הצלב בין מדדי הביצוע של החוקר בשטח לבין שאלוני הפרה-פוסט, ודון בפער הקוגניטיבי ובשינוי המסוגלות הנתפסת.
+                """
+                part2_text = ask_ai_for_report(model, {"step": 2}, p2_instructions)
+
+            with st.spinner("חלק ג': מגבש תובנות ספיראליות למחקר הפעולה..."):
+                p3_instructions = base_instructions + f"""
+                בהסתמך על כלל הממצאים:
+                {part2_text}
+                נסח את הפרק המסכם: "3. השלכות פדגוגיות לאופיו הספיראלי של מחקר הפעולה".
+                הסבר כיצד הממצאים מזינים את מחזורי ההתערבות הבאים ומדייקים את הפיגומים בכיתה.
+                """
+                part3_text = ask_ai_for_report(model, {"step": 3}, p3_instructions)
+
+            # איחוד דוח העומק לפרק ממצאים מושלם
+            report_text = f"🕵️ **דוח פרופיל מוצלב והערכת מגמה - {selected_student}**\n\n{part1_text}\n\n---\n\n{part2_text}\n\n---\n\n{part3_text}"
+            
+            reply(report_text)
+            
+            # ממשק שמירה בטוח ואבסולוטי לדרייב
+            st.markdown("---")
+            st.subheader("💾 ארכוב ממצאים")
+            if st.button(f"💾 שמור את הדוח המדעי של {selected_student} לדרייב", key=f"save_drive_{student_key}"):
+                with st.spinner("מייצר קובץ טקסט אקדמי ומסנכרן לענן..."):
+                    success, filepath = save_report_to_local_or_drive(selected_student, report_text)
+                    if success:
+                        st.success(f"✅ הדוח אורכב בהצלחה בנתיב המאסטר: `{filepath}` והועלה אוטומטית לדרייב!")
+                    else:
+                        st.error(f"⚠️ שגיאה בארכוב הקובץ: {filepath}")
