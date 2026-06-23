@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import re
 import json
+import os  # ניהול נתיבים וקבצים במערכת לשמירה לדרייב
 from scipy import stats
 
 # ==========================================================
@@ -58,8 +59,6 @@ METRICS_DICTIONARY = {
 SCORE_COLS = ['score_proj', 'score_spatial', 'score_conv', 'score_efficacy', 'score_model', 'score_views']
 CAT_COLS = ['cat_convert_rep', 'cat_dims_props', 'cat_proj_trans', 'cat_3d_support']
 
-# מיפוי תגיות איכותניות (מ-TAGS_OPTIONS ב-app.py) לקטגוריות קושי כמותיות (cat_*)
-# כל תגית יכולה למפות לכמה קטגוריות (אם רלוונטי)
 TAG_TO_CAT_MAP = {
     "התעלמות מקווים נסתרים": ["cat_proj_trans"],
     "בלבול בין היטלים": ["cat_proj_trans"],
@@ -68,18 +67,15 @@ TAG_TO_CAT_MAP = {
     "קושי במעבר בין היטלים": ["cat_proj_trans", "cat_convert_rep"],
     "שימוש בכלי מדידה": ["cat_dims_props"],
     "סיבוב פיזי של המודל": ["cat_3d_support"],
-    # תגיות חיוביות - לא ממופות לקטגוריות קושי
     "תיקון עצמי": [],
     "עבודה עצמאית שוטפת": [],
 }
 
-
 # ==========================================================
-# פונקציות עזר - ניקוי והצלבת שמות
+# פונקציות עזר - ניקוי, הצלבת שמות ושמירה לדרייב
 # ==========================================================
 
 def clean_name_string(val):
-    """מנקה שם תלמיד לצורך הצלבה בין קבצים: רווחים, נקודות, אותיות גדולות."""
     if pd.isna(val):
         return ""
     val = str(val).strip().lower()
@@ -88,18 +84,31 @@ def clean_name_string(val):
 
 
 def find_name_column(df):
-    """מאתר עמודת שם תוך הימנעות מטעות 'Unnamed' (שמכילה 'name')."""
     name_cols = [c for c in df.columns
-                  if ('name' in str(c).lower() and 'unnamed' not in str(c).lower()) or 'שם' in str(c)]
+                 if ('name' in str(c).lower() and 'unnamed' not in str(c).lower()) or 'שם' in str(c)]
     return name_cols[0] if name_cols else df.columns[0]
 
 
+def save_report_to_local_or_drive(student_name, report_text):
+    """
+    יוצר קובץ טקסט של דוח הפרופיל המוצלב בתיקיית המערכת.
+    מאחר שסביבת העבודה שלך מסונכרנת ל-Google Drive, שמירה זו תגבה את הקובץ ישירות בענן.
+    """
+    clean_name = student_name.replace(' ', '_').replace('.', '')
+    filename = f"Report_Triangulation_{clean_name}.txt"
+    try:
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(report_text)
+        return True, filename
+    except Exception as e:
+        return False, str(e)
+
+
 # ==========================================================
-# שאלון Pre/Post
+# עיבודי שאלונים ותצפיות (פייטון סטטיסטי)
 # ==========================================================
 
 def get_pre_post_pairs(df_quest):
-    """מאתר זוגות עמודות Pre/Post תואמות לפי מספר השאלה (Q1_preQ <-> Q01_post)."""
     pre_cols, post_cols = {}, {}
     for c in df_quest.columns:
         m = re.search(r'(\d+)', str(c))
@@ -115,7 +124,6 @@ def get_pre_post_pairs(df_quest):
 
 
 def compute_questionnaire_deltas(df_quest, name_col):
-    """מחזיר DataFrame עם name_key, mean_pre, mean_post, delta_quest לכל תלמיד."""
     pairs = get_pre_post_pairs(df_quest)
     if not pairs:
         return pd.DataFrame(columns=['name_key', 'mean_pre', 'mean_post', 'delta_quest'])
@@ -133,15 +141,7 @@ def compute_questionnaire_deltas(df_quest, name_col):
     return out.groupby('name_key', as_index=False).mean(numeric_only=True)
 
 
-# ==========================================================
-# נתוני תצפיות (Master) - מגמות כמותיות
-# ==========================================================
-
 def compute_master_trends(df_master, name_col='student_name'):
-    """
-    לכל תלמיד: ממוצע, ערך ראשון/אחרון ושיפוע (slope) של ציון 'כללי'
-    (ממוצע עמודות score_* הזמינות) על פני זמן + שיטת עבודה שכיחה.
-    """
     df = df_master.copy()
     df['name_key'] = df[name_col].apply(clean_name_string)
 
@@ -196,16 +196,7 @@ def compute_master_trends(df_master, name_col='student_name'):
     return pd.DataFrame(rows)
 
 
-# ==========================================================
-# מיפוי תגיות איכותניות -> קטגוריות קושי כמותיות (cat_*)
-# ==========================================================
-
 def compute_tag_category_counts(df_master, name_col='student_name'):
-    """
-    עובר על עמודת 'tags' (נשמרת כ-string של רשימה, למשל "['בלבול בין היטלים', ...]")
-    וסופר לכל תלמיד כמה פעמים הופיעה כל קטגוריית קושי (cat_*) על פני כל התצפיות שלו.
-    מחזיר DataFrame: name_key, cat_convert_rep, cat_dims_props, cat_proj_trans, cat_3d_support, n_observations.
-    """
     if 'tags' not in df_master.columns:
         return pd.DataFrame(columns=['name_key', 'n_observations'] + CAT_COLS)
 
@@ -218,14 +209,12 @@ def compute_tag_category_counts(df_master, name_col='student_name'):
         if isinstance(val, list):
             return val
         s = str(val)
-        # ננסה לפרש כרשימת פייתון (str(["a","b"]))
         try:
             parsed = json.loads(s.replace("'", '"'))
             if isinstance(parsed, list):
                 return parsed
         except Exception:
             pass
-        # fallback: split על פסיקים
         return [t.strip().strip("[]'\"") for t in s.split(',') if t.strip().strip("[]'\"")]
 
     rows = []
@@ -244,12 +233,7 @@ def compute_tag_category_counts(df_master, name_col='student_name'):
     return pd.DataFrame(rows)
 
 
-# ==========================================================
-# מבחנים סטטיסטיים
-# ==========================================================
-
 def run_correlation(x, y, x_name="X", y_name="Y"):
-    """Pearson + Spearman על שני וקטורים מקבילים."""
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
     mask = ~np.isnan(x) & ~np.isnan(y)
@@ -276,10 +260,9 @@ def run_correlation(x, y, x_name="X", y_name="Y"):
 
 
 def run_paired_pre_post_test(df_quest, name_col):
-    """מבחן Paired Samples (Pre vs Post) על כל הכיתה + Effect Size."""
     pairs = get_pre_post_pairs(df_quest)
     if not pairs:
-        return {"error": "לא נמצאו זוגות עמודות Pre/Post תואמות בקובץ השאלונים."}
+        return {"error": "לאמצאו זוגות עמודות Pre/Post תואמות בקובץ השאלונים."}
 
     pre_cols = [p[0] for p in pairs]
     post_cols = [p[1] for p in pairs]
@@ -357,7 +340,6 @@ def run_paired_pre_post_test(df_quest, name_col):
 
 
 def run_group_comparison(df, group_col, val_col):
-    """Independent Samples T-Test / Mann-Whitney U בין 2 קבוצות."""
     groups = df[group_col].dropna().unique()
     if len(groups) != 2:
         return {"error": f"השוואה דורשת בדיוק 2 קבוצות בעמודה '{group_col}'. נמצאו: {list(groups)}"}
@@ -384,7 +366,6 @@ def run_group_comparison(df, group_col, val_col):
 
 
 def data_quality_report(df_master, df_quest=None, name_col='student_name'):
-    """סקירת תקינות נתונים: תלמידים עם פחות מ-2 תצפיות, וחפיפת שמות בין קבצים."""
     issues = {}
     df = df_master.copy()
     df['name_key'] = df[name_col].apply(clean_name_string)
@@ -415,19 +396,18 @@ def data_quality_report(df_master, df_quest=None, name_col='student_name'):
 # ==========================================================
 
 def ask_ai_for_report(model, stats_result, instructions):
-    """שולח JSON של תוצאות חישוב אמיתיות + הנחיות דיווח, ומחזיר טקסט."""
+    """
+    מנגנון שליחת הנתונים ל-AI. שימו לב שהגדרת התפקיד הועברה 
+    ל-system_instruction קבוע בעת אתחול המודל לשמירה על טון אקדמי יציב.
+    """
     prompt = f"""
-    אתה יועץ סטטיסטי אקדמי בכיר המלווה עבודת תזה במחקר פעולה פדגוגי.
-
-    נתוני החישוב האמיתיים (התקבלו מ-Python, אל תמציא נתונים אחרים):
+    נתוני החישוב האמיתיים של המחקר (התקבלו מתוך קוד הפייטון האמפירי):
     {json.dumps(stats_result, ensure_ascii=False)}
 
+    הנחיות דיווח ספציפיות:
     {instructions}
 
-    הנחיות כלליות קשיחות:
-    - אל תכתוב קוד פייטון בתשובה.
-    - כתוב בעברית אקדמית רהוטה.
-    - אם stats_result מכיל מפתח "error", הסבר את הבעיה למשתמש בפשטות והצע מה ניתן לעשות, ואל תמשיך לדיווח סטטיסטי.
+    הנחיות קשיחות: אל תכתוב קוד פייטון בתשובה. נסח בעברית אקדמית נקייה התואמת לפרק ממצאים בתזה.
     """
     try:
         return model.generate_content(prompt).text
@@ -436,11 +416,10 @@ def ask_ai_for_report(model, stats_result, instructions):
 
 
 # ==========================================================
-# טאב הסוכן
+# טאב הסוכן הראשי
 # ==========================================================
 
 def render_ai_agent_tab():
-    """טאב 5: מעבדת מחקר וסוכן חכם לריבוי קבצים (Triangulation Lab)"""
     st.header("🤖 סוכן חכם - הצלבת נתונים מרובים (Triangulation Lab)")
     st.markdown("---")
 
@@ -498,9 +477,6 @@ def render_ai_agent_tab():
             except Exception as e:
                 st.error(f"שגיאה בטעינת הקובץ {file.name}: {e}")
 
-    # --------------------------------------------------------
-    # בדיקת תקינות נתונים (לא דורשת AI)
-    # --------------------------------------------------------
     if df_master is not None:
         with st.expander("🔍 בדיקת תקינות נתונים (Data Quality Check)"):
             dq = data_quality_report(df_master, df_quest)
@@ -519,9 +495,6 @@ def render_ai_agent_tab():
 
     st.markdown("---")
 
-    # -----------------------------------------------------------
-    # 💬 חלק הצ'אט וההתכתבות
-    # -----------------------------------------------------------
     st.subheader("💬 התכתבות עם הסוכן הסטטיסטי")
     st.caption(
         "דוגמאות לשאלות: 'נתח את הפרופיל של עילאי' • 'יש שיפור מובהק בכיתה בין pre ל-post?' • "
@@ -553,7 +526,20 @@ def render_ai_agent_tab():
 
         import google.generativeai as genai
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        # ==========================================================
+        # 🧪 שיפור 1: הזרקת System Instructions קבועה למודל
+        # ==========================================================
+        system_rules = (
+            "אתה פרופסור ומתודולוג בכיר המלווה כתיבת תזת מאסטר במחקר פעולה (Action Research) פדגוגי. "
+            "עליך לענות תמיד בעברית אקדמית רהוטה וגבוהה, חפה מחזרות, ותואמת לחלוטין את מדריך הדיווח APA 7th Edition. "
+            "חל איסור מוחלט להמציא נתונים מספריים, שמות או מדדים שלא מופיעים במפורש במבנה הנתונים הסטטיסטי שחושב בפייטון. "
+            "התייחס תמיד לשילוב בין ממצאים כמותיים (ממוצעים, שיפועים) לממצאים איכותניים (תצפיות שדה, תגיות) כטריאנגולציה מחקרית מבוססת תוקף."
+        )
+        model = genai.GenerativeModel(
+            model_name='gemini-2.5-flash',
+            system_instruction=system_rules
+        )
 
         p_low = prompt.lower()
 
@@ -573,9 +559,7 @@ def render_ai_agent_tab():
                 return True
             return False
 
-        # --------------------------------------------------------
-        # 1. מבחן Paired Pre/Post כיתתי + Effect Size
-        # --------------------------------------------------------
+        # 1. מבחן Paired Pre/Post כיתתי
         if any(kw in p_low for kw in ["מובהק", " pre", "post", "פרה", "פוסט", "wilcoxon", "t-test", "effect size",
                                         "שיפור כיתתי", "שיפור בכיתה בין"]) and "מתאם" not in p_low and "קשר" not in p_low:
             if need_quest():
@@ -594,9 +578,7 @@ def render_ai_agent_tab():
                 reply(ask_ai_for_report(model, stats_result, instructions))
             return
 
-        # --------------------------------------------------------
-        # 2. מתאם כמותי-איכותני: תגיות קושי (cat_*) מול ציוני score_*
-        # --------------------------------------------------------
+        # 2. מתאם כמותי-איכותני: תגיות קושי
         if "תגי" in p_low or any(kw in p_low for kw in ["cat_", "מוקד קושי"]) or \
            ("קושי" in p_low and "קשר" in p_low) or ("קושי" in p_low and "מתאם" in p_low):
             if need_master():
@@ -610,14 +592,13 @@ def render_ai_agent_tab():
                 master_trends = compute_master_trends(df_master)
                 merged = tag_counts.merge(master_trends, on='name_key', how='inner')
 
-                # ברירת מחדל: cat_proj_trans מול score_views (קשר ישיר לפי ההגדרות)
                 cat_col = next((c for c in CAT_COLS if c in p_low or
                                  METRICS_DICTIONARY[c]['app_name'] in prompt or
                                  any(part in p_low for part in c.split('_')[1:])), 'cat_proj_trans')
                 if cat_col not in merged.columns:
                     cat_col = 'cat_proj_trans'
 
-                score_col = 'mean_master'  # ממוצע כללי כברירת מחדל
+                score_col = 'mean_master'
 
                 merged_valid = merged.dropna(subset=[cat_col, score_col])
                 stats_result = run_correlation(
@@ -640,9 +621,7 @@ def render_ai_agent_tab():
                 reply(ask_ai_for_report(model, stats_result, instructions))
             return
 
-        # --------------------------------------------------------
-        # 3. מתאם Delta-Delta: שיפור בשאלון מול מגמת שינוי בכיתה
-        # --------------------------------------------------------
+        # 3. מתאם Delta-Delta
         if "מתאם" in p_low and any(kw in p_low for kw in ["שיפור", "שינוי", "התקדמות", "מגמה", "שיפוע"]):
             if need_quest() or need_master():
                 return
@@ -672,9 +651,7 @@ def render_ai_agent_tab():
                 reply(ask_ai_for_report(model, stats_result, instructions))
             return
 
-        # --------------------------------------------------------
-        # 4. מתאם Baseline: מסוגלות התחלתית (Pre) מול ביצועים בכיתה
-        # --------------------------------------------------------
+        # 4. מתאם Baseline
         if ("baseline" in p_low or "מסוגלות התחלתית" in p_low or "פרה" in p_low) and \
            any(kw in p_low for kw in ["מנבא", "ניבוי", "מתאם", "קשור"]):
             if need_quest() or need_master():
@@ -698,9 +675,7 @@ def render_ai_agent_tab():
                 reply(ask_ai_for_report(model, stats_result, instructions))
             return
 
-        # --------------------------------------------------------
-        # 5. השוואה בין שיטות עבודה (work_method)
-        # --------------------------------------------------------
+        # 5. השוואה בין שיטות עבודה
         if any(kw in p_low for kw in ["שיטת עבודה", "שיטות עבודה", "work_method", "גוף פיזי", "דמיון"]):
             if need_quest() or need_master():
                 return
@@ -721,9 +696,7 @@ def render_ai_agent_tab():
                 reply(ask_ai_for_report(model, stats_result, instructions))
             return
 
-        # --------------------------------------------------------
-        # 6. ניתוח מגמת זמן (Slope) - תיאור התפלגות השיפועים
-        # --------------------------------------------------------
+        # 6. ניתוח מגמת זמן (Slope)
         if any(kw in p_low for kw in ["מגמה", "שיפוע", "trend", "לאורך זמן"]):
             if need_master():
                 return
@@ -743,121 +716,4 @@ def render_ai_agent_tab():
                 1. ציין כמה תלמידים הציגו מגמת שיפור (שיפוע חיובי), כמה ירידה, וכמה ללא שינוי.
                 2. הצג את השיפוע הממוצע הכיתתי.
                 3. כתוב פסקה פדגוגית בעברית על המגמה הכוללת במחקר הפעולה.
-                4. ציין שניתוח זה תיאורי ואינו מבחן השוואה פורמלי.
-                """
-                reply(ask_ai_for_report(model, stats_result, instructions))
-            return
-
-        # --------------------------------------------------------
-        # 7. פרופיל תלמיד מוצלב (Triangulation) - ברירת מחדל
-        # --------------------------------------------------------
-        if df_master is None or df_quest is None:
-            missing = []
-            if df_master is None:
-                missing.append("קובץ התצפיות (Master)")
-            if df_quest is None:
-                missing.append("קובץ השאלונים (Pre/Post)")
-            reply(f"⚠️ לא ניתן לבצע את הניתוח המבוקש מכיוון שהמערכת לא הצליחה לזהות את: {', '.join(missing)}. "
-                  f"אנא ודא שהעלית את הקבצים הנכונים בתיבת ההעלאה שלמעלה ונסה שוב.")
-            return
-
-        with st.spinner("מצליב נתונים ומנתח את קבצי המחקר..."):
-            master_clean = df_master.copy()
-            if 'student_name' in master_clean.columns:
-                master_clean['name_key'] = master_clean['student_name'].apply(clean_name_string)
-            else:
-                reply("⚠️ עמודת student_name לא נמצאה בקובץ המאסטר!")
-                return
-
-            quest_clean = df_quest.copy()
-            quest_clean['name_key'] = quest_clean[quest_col_name].apply(clean_name_string)
-
-            selected_student = None
-            for name in master_clean['student_name'].dropna().unique():
-                if str(name).strip() in prompt:
-                    selected_student = name
-                    break
-
-            if not selected_student:
-                for name in df_quest[quest_col_name].dropna().unique():
-                    if str(name).strip().replace('.', '').replace(' ', '') in prompt.replace(' ', ''):
-                        selected_student = name
-                        break
-
-            if not selected_student:
-                reply("🔍 לא זיהיתי שם של תלמיד מוכר, ולא זיהיתי שאלת מחקר כיתתית (מתאם / מבחן מובהקות / מגמה / שיטת עבודה / תגיות קושי). "
-                      "אנא ציין שם תלמיד מדויק, או נסה לנסח שאלה כיתתית (ראה דוגמאות מעל תיבת הצ'אט).")
-                return
-
-            student_key = clean_name_string(selected_student)
-
-            student_observations = master_clean[master_clean['name_key'] == student_key]
-            if not student_observations.empty:
-                num_data = student_observations.select_dtypes(include=[np.number])
-                means = num_data.mean().round(2).to_dict()
-
-                raw_interpretations = []
-                for _, row in student_observations.iterrows():
-                    date_str = str(row.get('date', 'תאריך חסר'))
-                    diff_text = str(row.get('difficulty', '')).strip()
-                    interp_text = str(row.get('interpretation', row.get('insight', ''))).strip()
-                    method_text = str(row.get('work_method', 'לא צוין'))
-                    tags_text = str(row.get('tags', ''))
-                    raw_interpretations.append(
-                        f"תאריך: {date_str} | שיטה: {method_text} | תגיות: {tags_text}\n- קושי: {diff_text}\n- פרשנות חוקר: {interp_text}"
-                    )
-
-                master_summary = {
-                    "total_observations": len(student_observations),
-                    "average_quantitative_scores": means,
-                    "detailed_qualitative_observations": raw_interpretations
-                }
-            else:
-                master_summary = {"status": "לא נמצאו תצפיות עבור תלמיד זה במאסטר"}
-
-            student_questionnaire = quest_clean[quest_clean['name_key'] == student_key]
-            if not student_questionnaire.empty:
-                q_row = student_questionnaire.iloc[0]
-                pairs = get_pre_post_pairs(df_quest)
-                pre_vals = [q_row[p[0]] for p in pairs if pd.notna(q_row[p[0]])]
-                post_vals = [q_row[p[1]] for p in pairs if pd.notna(q_row[p[1]])]
-
-                quest_summary = {
-                    "has_questionnaire_data": True,
-                    "mean_pre": round(float(np.mean(pre_vals)), 2) if pre_vals else None,
-                    "mean_post": round(float(np.mean(post_vals)), 2) if post_vals else None,
-                    "delta": round(float(np.mean(post_vals) - np.mean(pre_vals)), 2) if pre_vals and post_vals else None
-                }
-            else:
-                quest_summary = {"status": "התלמיד לא נמצא בקובץ שאלוני ה-Pre/Post"}
-
-            other_summary = {}
-            for f_name, other_df in other_dfs.items():
-                possible_name_cols = [c for c in other_df.columns
-                                       if ('name' in str(c).lower() and 'unnamed' not in str(c).lower()) or 'שם' in str(c)]
-                if possible_name_cols:
-                    other_clean = other_df.copy()
-                    other_clean['name_key'] = other_clean[possible_name_cols[0]].apply(clean_name_string)
-                    sub_row = other_clean[other_clean['name_key'] == student_key]
-                    if not sub_row.empty:
-                        other_summary[f_name] = sub_row.iloc[0].drop(['name_key', possible_name_cols[0]], errors='ignore').to_dict()
-
-            student_profile_json = {
-                "student_name": str(selected_student),
-                "observations_master_data": master_summary,
-                "questionnaire_survey_data": quest_summary,
-                "additional_files_data": other_summary
-            }
-
-            instructions = f"""
-            הנתונים שלהלן מהווים פרופיל מוצלב (Triangulation) של התלמיד {selected_student}:
-            {json.dumps(student_profile_json, ensure_ascii=False)}
-
-            הפק דוח פרופיל מוצלב עמוק:
-            1. כותרת ראשית: "🕵️ דוח פרופיל מוצלב והערכת מגמה - {selected_student}"
-            2. ניתוח המדדים הכמותיים מהתצפיות.
-            3. שילוב וניתוח פרשנויות המורה (detailed_qualitative_observations), כולל התגיות שתועדו.
-            4. הצלבה מול השאלון: השווה mean_pre, mean_post, delta לבין הנתונים מהמאסטר - יש התאמה?
-            5. דיון פדגוגי עמוק להתקדמות התלמיד עקב ההתערבות.
-            """
-            reply(ask_ai_for_report(model, {"profile": "see instructions"}, instructions))
+                4. ציין שניתוח זה תיאורי ואינו מבח
