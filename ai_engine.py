@@ -62,8 +62,12 @@ def load_prepost_local(file) -> pd.DataFrame | None:
     df = pd.read_excel(file, header=header_row) if file.name.endswith(".xlsx") else pd.read_csv(file, header=header_row)
     name_col = next((c for c in df.columns if "name" in str(c).lower() or "שם" in str(c)), df.columns[0])
     df = df.rename(columns={name_col: "name"})
-    df = df[df["name"].notna() & (df["name"].astype(str).str.strip() != "")].reset_index(drop=True)
-    df["name_key"] = df["name"].apply(clean_name)
+    
+    # תיקון: המרה בטוחה של עמודת השם בלבד לטקסט נקי, ללא קריסה של ה-DataFrame
+    df = df[df["name"].notna()].reset_index(drop=True)
+    df = df[df["name"].astype(str).str.strip() != ""].reset_index(drop=True)
+    
+    df["name_key"] = df["name"].astype(str).apply(clean_name)
     return df
 
 # ─────────────────────────────────────────────
