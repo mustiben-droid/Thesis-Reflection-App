@@ -52,7 +52,7 @@ def load_master_local(file) -> pd.DataFrame:
     return df
 
 def load_prepost_local(file) -> pd.DataFrame | None:
-    # 1. קריאת הקובץ הגולמי ללא כותרות כדי למצוא את שורת השמות
+    # 1. מציאת שורת הכותרת (השם או name) בצורה בטוחה
     raw = pd.read_excel(file, header=None) if file.name.endswith(".xlsx") else pd.read_csv(file, header=None)
     header_row = 0
     for idx, row in raw.iterrows():
@@ -61,28 +61,43 @@ def load_prepost_local(file) -> pd.DataFrame | None:
             header_row = idx
             break
             
-    # 2. טעינה מחדש עם שורת הכותרת הנכונה
+    # 2. טעינת הקובץ מחדש
     df = pd.read_excel(file, header=header_row) if file.name.endswith(".xlsx") else pd.read_csv(file, header=header_row)
     
-    # 🛠️ שיפור הגנה: אם יש עמודות כפולות באקסל, נשנה את השם שלהן באופן ייחודי כדי שפנדס לא יקרוס
-    df.columns = [f"{c}_{i}" if list(df.columns).count(c) > 1 else c for i, c in enumerate(df.columns)]
-    
-    # מאתר את עמודת השם (הראשונה שמתאימה)
-    name_col = next((c for c in df.columns if "name" in str(c).lower() or "שם" in str(c)), df.columns[0])
+    # 🛠️ שיפור קריטי: הגנה מפני עמודות Unnamed המכילות את המחרוזת "name"
+    # מאתר את עמודת השם האמיתית (שמכילה name או שם, אך אינה עמודה ריקה מסוג Unnamed)
+    name_col = None
+    for c in df.columns:
+        c_str = str(c).lower().strip()
+        if ("name" in c_str or "שם" in c_str) and "unnamed" not in c_str:
+            name_col = c
+            break
+            
+    # פתרון גיבוי למקרה שלא נמצאה עמודה מתאימה
+    if name_col is None:
+        name_col = df.columns[0]
+        
     df = df.rename(columns={name_col: "name"})
     
-    # 🛠️ תיקון השגיאה: סינון שורות ריקות בדרך עקיפה ובטוחה שלא מפעילה reindex על צירים כפולים
+    # 🛠️ ניקוי עמודות כפולות אחרות אם קיימות באקסל
+    df = df.loc[:, ~df.columns.duplicated()].copy()
+    
+    # 3. הגנה אבסולוטית: ניקוי שורות ריקות ללא שימוש במתודות ציר בעייתיות
     df = df[df["name"].notna()]
     df = df[df["name"].astype(str).str.strip() != ""]
     
-    # יצירת מפתח השם הנקי
+    # יצירת מפתח השם הנקי למנוע
     df["name_key"] = df["name"].astype(str).apply(clean_name)
     
-    # החזרת הטבלה כעת כשהיא נקייה מכפילויות ואינדקסים בעייתיים
+    # איפוס אינדקס מספרי נקי
+    df.index = range(len(df))
+    
     return df
+    
 # ─────────────────────────────────────────────
 # פונקציית ארכוב ושמירה לדרייב
 # ─────────────────────────────────────────────
+
 def save_chain(name: str, messages: list) -> tuple[bool, str]:
     clean = re.sub(r"[^\w]", "_", name)
     path = os.path.abspath(f"Report_Triangulation_{clean}.txt")
