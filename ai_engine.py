@@ -52,6 +52,7 @@ def load_master_local(file) -> pd.DataFrame:
     return df
 
 def load_prepost_local(file) -> pd.DataFrame | None:
+    # 1. קריאת הקובץ הגולמי ללא כותרות כדי למצוא את שורת השמות
     raw = pd.read_excel(file, header=None) if file.name.endswith(".xlsx") else pd.read_csv(file, header=None)
     header_row = 0
     for idx, row in raw.iterrows():
@@ -59,17 +60,26 @@ def load_prepost_local(file) -> pd.DataFrame | None:
         if "name" in vals or "שם" in vals:
             header_row = idx
             break
+            
+    # 2. טעינה מחדש עם שורת הכותרת הנכונה
     df = pd.read_excel(file, header=header_row) if file.name.endswith(".xlsx") else pd.read_csv(file, header=header_row)
+    
+    # 🛠️ שיפור הגנה: אם יש עמודות כפולות באקסל, נשנה את השם שלהן באופן ייחודי כדי שפנדס לא יקרוס
+    df.columns = [f"{c}_{i}" if list(df.columns).count(c) > 1 else c for i, c in enumerate(df.columns)]
+    
+    # מאתר את עמודת השם (הראשונה שמתאימה)
     name_col = next((c for c in df.columns if "name" in str(c).lower() or "שם" in str(c)), df.columns[0])
     df = df.rename(columns={name_col: "name"})
     
-    # תיקון: המרה בטוחה של עמודת השם בלבד לטקסט נקי, ללא קריסה של ה-DataFrame
-    df = df[df["name"].notna()].reset_index(drop=True)
-    df = df[df["name"].astype(str).str.strip() != ""].reset_index(drop=True)
+    # 🛠️ תיקון השגיאה: סינון שורות ריקות בדרך עקיפה ובטוחה שלא מפעילה reindex על צירים כפולים
+    df = df[df["name"].notna()]
+    df = df[df["name"].astype(str).str.strip() != ""]
     
+    # יצירת מפתח השם הנקי
     df["name_key"] = df["name"].astype(str).apply(clean_name)
+    
+    # החזרת הטבלה כעת כשהיא נקייה מכפילויות ואינדקסים בעייתיים
     return df
-
 # ─────────────────────────────────────────────
 # פונקציית ארכוב ושמירה לדרייב
 # ─────────────────────────────────────────────
