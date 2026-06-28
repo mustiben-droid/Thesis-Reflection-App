@@ -1,17 +1,9 @@
-"""
-ai_engine.py — מנוע ה-AI והסוכן החכם (גרסה 2.8)
-תיקון קריטי: מאפשר לסוכן לקבל את הנתונים המצרפיים של כלל הכיתה (N=43) 
-ולא להינעל על תלמיד בודד כאשר מתבקש ניתוח כמותי כללי.
-"""
-
 import streamlit as st
 import pandas as pd
 import numpy as np
 import re
 import json
 import os
-from scipy import stats
-from difflib import get_close_matches
 
 SCORE_COLS = ['score_proj', 'score_spatial', 'score_conv', 'score_views', 'score_efficacy', 'score_model']
 CAT_COLS   = ["cat_convert_rep", "cat_dims_props", "cat_proj_trans", "cat_3d_support"]
@@ -86,7 +78,6 @@ def init_gemini(api_key: str):
 
 def render_ai_agent_tab():
     st.subheader("🤖 סוכן ניתוח ממצאים (שיחה משורשרת)")
-    
     st.markdown("### 📁 שלב א': טעינת קבצי המחקר לסוכן")
     uploaded_files = st.file_uploader(
         "גרור לכאן את קובץ המאסטר ואת קובץ השאלונים יחד:", 
@@ -136,12 +127,9 @@ def render_ai_agent_tab():
             active_master = df_master_local if df_master_local is not None else st.session_state.get("df_master")
             active_pp = df_pp_local if df_pp_local is not None else st.session_state.get("df_pp")
 
-            # 🛠️ חישוב והזרקת נתוני חתך כרונולוגיים ומצרפיים של כלל המערכת (N=43)
             global_stats_payload = {}
             if active_master is not None:
                 global_stats_payload["master_total_rows"] = int(len(active_master))
-                
-                # חישוב מדדי ביצוע אמיתיים לכל הכיתה
                 scores_summary = {}
                 for c in SCORE_COLS:
                     if c in active_master.columns:
@@ -153,7 +141,6 @@ def render_ai_agent_tab():
                             }
                 global_stats_payload["performance_scores_stats_all_class"] = scores_summary
 
-                # חישוב מדדי שגיאה אמיתיים לכל הכיתה
                 cats_summary = {}
                 for c in CAT_COLS:
                     if c in active_master.columns:
@@ -182,7 +169,6 @@ def render_ai_agent_tab():
                         global_stats_payload["questionnaire_3d_pre_mean_subset"] = round(float(df_10['pre_m'].mean()), 2)
                         global_stats_payload["questionnaire_3d_post_mean_subset"] = round(float(df_10['post_m'].mean()), 2)
 
-            # 🛠️ שיפור קריטי: בודק אם הפרומפט של המשתמש מבקש ניתוח כללי או תלמיד ספציפי
             student_payload = ""
             is_general_query = any(w in prompt.lower() for w in ["כלל", "כל הכיתה", "מצרפי", "המדגם", "הכיתה", "טבלה 1", "טבלה 2"])
             
@@ -222,7 +208,6 @@ def render_ai_agent_tab():
                             pp_data["mean_post"] = round(float(pp_row['post_m'].values[0]), 2)
                     student_payload = f"\n[נתוני מקרה בוחן בודד]: {json.dumps({'student_name': found_student, 'timeline': timeline, 'questionnaire': pp_data}, ensure_ascii=False)}"
 
-            # הזרקת ההקשר המלא המורחב
             full_context_injection = f"\n### 📊 עוגן נתונים מצרפיים מחושבים של כלל הכיתה (N=43): ###\n{json.dumps(global_stats_payload, ensure_ascii=False)}\n{student_payload}\n"
 
             with st.spinner("הסוכן מנתח ומגבש תמות..."):
