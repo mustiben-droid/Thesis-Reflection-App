@@ -162,64 +162,7 @@ def render_ai_agent_tab():
                     global_stats_payload["questionnaire_global_pre_mean_all_class"] = round(float(valid_paired['pre_m'].mean()), 2)
                     global_stats_payload["questionnaire_global_post_mean_all_class"] = round(float(valid_paired['post_m'].mean()), 2)
                     
-                    3d_col = next((c for c in active_pp.columns if '3d' in c.lower()), None)
-                    if 3d_col is not None:
-                        df_10 = active_pp[active_pp[3d_col].astype(str).str.contains('1|yes|true|כן', na=False)].dropna(subset=['pre_m', 'post_m'])
-                        global_stats_payload["questionnaire_3d_group_n_subset"] = int(len(df_10))
-                        global_stats_payload["questionnaire_3d_pre_mean_subset"] = round(float(df_10['pre_m'].mean()), 2)
-                        global_stats_payload["questionnaire_3d_post_mean_subset"] = round(float(df_10['post_m'].mean()), 2)
-
-            student_payload = ""
-            is_general_query = any(w in prompt.lower() for w in ["כלל", "כל הכיתה", "מצרפי", "המדגם", "הכיתה", "טבלה 1", "טבלה 2"])
-            
-            if active_master is not None and not is_general_query:
-                all_students = list(active_master["student_name"].dropna().unique())
-                found_student = None
-                for s in all_students:
-                    if str(s).strip() in prompt: found_student = s; break
-                
-                if found_student:
-                    st.session_state.current_analyzed_student = found_student
-                    key = clean_name(found_student)
-                    obs = student_observations(active_master, key)
-                    available = [c for c in SCORE_COLS if c in obs.columns]
-                    
-                    timeline = []
-                    for _, row in obs.iterrows():
-                        inverted_cats = {}
-                        for c in CAT_COLS:
-                            if c in row and pd.notna(row[c]):
-                                inverted_cats[f"{c}_efficiency_index"] = round(float(5.0 - pd.to_numeric(row[c])), 2)
-                        timeline.append({
-                            "date": str(row.get("date", ""))[:10], "difficulty": row.get("difficulty"),
-                            "performance_scores": {c: row.get(c) for c in available},
-                            "error_category_counts_raw": {c: row.get(c) for c in CAT_COLS if c in row},
-                            "cognitive_efficiency_indices_calculated": inverted_cats,
-                            "work_method": row.get("work_method"),
-                            "interpretation": str(row.get("interpretation", row.get("insight", "")))[:500],
-                            "tags": str(row.get("tags", ""))
-                        })
-                    pp_data = {}
-                    if active_pp is not None:
-                        name_col = "name_key" if "name_key" in active_pp.columns else "name"
-                        pp_row = active_pp[active_pp[name_col] == key]
-                        if not pp_row.empty:
-                            pp_data["mean_pre"] = round(float(pp_row['pre_m'].values[0]), 2)
-                            pp_data["mean_post"] = round(float(pp_row['post_m'].values[0]), 2)
-                    student_payload = f"\n[נתוני מקרה בוחן בודד]: {json.dumps({'student_name': found_student, 'timeline': timeline, 'questionnaire': pp_data}, ensure_ascii=False)}"
-
-            full_context_injection = f"\n### 📊 עוגן נתונים מצרפיים מחושבים של כלל הכיתה (N=43): ###\n{json.dumps(global_stats_payload, ensure_ascii=False)}\n{student_payload}\n"
-
-            with st.spinner("הסוכן מנתח ומגבש תמות..."):
-                response = st.session_state.gemini_session.send_message(prompt + full_context_injection).text
-            st.markdown(response)
-            st.session_state.agent_messages.append({"role": "assistant", "content": response})
-
-    if st.session_state.agent_messages:
-        st.divider()
-        col_name, col_btn = st.columns([3, 1])
-        save_name = col_name.text_input("שם לקובץ הניתוח:", value=f"Analysis_{st.session_state.current_analyzed_student or 'Class_Global'}")
-        if col_btn.button("💾 שמור שיחה לדרייב"):
-            ok, path = save_chain(save_name, st.session_state.agent_messages)
-            if ok: st.success(f"✅ השיחה אורכבה בהצלחה בנתיב: `{path}`")
-            else: st.error(f"⚠️ שגיאה בשמירה: {path}")
+                    col_3d = next((c for c in active_pp.columns if '3d' in c.lower()), None)
+                    if col_3d is not None:
+                        df_10 = active_pp[active_pp[col_3d].astype(str).str.contains('1|yes|true|כן', na=False)].dropna(subset=['pre_m', 'post_m'])
+                        global_stats_payload
