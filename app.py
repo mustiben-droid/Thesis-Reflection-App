@@ -14,7 +14,7 @@ from streamlit_mic_recorder import mic_recorder
 
 # --- חיבור למנוע הסטטיסטי (ai_engine.py) ---
 try:
-    from ai_engine import render_ai_agent_tab
+from ai_engine import render_ai_agent_tab
 except ImportError:
     def render_ai_agent_tab():
         st.warning("⚠️ קובץ ai_engine.py לא נמצא. הטאב הזה מושבת.")
