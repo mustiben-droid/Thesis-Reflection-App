@@ -155,7 +155,7 @@ def call_gemini(prompt, audio_bytes=None):
         api_key = st.secrets.get("GOOGLE_API_KEY")
         if not api_key: return "שגיאה: חסר API Key"
 
-        model_id = "gemini-1.5-flash" 
+        model_id = "gemini-2.5-flash" 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
         
         headers = {'Content-Type': 'application/json'}
@@ -198,7 +198,7 @@ def get_ai_model():
         return None
     import google.generativeai as genai
     genai.configure(api_key=api_key)
-    return genai.GenerativeModel('gemini-1.5-flash')        
+    return genai.GenerativeModel('gemini-2.5-flash')        
 
 # ==========================================
 # --- 2. פונקציות ממשק משתמש (Tabs) ---
